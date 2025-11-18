@@ -1,0 +1,343 @@
+INFO:     Application startup complete.
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: Who are the customers in the database?
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: I can show you this thing open. Abhay Patgar Okay. So if it's possible. Deepesh Bhandari I can show you the open side dashboard. Now, only if you want Abhay Patgar Okay, it's possible. Can you just Oh yeah, please show me. And as for the like requirement, I don't need that exact requirement, just the list of features and maybe watch the database will contain Deepesh Bhandari Yeah, sure. Okay, I will need to play. Abhay Patgar And the role roles. Deepesh Bhandari Now, yeah, we did not plan so I'm just explaining it high level because Abhay Patgar Okay. Deepesh Bhandari yesterday, only, we had a discussion with client and just client gave it forward. So, the phone that's it. So, we need to know proper properly plan and we need to front and no problem. What Vinayak will design our work on that. So I Abhay Patgar Yes, sir.
+
+{"id": "25", "customer_id": null, "table_id": "23", "status": "accepted", "total_amount": "217", "created_at": "2025-06-02 07:56:22.684046", "accepted_at": "2025-06-02 07:56:43.207962", "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "43", "rejected_at": null, "on_hold_at": null}
+
+{"id": "17", "customer_id": null, "table_id": "21", "status": "pending", "total_amount": "188", "created_at": "2025-05-30 11:15:01.720111", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "41", "rejected_at": null, "on_hold_at": null}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: I can show you this thing open. Abhay Patgar Okay. So if it's possible. Deepesh Bhandari I can show you the open side dashboard. Now, only if you want Abhay Patgar Okay, it's possible. Can you just Oh yeah, please show me. And as for the like requirement, I don't need that exact requirement, just the list of features and maybe watch the database will contain Deepesh Bhandari Yeah, sure. Okay, I will need to play. Abhay Patgar And the role roles. Deepesh Bhandari Now, yeah, we did not plan so I'm just explaining it high level because Abhay Patgar Okay. Deepesh Bhandari yesterday, only, we had a discussion with client and just client gave it forward. So, the phone that's it. So, we need to know proper properly plan and we need to front and no problem. What Vinayak will design our work on that. So I Abhay Patgar Yes, sir.
+
+{"id": "25", "customer_id": null, "table_id": "23", "status": "accepted", "total_amount": "217", "created_at": "2025-06-02 07:56:22.684046", "accepted_at": "2025-06-02 07:56:43.207962", "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "43", "rejected_at": null, "on_hold_at": null}
+
+{"id": "17", "customer_id": null, "table_id": "21", "status": "pending", "total_amount": "188", "created_at": "2025-05-30 11:15:01.720111", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "41", "rejected_at": null, "on_hold_at": null}
+INFO:app.services.query_service:Final inputs to prompt: question=Who are the customers in the database?, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: I don't know
+INFO:     127.0.0.1:60966 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: Find customer with phone number +918296635241
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"id": "17", "customer_id": null, "table_id": "21", "status": "pending", "total_amount": "188", "created_at": "2025-05-30 11:15:01.720111", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "41", "rejected_at": null, "on_hold_at": null}
+
+{"id": "15", "customer_id": null, "table_id": "21", "status": "pending", "total_amount": "188", "created_at": "2025-05-30 10:53:01.355928", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "41", "rejected_at": null, "on_hold_at": null}
+
+{"id": "14", "customer_id": null, "table_id": "21", "status": "pending", "total_amount": "201", "created_at": "2025-05-30 10:42:49.006047", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "41", "rejected_at": null, "on_hold_at": null}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"id": "17", "customer_id": null, "table_id": "21", "status": "pending", "total_amount": "188", "created_at": "2025-05-30 11:15:01.720111", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "41", "rejected_at": null, "on_hold_at": null}
+
+{"id": "15", "customer_id": null, "table_id": "21", "status": "pending", "total_amount": "188", "created_at": "2025-05-30 10:53:01.355928", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "41", "rejected_at": null, "on_hold_at": null}
+
+{"id": "14", "customer_id": null, "table_id": "21", "status": "pending", "total_amount": "201", "created_at": "2025-05-30 10:42:49.006047", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "41", "rejected_at": null, "on_hold_at": null}
+INFO:app.services.query_service:Final inputs to prompt: question=Find customer with phone number +918296635241, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: I don't know
+INFO:     127.0.0.1:60983 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: What menu items are available?
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"id": "10", "order_id": "3", "menu_item_id": "1", "quantity": "2", "special_requests": null, "price_at_order": "25", "member_id": "18"}
+
+{"id": "28", "order_id": "7", "menu_item_id": "2", "quantity": "2", "special_requests": null, "price_at_order": "9.99", "member_id": "32"}
+
+{"id": "15", "order_id": "3", "menu_item_id": "6", "quantity": "2", "special_requests": null, "price_at_order": "5", "member_id": "20"}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"id": "10", "order_id": "3", "menu_item_id": "1", "quantity": "2", "special_requests": null, "price_at_order": "25", "member_id": "18"}
+
+{"id": "28", "order_id": "7", "menu_item_id": "2", "quantity": "2", "special_requests": null, "price_at_order": "9.99", "member_id": "32"}
+
+{"id": "15", "order_id": "3", "menu_item_id": "6", "quantity": "2", "special_requests": null, "price_at_order": "5", "member_id": "20"}
+INFO:app.services.query_service:Final inputs to prompt: question=What menu items are available?, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: I don't know
+INFO:     127.0.0.1:60994 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: Show me vegetarian menu items
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"id": "5", "name": "Vegan Buddha Bowl", "description": "Brown rice, chickpeas, and veggies. ", "price": "10.5", "image_url": "https://unsplash.com/photos/9wg5jCEPBsw", "organization_id": "1", "category": "main", "dietary_preference": "vegan", "available_times": "lunch", "is_vegetarian": "t", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+
+{"id": "4", "name": "Caesar Salad", "description": "Crisp romaine with Caesar dressing. ", "price": "6.5", "image_url": "https://unsplash.com/photos/7U6xYj6sD9Q", "organization_id": "1", "category": "starter", "dietary_preference": "gluten-free", "available_times": "all-day", "is_vegetarian": "f", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+
+{"id": "18", "name": "Veggie Omelette", "description": "Omelette with mixed veggies. ", "price": "6.25", "image_url": "https://unsplash.com/photos/7KLa-xLbSXA", "organization_id": "1", "category": "breakfast", "dietary_preference": "vegetarian", "available_times": "breakfast", "is_vegetarian": "t", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"id": "5", "name": "Vegan Buddha Bowl", "description": "Brown rice, chickpeas, and veggies. ", "price": "10.5", "image_url": "https://unsplash.com/photos/9wg5jCEPBsw", "organization_id": "1", "category": "main", "dietary_preference": "vegan", "available_times": "lunch", "is_vegetarian": "t", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+
+{"id": "4", "name": "Caesar Salad", "description": "Crisp romaine with Caesar dressing. ", "price": "6.5", "image_url": "https://unsplash.com/photos/7U6xYj6sD9Q", "organization_id": "1", "category": "starter", "dietary_preference": "gluten-free", "available_times": "all-day", "is_vegetarian": "f", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+
+{"id": "18", "name": "Veggie Omelette", "description": "Omelette with mixed veggies. ", "price": "6.25", "image_url": "https://unsplash.com/photos/7KLa-xLbSXA", "organization_id": "1", "category": "breakfast", "dietary_preference": "vegetarian", "available_times": "breakfast", "is_vegetarian": "t", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+INFO:app.services.query_service:Final inputs to prompt: question=Show me vegetarian menu items, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: Here are the vegetarian menu items:
+
+*   **Vegan Buddha Bowl**: Brown rice, chickpeas, and veggies. ($10.5)
+*   **Veggie Omelette**: Omelette with mixed veggies. ($6.25)
+INFO:     127.0.0.1:61008 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: What is the price of Margherita Pizza?
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"id": "2", "name": "Margherita Pizza", "description": "Classic pizza with fresh mozzarella and basil. ", "price": "9.99", "image_url": "https://unsplash.com/photos/8manzosRGPE", "organization_id": "1", "category": "main", "dietary_preference": "vegetarian", "available_times": "lunch,dinner", "is_vegetarian": "t", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+
+{"id": "4", "name": "Caesar Salad", "description": "Crisp romaine with Caesar dressing. ", "price": "6.5", "image_url": "https://unsplash.com/photos/7U6xYj6sD9Q", "organization_id": "1", "category": "starter", "dietary_preference": "gluten-free", "available_times": "all-day", "is_vegetarian": "f", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+
+{"id": "3", "name": "Pepperoni Pizza", "description": "Spicy pepperoni and cheese on tomato base. ", "price": "11.99", "image_url": "https://unsplash.com/photos/7BWz4bq6L2w", "organization_id": "1", "category": "main", "dietary_preference": null, "available_times": "lunch,dinner", "is_vegetarian": "f", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"id": "2", "name": "Margherita Pizza", "description": "Classic pizza with fresh mozzarella and basil. ", "price": "9.99", "image_url": "https://unsplash.com/photos/8manzosRGPE", "organization_id": "1", "category": "main", "dietary_preference": "vegetarian", "available_times": "lunch,dinner", "is_vegetarian": "t", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+
+{"id": "4", "name": "Caesar Salad", "description": "Crisp romaine with Caesar dressing. ", "price": "6.5", "image_url": "https://unsplash.com/photos/7U6xYj6sD9Q", "organization_id": "1", "category": "starter", "dietary_preference": "gluten-free", "available_times": "all-day", "is_vegetarian": "f", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+
+{"id": "3", "name": "Pepperoni Pizza", "description": "Spicy pepperoni and cheese on tomato base. ", "price": "11.99", "image_url": "https://unsplash.com/photos/7BWz4bq6L2w", "organization_id": "1", "category": "main", "dietary_preference": null, "available_times": "lunch,dinner", "is_vegetarian": "f", "is_available": "t", "image1": null, "image2": null, "image3": null, "image4": null}
+INFO:app.services.query_service:Final inputs to prompt: question=What is the price of Margherita Pizza?, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: The price of Margherita Pizza is 9.99.
+INFO:     127.0.0.1:61033 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: How many orders are there?
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"id": "28", "order_id": "7", "menu_item_id": "2", "quantity": "2", "special_requests": null, "price_at_order": "9.99", "member_id": "32"}
+
+{"id": "52", "order_id": "18", "menu_item_id": "24", "quantity": "1", "special_requests": null, "price_at_order": "51", "member_id": "67"}
+
+{"id": "55", "order_id": "20", "menu_item_id": "24", "quantity": "1", "special_requests": null, "price_at_order": "51", "member_id": "66"}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"id": "28", "order_id": "7", "menu_item_id": "2", "quantity": "2", "special_requests": null, "price_at_order": "9.99", "member_id": "32"}
+
+{"id": "52", "order_id": "18", "menu_item_id": "24", "quantity": "1", "special_requests": null, "price_at_order": "51", "member_id": "67"}
+
+{"id": "55", "order_id": "20", "menu_item_id": "24", "quantity": "1", "special_requests": null, "price_at_order": "51", "member_id": "66"}
+INFO:app.services.query_service:Final inputs to prompt: question=How many orders are there?, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: There are 3 orders.
+INFO:     127.0.0.1:61050 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: What tables are available in the restaurant?
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"id": "6", "customer_id": null, "table_id": "3", "status": "cart", "total_amount": null, "created_at": "2025-05-28 06:56:08.74884", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "15", "rejected_at": null, "on_hold_at": null}
+
+{"id": "5", "customer_id": "1", "table_id": "19", "status": "cart", "total_amount": null, "created_at": "2025-05-28 06:35:27.818978", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": null, "rejected_at": null, "on_hold_at": null}
+
+{"id": "3", "customer_id": null, "table_id": "1", "status": "cart", "total_amount": null, "created_at": "2025-05-28 05:33:07.589513", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "10", "rejected_at": null, "on_hold_at": null}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"id": "6", "customer_id": null, "table_id": "3", "status": "cart", "total_amount": null, "created_at": "2025-05-28 06:56:08.74884", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "15", "rejected_at": null, "on_hold_at": null}
+
+{"id": "5", "customer_id": "1", "table_id": "19", "status": "cart", "total_amount": null, "created_at": "2025-05-28 06:35:27.818978", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": null, "rejected_at": null, "on_hold_at": null}
+
+{"id": "3", "customer_id": null, "table_id": "1", "status": "cart", "total_amount": null, "created_at": "2025-05-28 05:33:07.589513", "accepted_at": null, "preparing_at": null, "ready_at": null, "served_at": null, "completed_at": null, "special_requests": null, "prep_instructions": null, "priority": "normal", "station_assignment_time": null, "kitchen_station_id": null, "group_id": "10", "rejected_at": null, "on_hold_at": null}
+INFO:app.services.query_service:Final inputs to prompt: question=What tables are available in the restaurant?, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: I don't know
+INFO:     127.0.0.1:61062 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: Which organizations are in the system?
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"id": "8", "role": "org_admin", "email": "abhay@afourd.com", "phone": null, "password_hash": "scrypt:32768:8:1$1ga7SMIMaurgdOOA$d4ab3aac37aede4b808dce44f588b80767dcc56072da9fdef061ffdab4d60b3539a5c3a2aee38465bbdef364b844538fd170908cdf3c94015cf292373c63e44a", "otp_expiry": null, "created_at": "2025-05-15 11:02:17.646466", "is_active": "t", "organization_id": null}
+
+{"id": "10", "role": "org_admin", "email": "admin@royalcafe.com", "phone": null, "password_hash": "scrypt:32768:8:1$hi0XWqGVLE4nkMS2$60666fd4b1434eeb382334847acae7bf62f12e6b33d8c32d3be27d18eb6177681b72a0dc736e8827a8bdeaa4b12b1f12ba5f19c3c20358dd2c5722efea6ec338", "otp_expiry": null, "created_at": "2025-05-20 06:39:45.689869", "is_active": "t", "organization_id": null}
+
+{"id": "14", "role": "org_admin", "email": "bakes@admin.com", "phone": null, "password_hash": "scrypt:32768:8:1$9TsKuEKFXCzggSKk$e1ee1b5db2811b3e287a445891733477d0d22113fc98608c623edccc4591a529e36aa358debb78bf2fe87024782bd43b3d8bb93c9b256c04a4a714694514a87f", "otp_expiry": null, "created_at": "2025-05-22 06:29:50.886678", "is_active": "t", "organization_id": null}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"id": "8", "role": "org_admin", "email": "abhay@afourd.com", "phone": null, "password_hash": "scrypt:32768:8:1$1ga7SMIMaurgdOOA$d4ab3aac37aede4b808dce44f588b80767dcc56072da9fdef061ffdab4d60b3539a5c3a2aee38465bbdef364b844538fd170908cdf3c94015cf292373c63e44a", "otp_expiry": null, "created_at": "2025-05-15 11:02:17.646466", "is_active": "t", "organization_id": null}
+
+{"id": "10", "role": "org_admin", "email": "admin@royalcafe.com", "phone": null, "password_hash": "scrypt:32768:8:1$hi0XWqGVLE4nkMS2$60666fd4b1434eeb382334847acae7bf62f12e6b33d8c32d3be27d18eb6177681b72a0dc736e8827a8bdeaa4b12b1f12ba5f19c3c20358dd2c5722efea6ec338", "otp_expiry": null, "created_at": "2025-05-20 06:39:45.689869", "is_active": "t", "organization_id": null}
+
+{"id": "14", "role": "org_admin", "email": "bakes@admin.com", "phone": null, "password_hash": "scrypt:32768:8:1$9TsKuEKFXCzggSKk$e1ee1b5db2811b3e287a445891733477d0d22113fc98608c623edccc4591a529e36aa358debb78bf2fe87024782bd43b3d8bb93c9b256c04a4a714694514a87f", "otp_expiry": null, "created_at": "2025-05-22 06:29:50.886678", "is_active": "t", "organization_id": null}
+INFO:app.services.query_service:Final inputs to prompt: question=Which organizations are in the system?, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: I don't know
+INFO:     127.0.0.1:61073 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: What is the total revenue from completed orders?
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"id": "28", "order_id": "7", "menu_item_id": "2", "quantity": "2", "special_requests": null, "price_at_order": "9.99", "member_id": "32"}
+
+{"id": "29", "order_id": "8", "menu_item_id": "2", "quantity": "2", "special_requests": null, "price_at_order": "9.99", "member_id": "39"}
+
+{"id": "32", "order_id": "8", "menu_item_id": "7", "quantity": "2", "special_requests": null, "price_at_order": "8.5", "member_id": "40"}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"id": "28", "order_id": "7", "menu_item_id": "2", "quantity": "2", "special_requests": null, "price_at_order": "9.99", "member_id": "32"}
+
+{"id": "29", "order_id": "8", "menu_item_id": "2", "quantity": "2", "special_requests": null, "price_at_order": "9.99", "member_id": "39"}
+
+{"id": "32", "order_id": "8", "menu_item_id": "7", "quantity": "2", "special_requests": null, "price_at_order": "8.5", "member_id": "40"}
+INFO:app.services.query_service:Final inputs to prompt: question=What is the total revenue from completed orders?, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: I don't know
+INFO:     127.0.0.1:61098 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: Which customer has the most recent login?
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"id": "4", "phone": "9986905655", "name": "Abhay Patgar", "created_at": "2025-10-01 11:54:44.302549", "last_login": null}
+
+{"id": "2", "phone": "8296635241", "name": "Afnan Ahmed", "created_at": "2025-05-14 09:58:04.807746", "last_login": null}
+
+{"id": "15", "role": "staff", "email": "test1@staff.com", "phone": null, "password_hash": "scrypt:32768:8:1$V9n0vWt9IjxF0wY0$f4bd3056a22284b74c6086312f1dee1c358c072973a9c50fe8624f5d48bb7377626c90b584643bb09ecdbbc7457fce11f58e0fbb2f3cef1b46a66741b8a28330", "otp_expiry": null, "created_at": "2025-05-22 07:17:00.092318", "is_active": "t", "organization_id": "6"}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"id": "4", "phone": "9986905655", "name": "Abhay Patgar", "created_at": "2025-10-01 11:54:44.302549", "last_login": null}
+
+{"id": "2", "phone": "8296635241", "name": "Afnan Ahmed", "created_at": "2025-05-14 09:58:04.807746", "last_login": null}
+
+{"id": "15", "role": "staff", "email": "test1@staff.com", "phone": null, "password_hash": "scrypt:32768:8:1$V9n0vWt9IjxF0wY0$f4bd3056a22284b74c6086312f1dee1c358c072973a9c50fe8624f5d48bb7377626c90b584643bb09ecdbbc7457fce11f58e0fbb2f3cef1b46a66741b8a28330", "otp_expiry": null, "created_at": "2025-05-22 07:17:00.092318", "is_active": "t", "organization_id": "6"}
+INFO:app.services.query_service:Final inputs to prompt: question=Which customer has the most recent login?, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: I don't know
+INFO:     127.0.0.1:61111 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: Show me group information for groups that are active
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"id": "25", "group_id": "12", "name": "joey", "member_token": "gG0i2IqWtQqUTbiHyeCLrmbL5kWbh4qY", "joined_at": "2025-05-28 05:46:25.778703"}
+
+{"id": "52", "group_id": "27", "name": "John Snow", "member_token": "wugZmwKhsrNBJzVJ9zlsfWQejT144fB2", "joined_at": "2025-05-30 10:16:05.559931"}
+
+{"id": "32", "group_id": "16", "name": "Abhay", "member_token": "w1QYGZjID2N7HA1wjYdbtKYddHyIZLIv", "joined_at": "2025-05-28 07:18:18.97466"}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"id": "25", "group_id": "12", "name": "joey", "member_token": "gG0i2IqWtQqUTbiHyeCLrmbL5kWbh4qY", "joined_at": "2025-05-28 05:46:25.778703"}
+
+{"id": "52", "group_id": "27", "name": "John Snow", "member_token": "wugZmwKhsrNBJzVJ9zlsfWQejT144fB2", "joined_at": "2025-05-30 10:16:05.559931"}
+
+{"id": "32", "group_id": "16", "name": "Abhay", "member_token": "w1QYGZjID2N7HA1wjYdbtKYddHyIZLIv", "joined_at": "2025-05-28 07:18:18.97466"}
+INFO:app.services.query_service:Final inputs to prompt: question=Show me group information for groups that are active, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: I don't know
+INFO:     127.0.0.1:61120 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+INFO:app.routers.query_router:Received query for collection: ecostance-demo2
+INFO:app.routers.query_router:Query: What kitchen stations are configured?
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context: {"col_0": "JKL012", "col_1": "Daisy", "col_2": "kitchen appliances", "col_3": "423.86", "col_4": "8", "col_5": "true", "col_6": "template_009", "col_7": "bank", "col_8": "biometric scan", "col_9": "advanced", "col_10": "33", "col_11": "false", "col_12": "true", "col_13": "true", "col_14": "4/1/2023", "col_15": "7/29/2023", "col_16": "true"}
+
+{"col_0": "JKL012", "col_1": "Daisy", "col_2": "kitchen appliances", "col_3": "423.86", "col_4": "8", "col_5": "true", "col_6": "template_009", "col_7": "bank", "col_8": "biometric scan", "col_9": "advanced", "col_10": "33", "col_11": "false", "col_12": "true", "col_13": "true", "col_14": "4/1/2023", "col_15": "7/29/2023", "col_16": "true"}
+
+{"col_0": "VWX234", "col_1": "Quinn", "col_2": "kitchen appliances", "col_3": "189.1", "col_4": "28", "col_5": "false", "col_6": "template_007", "col_7": "mortgage lender", "col_8": "physical mail", "col_9": "intermediate", "col_10": "18", "col_11": "false", "col_12": "true", "col_13": "false", "col_14": "10/21/2024", "col_15": "6/22/2024", "col_16": "true"}
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/ecostance-demo2/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: {"col_0": "JKL012", "col_1": "Daisy", "col_2": "kitchen appliances", "col_3": "423.86", "col_4": "8", "col_5": "true", "col_6": "template_009", "col_7": "bank", "col_8": "biometric scan", "col_9": "advanced", "col_10": "33", "col_11": "false", "col_12": "true", "col_13": "true", "col_14": "4/1/2023", "col_15": "7/29/2023", "col_16": "true"}
+
+{"col_0": "JKL012", "col_1": "Daisy", "col_2": "kitchen appliances", "col_3": "423.86", "col_4": "8", "col_5": "true", "col_6": "template_009", "col_7": "bank", "col_8": "biometric scan", "col_9": "advanced", "col_10": "33", "col_11": "false", "col_12": "true", "col_13": "true", "col_14": "4/1/2023", "col_15": "7/29/2023", "col_16": "true"}
+
+{"col_0": "VWX234", "col_1": "Quinn", "col_2": "kitchen appliances", "col_3": "189.1", "col_4": "28", "col_5": "false", "col_6": "template_007", "col_7": "mortgage lender", "col_8": "physical mail", "col_9": "intermediate", "col_10": "18", "col_11": "false", "col_12": "true", "col_13": "false", "col_14": "10/21/2024", "col_15": "6/22/2024", "col_16": "true"}
+INFO:app.services.query_service:Final inputs to prompt: question=What kitchen stations are configured?, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: I don't know
+INFO:     127.0.0.1:61134 - "POST /api/v1/query/ HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'check_collections.py'. Reloading...
+ INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [37552]
+Embedding service: Using device 'cpu'
+INFO:     Started server process [31364]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:61166 - "GET /api/v1/collections/ HTTP/1.1" 404 Not Found
+WARNING:  StatReload detected changes in 'check_collections.py'. Reloading...
+ INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [31364]
