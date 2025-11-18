@@ -3,6 +3,7 @@ ReAct Agent Service for QuickShip Logistics
 Handles conversational AI for customer service queries
 """
 
+import re
 import logging
 from typing import List, Dict
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -198,7 +199,6 @@ class AgentService:
                 
                 # Check for shipment ID pattern (QS250XXX)
                 if 'qs250' in message.lower():
-                    import re
                     match = re.search(r'QS250\d{3}', message, re.IGNORECASE)
                     if match:
                         shipment_id = match.group(0).upper()
@@ -207,7 +207,6 @@ class AgentService:
                 
                 # Check for tracking number pattern (TRKXXXXXXXXX)
                 elif 'trk' in message.lower():
-                    import re
                     match = re.search(r'TRK\d+', message, re.IGNORECASE)
                     if match:
                         tracking_number = match.group(0).upper()
@@ -216,7 +215,6 @@ class AgentService:
                 
                 # Check for phone number
                 elif 'phone' in message.lower() or re.search(r'\d{10}', message):
-                    import re
                     match = re.search(r'\d{10}', message)
                     if match:
                         phone = match.group(0)
@@ -225,7 +223,6 @@ class AgentService:
                 
                 # Check for email
                 elif '@' in message:
-                    import re
                     match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', message)
                     if match:
                         email = match.group(0)
@@ -240,6 +237,33 @@ class AgentService:
                     })
                     return {
                         "response": tool_result,
+                        "session_id": session_id,
+                        "success": True
+                    }
+                
+                # If no tool result, provide helpful prompt for missing information
+                else:
+                    help_msg = """I'd be happy to help you track your order! To find your shipment, I need one of the following:
+
+📋 **Option 1:** Shipment ID (e.g., QS250001)
+📱 **Option 2:** Your phone number (10 digits)
+📧 **Option 3:** Your email address
+🔍 **Option 4:** Tracking number (e.g., TRK123456789)
+
+**Examples:**
+- "Track QS250001"
+- "My phone is 9224217802"
+- "My email is customer@example.com"
+- "Track TRK123456789"
+
+Please provide any of these details and I'll look up your order right away!"""
+                    
+                    self.conversations[session_id].append({
+                        "role": "assistant",
+                        "content": help_msg
+                    })
+                    return {
+                        "response": help_msg,
                         "session_id": session_id,
                         "success": True
                     }
