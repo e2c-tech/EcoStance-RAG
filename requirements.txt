@@ -29,6 +29,17 @@ langchain-google-genai==1.0.2
 langchain-qdrant==0.1.1
 langchain-community==0.0.34
 
+# Database Connectivity
+sqlalchemy
+psycopg2-binary
+google-generativeai
+
 # UI
 streamlit
 requests
+
+# Security
+cryptography
+python-jose[cryptography]
+passlib[bcrypt]
+hvac  # HashiCorp Vault client

@@ -165,39 +165,46 @@ def _extract_docx(file_path: str) -> Tuple[List[Dict[str, Any]], str]:
 def _extract_spreadsheet(file_path: str, file_type: str) -> Tuple[List[Dict[str, Any]], str]:
     """
     Extracts data from spreadsheet files (XLSX, CSV), treating each row as a separate record.
+    Filters out NaN values to prevent downstream errors.
 
     Args:
         file_path (str): The path to the spreadsheet file.
         file_type (str): The type of spreadsheet ('xlsx' or 'csv').
 
     Returns:
-        A list of blocks, where each block is a row formatted as a key-value string,
-        and the corresponding document type.
+        A list of blocks, where each block is a row formatted as a key-value string.
     """
     blocks = []
     try:
-        # For Excel, iterate through each sheet
         if file_type == 'xlsx':
             xls = pd.ExcelFile(file_path)
             for sheet_name in xls.sheet_names:
                 df = pd.read_excel(xls, sheet_name=sheet_name).dropna(how='all')
+                # Replace pandas NaN with None for consistent handling
+                df = df.where(pd.notna(df), None)
+                
                 for index, row in df.iterrows():
-                    # Convert each row to a "Column: Value" string
-                    row_text = ", ".join([f'{col}: {val}' for col, val in row.astype(str).items()])
+                    # Create string representation, skipping None values
+                    row_text = ", ".join([f'{col}: {val}' for col, val in row.items() if val is not None])
+                    if not row_text:  # Skip rows that are entirely empty
+                        continue
                     blocks.append({
                         "text": row_text,
                         "metadata": {
                             "source_filename": os.path.basename(file_path),
                             "sheet_name": sheet_name,
-                            "row_number": index + 2, # +2 for 1-based index and header
+                            "row_number": index + 2,  # +2 for 1-based index and header
                             "extraction_method": "pandas"
                         }
                     })
-        # For CSV, read the single file
-        else:
+        else:  # For CSV
             df = pd.read_csv(file_path).dropna(how='all')
+            df = df.where(pd.notna(df), None)  # Replace NaN with None
+
             for index, row in df.iterrows():
-                row_text = ", ".join([f'{col}: {val}' for col, val in row.astype(str).items()])
+                row_text = ", ".join([f'{col}: {val}' for col, val in row.items() if val is not None])
+                if not row_text:
+                    continue
                 blocks.append({
                     "text": row_text,
                     "metadata": {
@@ -211,56 +218,148 @@ def _extract_spreadsheet(file_path: str, file_type: str) -> Tuple[List[Dict[str,
         return [], f"{file_type}-error"
     return blocks, file_type
 
-# --- SQL Dump Extraction Service ---
+# --- SQL Dump Extraction Service (Handles both INSERT and COPY) ---
 def _extract_sql(file_path: str) -> Tuple[List[Dict[str, Any]], str]:
     """
-    Extracts data from SQL INSERT statements in a .sql dump file using sqlparse.
+    Extracts data from SQL dump files, supporting both standard INSERT statements
+    and PostgreSQL's 'COPY ... FROM stdin' format.
 
     Args:
         file_path (str): The path to the .sql file.
 
     Returns:
-        A list of blocks, where each block is a row of inserted data represented as a JSON string.
+        A list of blocks, where each block is a row of data as a JSON string.
     """
     blocks = []
-    record_count = 0
+    print(f"--- Starting Unified SQL Extraction for {file_path} ---")
     try:
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
+        # Try to detect encoding first
+        encodings_to_try = ['utf-8', 'utf-16', 'utf-16le', 'utf-16be', 'latin-1', 'cp1252']
+        content = None
         
-        parsed = sqlparse.parse(content)
-        for stmt in parsed:
-            if stmt.get_type() == 'INSERT':
-                record_count += 1
-                # This is a simplified approach. A full implementation would require
-                # walking the token stream to robustly extract table names and values.
-                table_name = "unknown"
-                for token in stmt.tokens:
-                    if isinstance(token, sqlparse.sql.Identifier):
-                        table_name = token.get_real_name()
-                        break
+        for encoding in encodings_to_try:
+            try:
+                with open(file_path, 'r', encoding=encoding, errors='ignore') as f:
+                    test_content = f.read()
+                # Check if content looks reasonable (no excessive null bytes)
+                if test_content and test_content.count('\x00') / len(test_content) < 0.1:
+                    content = test_content
+                    print(f"Successfully read SQL file with encoding: {encoding}")
+                    break
+            except:
+                continue
+        
+        if not content:
+            # Fallback to utf-8 with error handling
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+
+        # --- Process COPY statements using line-by-line parsing ---
+        print("\n--- Processing for COPY statements ---")
+        found_copy_blocks = 0
+        lines = content.split('\n')
+        in_copy_block = False
+        current_table = None
+        current_columns = []
+        
+        for i, line in enumerate(lines):
+            line = line.strip()
+            
+            # Check for start of COPY block
+            if line.startswith('COPY ') and 'FROM stdin;' in line:
+                copy_match = re.match(r'COPY\s+([\w\.]+)\s*\((.*?)\)\s+FROM\s+stdin;', line, re.IGNORECASE)
+                if copy_match:
+                    found_copy_blocks += 1
+                    current_table = copy_match.group(1).strip()
+                    current_columns = [col.strip().strip('"') for col in copy_match.group(2).split(',')]
+                    in_copy_block = True
+                    print(f"Found COPY block for table '{current_table}' with columns: {current_columns}")
+                    
+            # Check for end of COPY block
+            elif in_copy_block and line == '\\.':
+                in_copy_block = False
+                current_table = None
+                current_columns = []
                 
-                pattern = re.compile(r"VALUES \((.*?)\)", re.IGNORECASE | re.DOTALL)
-                match = pattern.search(str(stmt))
-                if match:
-                    values_str = match.group(1)
-                    values = [v.strip().strip("'\"") for v in values_str.split(',')]
+            # Process data lines within COPY block
+            elif in_copy_block and line:
+                values = line.split('\t')
+                if len(current_columns) == len(values):
+                    row_data = {col: (val if val != '\\N' else None) for col, val in zip(current_columns, values)}
                     blocks.append({
-                        "text": json.dumps(dict(zip([f"col_{i}" for i in range(len(values))], values))),
-                        "metadata": {
-                            "source_filename": os.path.basename(file_path),
-                            "table_name": table_name,
-                            "extraction_method": "sqlparse"
+                        "text": json.dumps(row_data),
+                        "metadata": { 
+                            "source_filename": os.path.basename(file_path), 
+                            "table_name": current_table, 
+                            "extraction_method": "psql_copy" 
                         }
                     })
+                else:
+                    print(f"[WARNING] Column count mismatch in table '{current_table}': expected {len(current_columns)}, got {len(values)}. Skipping row.")
+        
+        if found_copy_blocks == 0:
+            print("No COPY blocks found.")
+
+        # --- Process INSERT statements using sqlparse ---
+        print("\n--- Processing for INSERT statements ---")
+        found_insert_blocks = 0
+        for stmt in sqlparse.parse(content):
+            if stmt.get_type() != 'INSERT':
+                continue
+            
+            found_insert_blocks += 1
+            table_name = "unknown"
+            into_seen = False
+            for token in stmt.tokens:
+                if into_seen and isinstance(token, sqlparse.sql.Identifier):
+                    table_name = token.get_real_name()
+                    break
+                if token.is_keyword and token.normalized == 'INTO':
+                    into_seen = True
+
+            columns_part = next((t for t in stmt.tokens if isinstance(t, sqlparse.sql.Parenthesis)), None)
+            column_names = []
+            if columns_part:
+                id_list = next((t for t in columns_part.tokens if isinstance(t, sqlparse.sql.IdentifierList)), None)
+                if id_list:
+                    column_names = [col.get_real_name() for col in id_list.get_identifiers()]
+
+            values_part = next((t for t in stmt.tokens if isinstance(t, sqlparse.sql.Values)), None)
+            if not values_part:
+                continue
+
+            for row_parens in values_part.get_sublists():
+                if isinstance(row_parens, sqlparse.sql.Parenthesis):
+                    id_list = next((t for t in row_parens.tokens if isinstance(t, sqlparse.sql.IdentifierList)), None)
+                    if not id_list: continue
+                    
+                    row_values = [identifier.normalized.strip("'\"") for identifier in id_list.get_identifiers()]
+                    
+                    if column_names and len(column_names) == len(row_values):
+                        row_data = dict(zip(column_names, row_values))
+                    else:
+                        row_data = {f"col_{j}": val for j, val in enumerate(row_values)}
+                    
+                    blocks.append({
+                        "text": json.dumps(row_data),
+                        "metadata": { "source_filename": os.path.basename(file_path), "table_name": table_name, "extraction_method": "sql_insert" }
+                    })
+        
+        if found_insert_blocks > 0:
+            print(f"Found and processed {found_insert_blocks} INSERT statements.")
+        else:
+            print("No INSERT statements found.")
+
+        print(f"--- SQL Extraction Complete. Found {len(blocks)} total blocks. ---")
 
     except Exception as e:
-        print(f"Error processing SQL {file_path}: {e}")
+        print(f"Error processing SQL file {file_path}: {e}")
+        import traceback
+        traceback.print_exc()
         return [], "sql-error"
-    # Add record count to the last block's metadata
-    if blocks:
-        blocks[-1]["metadata"]["record_count"] = record_count
+    
     return blocks, "sql"
+
 
 # --- JSONL Extraction Service ---
 def _extract_jsonl(file_path: str) -> Tuple[List[Dict[str, Any]], str]:

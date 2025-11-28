@@ -1,0 +1,22 @@
+# Core Dependencies
+python-dotenv
+
+# LangChain & Google Gemini
+langchain==0.1.16
+langchain-core==0.1.52
+langchain-google-genai==1.0.2
+langchain-qdrant==0.1.1
+langchain-community==0.0.34
+google-generativeai
+
+# Vector Database
+qdrant-client
+
+# Embeddings
+sentence-transformers
+torch
+
+# FastAPI (optional - for REST API)
+fastapi
+uvicorn
+pydantic

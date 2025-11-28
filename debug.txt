@@ -1,0 +1,243 @@
+this is how it should work 
+
+Embedding service: Using device 'cpu'
+
+INFO:     Started server process [9056]
+
+INFO:     Waiting for application startup.
+
+INFO:app.services.cleanup_service:Cleanup service started. Will run every 1 hours.
+
+INFO:app.services.cleanup_service:Starting periodic cleanup...
+
+INFO:app.services.cleanup_service:Periodic cleanup completed.
+
+INFO:     Application startup complete.
+
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+
+INFO:     127.0.0.1:65268 - "GET /api/v1/manage/knowledge-bases/ HTTP/1.1" 200 OK
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/test "HTTP/1.1 404 Not Found"
+
+ERROR:app.services.management_service:Error getting details for collection test: Unexpected Response: 404 (Not Found)
+
+Raw response content:
+
+b'{"status":{"error":"Not found: Collection `test` doesn\'t exist!"},"time":0.00003659}'
+
+INFO:     127.0.0.1:65269 - "GET /api/v1/manage/knowledge-bases/test/details HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:65272 - "GET /api/v1/db/connections/list HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:65276 - "GET /api/v1/manage/knowledge-bases/ HTTP/1.1" 200 OK
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/logistics-demo "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/logistics-demo/points/scroll "HTTP/1.1 200 OK"
+
+INFO:     127.0.0.1:65277 - "GET /api/v1/manage/knowledge-bases/logistics-demo/details HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:65284 - "GET /api/v1/db/connections/list HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:49588 - "GET /api/v1/manage/knowledge-bases/ HTTP/1.1" 200 OK
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/logistics-demo "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/logistics-demo/points/scroll "HTTP/1.1 200 OK"
+
+INFO:     127.0.0.1:49590 - "GET /api/v1/manage/knowledge-bases/logistics-demo/details HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:49614 - "GET /api/v1/db/connections/list HTTP/1.1" 200 OK
+
+INFO:app.routers.agent_router_beta:Agent chat request - Session: 9582afb4-8964-4397-bec5-4157e82a7262, Message: Where is my order?, KB: logistics-demo
+
+INFO:app.services.agent_service_beta:Query classified as: database
+
+INFO:app.services.agent_service_beta:Direct database tool execution for: Where is my order?
+
+INFO:     127.0.0.1:49617 - "POST /api/v1/beta/agent/chat HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:49618 - "GET /api/v1/manage/knowledge-bases/ HTTP/1.1" 200 OK
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/logistics-demo "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/logistics-demo/points/scroll "HTTP/1.1 200 OK"
+
+INFO:     127.0.0.1:49619 - "GET /api/v1/manage/knowledge-bases/logistics-demo/details HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:49641 - "GET /api/v1/db/connections/list HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:49729 - "GET /api/v1/manage/knowledge-bases/ HTTP/1.1" 200 OK
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/logistics-demo "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/logistics-demo/points/scroll "HTTP/1.1 200 OK"
+
+INFO:     127.0.0.1:49730 - "GET /api/v1/manage/knowledge-bases/logistics-demo/details HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:49755 - "GET /api/v1/db/connections/list HTTP/1.1" 200 OK
+
+INFO:app.routers.agent_router_beta:Agent chat request - Session: 9582afb4-8964-4397-bec5-4157e82a7262, Message: QS250001, KB: logistics-demo
+
+INFO:app.services.agent_service_beta:Query classified as: database
+
+INFO:app.services.agent_service_beta:Direct database tool execution for: QS250001
+
+INFO:     127.0.0.1:49756 - "POST /api/v1/beta/agent/chat HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:49757 - "GET /api/v1/manage/knowledge-bases/ HTTP/1.1" 200 OK
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/logistics-demo "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/logistics-demo/points/scroll "HTTP/1.1 200 OK"
+
+INFO:     127.0.0.1:49758 - "GET /api/v1/manage/knowledge-bases/logistics-demo/details HTTP/1.1" 200 OK
+
+INFO:     127.0.0.1:49780 - "GET /api/v1/db/connections/list HTTP/1.1" 200 OK
+
+INFO:     Shutting down
+
+  Stopping...
+
+INFO:     Waiting for application shutdown.
+
+INFO:app.services.cleanup_service:Cleanup service stopped.
+
+INFO:     Application shutdown complete.
+
+INFO:     Finished server process [9056]
+
+--- Ctrl+C received. Shutting down applications... ---
+
+Stopping FastAPI backend...
+
+--- All applications have been shut down. ---
+
+(.venv) PS W:\EcoStance-RAG-db-connect> 
+
+
+
+but its doing 
+
+
+
+Embedding service: Using device 'cpu'
+INFO:     Started server process [11752]
+INFO:     Waiting for application startup.
+INFO:app.services.cleanup_service:Cleanup service starting...
+INFO:app.services.cleanup_service:Cleanup service started
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:app.services.scheduler_service:Scheduler started
+INFO:     Application startup complete.
+INFO:app.middleware.auth_middleware:Request: POST /api/v1/auth/refresh | Tenant: None | Auth: None | Client: 127.0.0.1
+INFO:app.middleware.auth_middleware:Request: POST /api/v1/auth/refresh | Tenant: None | Auth: None | Client: 127.0.0.1
+INFO:app.routers.auth_router:Token refreshed for tenant: badcd123-6cc6-4011-b01b-d33d1153f10d
+INFO:app.routers.auth_router:Token refreshed for tenant: badcd123-6cc6-4011-b01b-d33d1153f10d
+INFO:app.middleware.auth_middleware:Response: POST /api/v1/auth/refresh | Status: 200 | Tenant: None | Time: 1.370s
+INFO:app.middleware.auth_middleware:Response: POST /api/v1/auth/refresh | Status: 200 | Tenant: None | Time: 1.369s
+INFO:     127.0.0.1:64260 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64261 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:app.middleware.auth_middleware:Request: GET /api/v1/db/schema | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Auth: jwt | Client: 127.0.0.1
+INFO:app.middleware.auth_middleware:Request: GET /api/v1/manage/knowledge-bases/ | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Auth: jwt | Client: 127.0.0.1
+INFO:app.middleware.auth_middleware:Request: GET /api/v1/db/connections/list | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Auth: jwt | Client: 127.0.0.1
+INFO:app.middleware.auth_middleware:Response: GET /api/v1/db/schema | Status: 400 | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Time: 0.097s
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:app.middleware.auth_middleware:Response: GET /api/v1/db/connections/list | Status: 200 | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Time: 1.359s
+INFO:     127.0.0.1:64261 - "GET /api/v1/db/schema HTTP/1.1" 400 Bad Request
+INFO:app.middleware.auth_middleware:Response: GET /api/v1/manage/knowledge-bases/ | Status: 200 | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Time: 1.446s
+INFO:     127.0.0.1:64263 - "GET /api/v1/db/connections/list HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64260 - "GET /api/v1/manage/knowledge-bases/ HTTP/1.1" 200 OK
+INFO:app.middleware.auth_middleware:Request: GET /api/v1/db/schema | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Auth: jwt | Client: 127.0.0.1     
+INFO:app.middleware.auth_middleware:Response: GET /api/v1/db/schema | Status: 400 | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Time: 0.085s
+INFO:app.middleware.auth_middleware:Request: GET /api/v1/db/connections/list | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Auth: jwt | Client: 127.0.0.1
+INFO:app.middleware.auth_middleware:Request: GET /api/v1/manage/knowledge-bases/ | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Auth: jwt | Client: 127.0.0.1
+INFO:     127.0.0.1:64261 - "GET /api/v1/db/schema HTTP/1.1" 400 Bad Request
+INFO:app.middleware.auth_middleware:Response: GET /api/v1/db/connections/list | Status: 200 | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Time: 0.090s
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:64263 - "GET /api/v1/db/connections/list HTTP/1.1" 200 OK
+INFO:app.middleware.auth_middleware:Response: GET /api/v1/manage/knowledge-bases/ | Status: 200 | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Time: 1.434s
+INFO:     127.0.0.1:64260 - "GET /api/v1/manage/knowledge-bases/ HTTP/1.1" 200 OK
+INFO:app.middleware.auth_middleware:Request: GET /api/v1/db/connections/logistics-demo | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Auth: jwt | Client: 127.0.0.1
+INFO:app.middleware.auth_middleware:Response: GET /api/v1/db/connections/logistics-demo | Status: 200 | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Time: 0.082s
+INFO:     127.0.0.1:64260 - "GET /api/v1/db/connections/logistics-demo HTTP/1.1" 200 OK
+INFO:app.middleware.auth_middleware:Request: POST /api/v1/db/connect | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Auth: jwt | Client: 127.0.0.1   
+INFO:app.middleware.auth_middleware:Response: POST /api/v1/db/connect | Status: 200 | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Time: 0.114s
+INFO:     127.0.0.1:64260 - "POST /api/v1/db/connect HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'quickship_agent\agent_service.py'. Reloading...
+ INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:app.services.scheduler_service:Scheduler stopped
+INFO:app.services.cleanup_service:Cleanup service stopping...
+INFO:app.services.cleanup_service:Cleanup service stopped
+INFO:     Application shutdown complete.
+INFO:     Finished server process [11752]
+Embedding service: Using device 'cpu'
+INFO:     Started server process [3484]
+INFO:     Waiting for application startup.
+INFO:app.services.cleanup_service:Cleanup service starting...
+INFO:app.services.cleanup_service:Cleanup service started
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:app.services.scheduler_service:Scheduler started
+INFO:     Application startup complete.
+INFO:app.middleware.auth_middleware:Request: POST /api/v1/query/ | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Auth: jwt | Client: 127.0.0.1       
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/tenant_badcd123-6cc6-4011-b01b-d33d1153f10d_test-demo "HTTP/1.1 200 OK"
+INFO:app.routers.query_router:Received query for tenant badcd123-6cc6-4011-b01b-d33d1153f10d, kb: test-demo, collection: tenant_badcd123-6cc6-4011-b01b-d33d1153f10d_test-demo
+INFO:app.routers.query_router:Query: where is my order
+INFO:app.routers.query_router:Chat history: []
+INFO:app.routers.query_router:Executing query...
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/tenant_badcd123-6cc6-4011-b01b-d33d1153f10d_test-demo/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Retrieved Context for tenant badcd123-6cc6-4011-b01b-d33d1153f10d: QuickShip Logistics — Complete Customer & Team Guide (November 2025) Customer Section — Most Common Questions 1. Where is my parcel right now? Go to quickship.in/track and enter your 12-digit tracking number (starts with QS). You will see the latest status: Booked — Picked up — At hub — Out for delivery — Delivered. We update every 1-2 hours and also send SMS automatically. 2. When will it reach me? Inside India normal time: - Same state: 2-3 days «Nearby state: 3-4 days « Far state (Kerala to Delhi etc. ): 5-7 days North-East/J&K: extra 2 days. Exact date is sent by SMS after pickup.
+
+1. Why is my shipment delayed? Common reasons: rain, traffic jam, festival rush, or customs checking (international). If delayed more than 2 days we give ¥100-200 discount on next shipment. 2. Can you pick up from my house/shop? Yes. Book on app or call 1800-123-9876. Pickup charge %50 in city, 100 outside. Free for orders above ¥5000 value. 3. How much will shipping cost? (November 2025 rates) Up to 1 kg: Same zone %55 | Nearby zone %80 | Far zone 3120 Every extra kg: 230 | %40 | 55 +18% GST. COD orders extra %50 fee. 4. Do you have fast delivery? Yes — Express (next day): extra ¥150-300 Same-day (big cities only): extra ¥250, book before 1 PM. 5. What papers needed for international shipping? Commercial Invoice (3 copies), Packing List, your GST number if business. We handle the rest — just send photos on WhatsApp. 6.
+
+We handle the rest — just send photos on WhatsApp. 6. Can | change the delivery address? Yes, free if status is still “At hub” or earlier. After truck leaves: ¥150 reroute fee. 7. Parcel came damaged or something missing? Don't accept if box is crushed. Take photo/video right there with the delivery boy. Send us photos — full money back in 3-5 days. 8. How to contact support? Call 1800-123-9876 (24x7), WhatsApp 98765-43210 (reply in 5 mins), email care@quickship.in Extra tips customers like: + Volumetric weight = (Length x Breadth x Height in cm)/5000 — we charge whichever is higher. +We don't carry alcohol, live animals, gold above 50g. - Sunday delivery only in metro cities (extra 100).
+
+Internal / Team Section — Daily Questions 1. How many parcels pending today? 350 pending, 1420 delivered, 95% on-time. 2. Which delivery boy is doing badly? Raju — only 72% on-time this week, too many “customer not home” cases. 3. Any urgent parcels stuck? 4 medicine parcels stuck at Guwahati customs — call broker now. 4. Fuel bill this month? %4.8 lakh used vs %5.2 lakh budget — under budget. 5. Top complaint reasons last 7 days 6. Delay (48%) 2. Damaged box (22%) 3. Wrong item (11%) 4. Rude boy (9%) 5. No call before coming (8%) 7. Space left in Delhi warehouse? 68% full — 3200 sq ft free, can take extra Diwali stock. 8. Which routes always late? Mumbai-Pune highway — start trucks 1 hour early from tomorrow. 9. COD cash collected today? %3.4 lakh — deposit in bank by 7 PM.
+
+COD cash collected today? %3.4 lakh — deposit in bank by 7 PM. Quick tips for team: Always scan parcel at pickup & delivery. Call customer 30 mins before reaching. If box looks old take photo first. That’s everything — normal logistics answers ready to use.
+INFO:httpx:HTTP Request: POST https://6d5668bc-19f8-4d25-85d3-4d656e8022db.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/tenant_badcd123-6cc6-4011-b01b-d33d1153f10d_test-demo/points/search "HTTP/1.1 200 OK"
+INFO:app.services.query_service:Context being passed to LLM: QuickShip Logistics — Complete Customer & Team Guide (November 2025) Customer Section — Most Common Questions 1. Where is my parcel right now? Go to quickship.in/track and enter your 12-digit tracking number (starts with QS). You will see the latest status: Booked — Picked up — At hub — Out for delivery — Delivered. We update every 1-2 hours and also send SMS automatically. 2. When will it reach me? Inside India normal time: - Same state: 2-3 days «Nearby state: 3-4 days « Far state (Kerala to Delhi etc. ): 5-7 days North-East/J&K: extra 2 days. Exact date is sent by SMS after pickup.
+
+1. Why is my shipment delayed? Common reasons: rain, traffic jam, festival rush, or customs checking (international). If delayed more than 2 days we give ¥100-200 discount on next shipment. 2. Can you pick up from my house/shop? Yes. Book on app or call 1800-123-9876. Pickup charge %50 in city, 100 outside. Free for orders above ¥5000 value. 3. How much will shipping cost? (November 2025 rates) Up to 1 kg: Same zone %55 | Nearby zone %80 | Far zone 3120 Every extra kg: 230 | %40 | 55 +18% GST. COD orders extra %50 fee. 4. Do you have fast delivery? Yes — Express (next day): extra ¥150-300 Same-day (big cities only): extra ¥250, book before 1 PM. 5. What papers needed for international shipping? Commercial Invoice (3 copies), Packing List, your GST number if business. We handle the rest — just send photos on WhatsApp. 6.
+
+We handle the rest — just send photos on WhatsApp. 6. Can | change the delivery address? Yes, free if status is still “At hub” or earlier. After truck leaves: ¥150 reroute fee. 7. Parcel came damaged or something missing? Don't accept if box is crushed. Take photo/video right there with the delivery boy. Send us photos — full money back in 3-5 days. 8. How to contact support? Call 1800-123-9876 (24x7), WhatsApp 98765-43210 (reply in 5 mins), email care@quickship.in Extra tips customers like: + Volumetric weight = (Length x Breadth x Height in cm)/5000 — we charge whichever is higher. +We don't carry alcohol, live animals, gold above 50g. - Sunday delivery only in metro cities (extra 100).
+
+Internal / Team Section — Daily Questions 1. How many parcels pending today? 350 pending, 1420 delivered, 95% on-time. 2. Which delivery boy is doing badly? Raju — only 72% on-time this week, too many “customer not home” cases. 3. Any urgent parcels stuck? 4 medicine parcels stuck at Guwahati customs — call broker now. 4. Fuel bill this month? %4.8 lakh used vs %5.2 lakh budget — under budget. 5. Top complaint reasons last 7 days 6. Delay (48%) 2. Damaged box (22%) 3. Wrong item (11%) 4. Rude boy (9%) 5. No call before coming (8%) 7. Space left in Delhi warehouse? 68% full — 3200 sq ft free, can take extra Diwali stock. 8. Which routes always late? Mumbai-Pune highway — start trucks 1 hour early from tomorrow. 9. COD cash collected today? %3.4 lakh — deposit in bank by 7 PM.
+
+COD cash collected today? %3.4 lakh — deposit in bank by 7 PM. Quick tips for team: Always scan parcel at pickup & delivery. Call customer 30 mins before reaching. If box looks old take photo first. That’s everything — normal logistics answers ready to use.
+INFO:app.services.query_service:Final inputs to prompt: question=where is my order, has_history=True
+INFO:app.routers.query_router:Query executed successfully. Answer: Go to quickship.in/track and enter your 12-digit tracking number (starts with QS). You will see the latest status: Booked — Picked up — At hub — Out for delivery — Delivered.
+INFO:app.middleware.auth_middleware:Response: POST /api/v1/query/ | Status: 200 | Tenant: badcd123-6cc6-4011-b01b-d33d1153f10d | Time: 15.992s
+INFO:     127.0.0.1:64302 - "POST /api/v1/query/ HTTP/1.1" 200 OK

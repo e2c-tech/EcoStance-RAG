@@ -1,0 +1,4264 @@
+Ingestion Results for w:\pyProjects\EcoStanceAgentV1\quickship_agent
+Summary
+Directory: quickship_agent
+Files analyzed: 25
+
+Estimated tokens: 31.0k
+
+
+Directory structure:
+└── quickship_agent/
+    ├── README.md
+    ├── __init__.py
+    ├── agent_service.py
+    ├── ARCHITECTURE.md
+    ├── CHECKLIST.md
+    ├── config.py
+    ├── INTEGRATION_GUIDE.md
+    ├── LICENSE
+    ├── MIGRATION_GUIDE.md
+    ├── PACKAGE_SUMMARY.md
+    ├── QUICK_REFERENCE.md
+    ├── requirements.txt
+    ├── router.py
+    ├── setup.py
+    ├── USAGE_DIAGRAM.md
+    ├── .env.example
+    ├── examples/
+    │   ├── basic_usage.py
+    │   ├── custom_tools.py
+    │   └── fastapi_integration.py
+    ├── services/
+    │   ├── __init__.py
+    │   ├── qdrant_service.py
+    │   └── rag_service.py
+    └── tools/
+        ├── __init__.py
+        ├── database_tools.py
+        └── knowledge_base_tools.py
+
+
+File Contents
+
+===============================================
+File: README.md
+===============================================
+
+# QuickShip AI Agent - Standalone Package
+
+A reusable conversational AI agent for logistics and customer service applications. Built with LangChain, Google Gemini, and supports both database queries and knowledge base search.
+
+## Features
+
+- 🤖 Natural language conversation with ReAct agent pattern
+- 📦 Database query tools (shipment tracking, customer search, etc.)
+- 📚 Knowledge base search with RAG (Retrieval Augmented Generation)
+- 💬 Multi-turn conversations with session management
+- 🔧 Easy to customize and extend with new tools
+- 🚀 FastAPI-ready with pre-built router
+
+## Quick Start
+
+### 1. Installation
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Configuration
+
+Create a `.env` file:
+
+```env
+GOOGLE_API_KEY=your_gemini_api_key
+QDRANT_URL=your_qdrant_url
+QDRANT_API_KEY=your_qdrant_api_key
+QUICKSHIP_DB_PATH=path/to/your/database.db
+```
+
+### 3. Basic Usage
+
+```python
+from quickship_agent import AgentService
+
+# Initialize the agent
+agent = AgentService()
+
+# Chat with the agent
+response = agent.chat(
+    session_id="user-123",
+    message="Track shipment QS250001"
+)
+
+print(response["response"])
+```
+
+### 4. Use with FastAPI
+
+```python
+from fastapi import FastAPI
+from quickship_agent.router import router as agent_router
+
+app = FastAPI()
+app.include_router(agent_router, prefix="/api/v1/beta")
+```
+
+## Architecture
+
+```
+User Query
+    ↓
+Agent Service
+    ↓
+ReAct Agent (LangChain + Gemini)
+    ↓
+Tools Layer
+    ├── Database Tools (SQLite)
+    └── Knowledge Base Tools (Qdrant + RAG)
+```
+
+## Customization
+
+### Adding New Tools
+
+Create a new tool in `tools/custom_tools.py`:
+
+```python
+from langchain.tools import tool
+
+@tool
+def my_custom_tool(param: str) -> str:
+    """Description of what this tool does"""
+    # Your logic here
+    return "Result"
+```
+
+Register it in `agent_service.py`:
+
+```python
+from .tools.custom_tools import my_custom_tool
+
+self.tools = [
+    # ... existing tools
+    my_custom_tool
+]
+```
+
+### Customizing the System Prompt
+
+Edit `SYSTEM_PROMPT` in `agent_service.py` to change the agent's behavior and personality.
+
+### Using Your Own Database
+
+Modify `tools/database_tools.py` to connect to your database schema. The tools use standard Python DB-API, so you can easily adapt to PostgreSQL, MySQL, etc.
+
+## API Reference
+
+### AgentService
+
+**Methods:**
+
+- `chat(session_id: str, message: str, knowledge_base: str = None) -> Dict`
+  - Process a user message and return agent response
+  
+- `get_conversation_history(session_id: str) -> List[Dict]`
+  - Retrieve conversation history for a session
+  
+- `reset_conversation(session_id: str) -> bool`
+  - Clear conversation history for a session
+
+### FastAPI Router
+
+**Endpoints:**
+
+- `POST /agent/chat` - Chat with the agent
+- `GET /agent/history/{session_id}` - Get conversation history
+- `POST /agent/reset/{session_id}` - Reset conversation
+
+## Examples
+
+See the `examples/` directory for:
+- Basic usage
+- FastAPI integration
+- Custom tool creation
+- Streamlit UI integration
+
+## Requirements
+
+- Python 3.8+
+- Google Gemini API key
+- Qdrant vector database (for knowledge base features)
+- SQLite database (or adapt to your database)
+
+## License
+
+MIT License - Feel free to use in your projects!
+
+## Support
+
+For issues or questions, please open an issue on GitHub.
+
+
+===============================================
+File: __init__.py
+===============================================
+
+"""
+QuickShip AI Agent - Standalone Package
+A reusable conversational AI agent for logistics and customer service
+"""
+
+from .agent_service import AgentService, agent_service
+
+__version__ = "1.0.0"
+__all__ = ["AgentService", "agent_service"]
+
+
+===============================================
+File: agent_service.py
+===============================================
+
+"""
+ReAct Agent Service for QuickShip Logistics
+Handles conversational AI for customer service queries
+"""
+
+import re
+import logging
+from typing import List, Dict
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+
+from .config import GOOGLE_API_KEY, AGENT_MODEL, AGENT_TEMPERATURE
+from .tools.database_tools import (
+    get_shipment_status,
+    search_shipments_by_customer,
+    track_by_tracking_number,
+    get_delivery_estimate,
+    check_cod_payment_status,
+    get_complaint_status,
+)
+from .tools.knowledge_base_tools import (
+    search_knowledge_base,
+    list_available_knowledge_bases
+)
+
+logger = logging.getLogger(__name__)
+
+# System prompt for the agent
+SYSTEM_PROMPT = """You are QuickShip's helpful and professional customer service agent.
+
+Your role:
+- Help customers track their shipments
+- Provide delivery estimates
+- Answer questions about payments and complaints
+- Always be polite, professional, and empathetic
+
+Guidelines:
+1. If customer doesn't provide shipment ID, politely ask for phone number, email, or tracking number
+2. If multiple shipments are found, list them clearly and ask which one they want to know about
+3. Use the available tools to get accurate information from the database
+4. NEVER make up information - only use data returned by the tools
+5. If a shipment is delayed or has issues, acknowledge the inconvenience and provide helpful information
+6. For complaints, check the complaint status and inform the customer about resolution
+7. Be concise but friendly in your responses
+
+Available Tools:
+
+**Shipment & Database Tools:**
+- get_shipment_status(shipment_id): Get full details of a shipment by ID (format: QS250XXX)
+- search_shipments_by_customer(phone, email): Find shipments by phone or email
+- track_by_tracking_number(tracking_number): Track using tracking number (format: TRKXXXXXXXXX)
+- get_delivery_estimate(shipment_id): Get delivery date estimates
+- check_cod_payment_status(shipment_id): Check COD payment collection status
+- get_complaint_status(shipment_id): Check if there are complaints for a shipment
+
+**Knowledge Base Tools:**
+- list_available_knowledge_bases(): List all available knowledge bases
+- search_knowledge_base(collection_name, query): Search company documents for policies, FAQs, procedures
+
+When to use each type:
+- Use shipment tools for: "Track QS250001", "Where is my order?", "Check payment", "Delivery estimate"
+- Use knowledge base tools for: "What is your policy?", "How do I...?", "Tell me about...", "What are your rates?"
+- If unsure which knowledge base to search, first use list_available_knowledge_bases()
+
+IMPORTANT: When a user asks about policies, procedures, rates, or general information (not about a specific shipment),
+you MUST use the search_knowledge_base tool. Do not try to answer from memory.
+
+Remember:
+- Shipment IDs are in format: QS250XXX
+- Tracking numbers are in format: TRKXXXXXXXXX
+- Always end with: "Is there anything else I can help you with?"
+
+When you need to use a tool, call it directly and use the result to answer the customer."""
+
+
+class AgentService:
+    """Service for managing agent conversations with tool calling"""
+    
+    def __init__(self):
+        self.llm = ChatGoogleGenerativeAI(
+            model=AGENT_MODEL,
+            google_api_key=GOOGLE_API_KEY,
+            temperature=AGENT_TEMPERATURE
+        )
+        
+        # Bind tools to the model
+        self.tools = [
+            get_shipment_status,
+            search_shipments_by_customer,
+            track_by_tracking_number,
+            get_delivery_estimate,
+            check_cod_payment_status,
+            get_complaint_status,
+            search_knowledge_base,
+            list_available_knowledge_bases
+        ]
+        
+        self.llm_with_tools = self.llm.bind_tools(self.tools)
+        
+        # Store conversations by session_id
+        self.conversations: Dict[str, List[Dict]] = {}
+    
+    def _is_out_of_scope(self, message: str) -> bool:
+        """
+        Check if query is out of scope (not related to logistics)
+        
+        Returns: True if out of scope, False if in scope
+        """
+        message_lower = message.lower()
+        
+        # Out of scope indicators (programming, general knowledge, etc.)
+        out_of_scope_indicators = [
+            'write code', 'python code', 'javascript', 'program', 'function',
+            'hello world', 'print', 'console.log', 'def ', 'class ',
+            'weather', 'news', 'stock', 'recipe', 'movie', 'song',
+            'joke', 'story', 'poem', 'translate', 'calculate',
+            'what is the capital', 'who is', 'when was', 'history of',
+            'math problem', 'solve equation', 'homework'
+        ]
+        
+        return any(indicator in message_lower for indicator in out_of_scope_indicators)
+    
+    def _classify_query(self, message: str) -> str:
+        """
+        Classify query type to determine which tool to use
+        
+        Returns: 'database', 'knowledge_base', 'out_of_scope', or 'unknown'
+        """
+        message_lower = message.lower()
+        
+        # Check if out of scope first
+        if self._is_out_of_scope(message):
+            return 'out_of_scope'
+        
+        # Database query indicators (shipment tracking)
+        db_indicators = [
+            'track', 'qs250', 'shipment', 'order', 'delivery boy', 'cod collected',
+            'payment status', 'complaint for', 'where is my', 'phone is', 'email is',
+            'trk', 'delivered', 'in transit', 'estimate for'
+        ]
+        
+        # Knowledge base query indicators (policies, rates, procedures)
+        kb_indicators = [
+            'rate', 'cost', 'price', 'how much', 'policy', 'procedure', 
+            'how do i', 'what is your', 'what are your', 'tell me about',
+            'how long does', 'do you offer', 'what documents', 'why is',
+            'how to', 'can you', 'shipping', 'delivery time', 'pickup',
+            'international', 'express', 'same-day', 'next-day'
+        ]
+        
+        # Check for database indicators
+        if any(indicator in message_lower for indicator in db_indicators):
+            return 'database'
+        
+        # Check for knowledge base indicators
+        if any(indicator in message_lower for indicator in kb_indicators):
+            return 'knowledge_base'
+        
+        return 'unknown'
+    
+    def chat(self, session_id: str, message: str, knowledge_base: str = None) -> Dict:
+        """
+        Process a chat message and return agent response
+        
+        Args:
+            session_id: Unique session identifier
+            message: User message
+            knowledge_base: Optional knowledge base name to search (from sidebar)
+            
+        Returns:
+            Dict with response and metadata
+        """
+        try:
+            # Initialize conversation history if new session
+            if session_id not in self.conversations:
+                self.conversations[session_id] = []
+            
+            # Store selected knowledge base for this session
+            if not hasattr(self, 'session_kb'):
+                self.session_kb = {}
+            if knowledge_base:
+                self.session_kb[session_id] = knowledge_base
+            
+            # Add user message to history
+            self.conversations[session_id].append({
+                "role": "user",
+                "content": message
+            })
+            
+            # Classify the query type
+            query_type = self._classify_query(message)
+            logger.info(f"Query classified as: {query_type}")
+            
+            # For database queries, use tools directly without LLM reformatting
+            if query_type == 'database':
+                logger.info(f"Direct database tool execution for: {message}")
+                
+                # Determine which tool to use based on query
+                tool_result = None
+                
+                # Check for shipment ID pattern (QS250XXX)
+                if 'qs250' in message.lower():
+                    match = re.search(r'QS250\d{3}', message, re.IGNORECASE)
+                    if match:
+                        shipment_id = match.group(0).upper()
+                        tool_result = get_shipment_status.invoke({"shipment_id": shipment_id})
+                
+                # Check for tracking number pattern (TRKXXXXXXXXX)
+                elif 'trk' in message.lower():
+                    match = re.search(r'TRK\d+', message, re.IGNORECASE)
+                    if match:
+                        tracking_number = match.group(0).upper()
+                        tool_result = track_by_tracking_number.invoke({"tracking_number": tracking_number})
+                
+                # Check for phone number
+                elif 'phone' in message.lower() or re.search(r'\d{10}', message):
+                    match = re.search(r'\d{10}', message)
+                    if match:
+                        phone = match.group(0)
+                        tool_result = search_shipments_by_customer.invoke({"phone": phone})
+                
+                # Check for email
+                elif '@' in message:
+                    match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', message)
+                    if match:
+                        email = match.group(0)
+                        tool_result = search_shipments_by_customer.invoke({"email": email})
+                
+                # If we got a result, return it directly
+                if tool_result:
+                    self.conversations[session_id].append({
+                        "role": "assistant",
+                        "content": tool_result
+                    })
+                    return {
+                        "response": tool_result,
+                        "session_id": session_id,
+                        "success": True
+                    }
+                
+                # If no tool result, provide helpful prompt for missing information
+                else:
+                    help_msg = """I'd be happy to help you track your order! To find your shipment, I need one of the following:
+
+📋 **Option 1:** Shipment ID (e.g., QS250001)
+📱 **Option 2:** Your phone number (10 digits)
+📧 **Option 3:** Your email address
+🔍 **Option 4:** Tracking number (e.g., TRK123456789)
+
+**Examples:**
+- "Track QS250001"
+- "My phone is 9224217802"
+- "My email is customer@example.com"
+- "Track TRK123456789"
+
+Please provide any of these details and I'll look up your order right away!"""
+                    
+                    self.conversations[session_id].append({
+                        "role": "assistant",
+                        "content": help_msg
+                    })
+                    return {
+                        "response": help_msg,
+                        "session_id": session_id,
+                        "success": True
+                    }
+            
+            # Handle out-of-scope queries
+            if query_type == 'out_of_scope':
+                out_of_scope_msg = """I'm sorry, but I can't help with that. I'm a QuickShip logistics assistant specialized in:
+
+📦 **Shipment Tracking:**
+- Track shipments by ID (e.g., "Track QS250001")
+- Check delivery status and estimates
+- View payment and COD status
+- Check complaints
+
+📚 **Company Information:**
+- Shipping rates and costs
+- Delivery timelines
+- Pickup services
+- Policies and procedures
+
+**Try asking:**
+- "What are your shipping rates?"
+- "Track QS250001"
+- "How long does delivery take?"
+- "My phone is 9224217802, show my orders"
+
+Is there anything related to shipments or logistics I can help you with?"""
+                
+                self.conversations[session_id].append({
+                    "role": "assistant",
+                    "content": out_of_scope_msg
+                })
+                
+                return {
+                    "response": out_of_scope_msg,
+                    "session_id": session_id,
+                    "success": True
+                }
+            
+            # If it's clearly a KB query and we have a KB, search it directly
+            if query_type == 'knowledge_base' and session_id in self.session_kb:
+                logger.info(f"Direct KB search for: {message}")
+                try:
+                    kb_result = search_knowledge_base.invoke({
+                        "collection_name": self.session_kb[session_id],
+                        "query": message
+                    })
+                    
+                    # Add agent response to history
+                    self.conversations[session_id].append({
+                        "role": "assistant",
+                        "content": kb_result
+                    })
+                    
+                    return {
+                        "response": kb_result,
+                        "session_id": session_id,
+                        "success": True
+                    }
+                except Exception as e:
+                    logger.error(f"KB search failed: {e}", exc_info=True)
+                    error_msg = f"I encountered an error searching the knowledge base: {str(e)}"
+                    self.conversations[session_id].append({
+                        "role": "assistant",
+                        "content": error_msg
+                    })
+                    return {
+                        "response": error_msg,
+                        "session_id": session_id,
+                        "success": False,
+                        "error": str(e)
+                    }
+            
+            # Build system prompt with KB context
+            kb_context = ""
+            if session_id in self.session_kb:
+                kb_context = f"\n\nIMPORTANT: When searching the knowledge base, use the collection name: '{self.session_kb[session_id]}'"
+            
+            # Build messages for the model
+            messages = [SystemMessage(content=SYSTEM_PROMPT + kb_context)]
+            
+            # Add conversation history
+            for msg in self.conversations[session_id]:
+                if msg["role"] == "user":
+                    messages.append(HumanMessage(content=msg["content"]))
+                else:
+                    messages.append(AIMessage(content=msg["content"]))
+            
+            # Get response from model with tools
+            logger.info(f"Invoking LLM with {len(messages)} messages")
+            response = self.llm_with_tools.invoke(messages)
+            
+            # Check if model wants to use tools
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                logger.info(f"Model requested {len(response.tool_calls)} tool calls")
+                # Execute tool calls
+                tool_results = []
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call.get("name")
+                    tool_args = tool_call.get("args", {})
+                    
+                    logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
+                    
+                    # Find and execute the tool
+                    tool_found = False
+                    for tool in self.tools:
+                        if tool.name == tool_name:
+                            tool_found = True
+                            try:
+                                result = tool.invoke(tool_args)
+                                logger.info(f"Tool {tool_name} returned: {result[:100]}...")
+                                tool_results.append(f"Tool {tool_name} result: {result}")
+                            except Exception as e:
+                                logger.error(f"Tool {tool_name} error: {e}", exc_info=True)
+                                tool_results.append(f"Tool {tool_name} error: {str(e)}")
+                            break
+                    
+                    if not tool_found:
+                        logger.warning(f"Tool {tool_name} not found in available tools")
+                
+                # Add tool results to messages and get final response
+                messages.append(response)
+                messages.append(HumanMessage(content="\n\n".join(tool_results)))
+                final_response = self.llm.invoke(messages)
+                response_text = final_response.content
+            else:
+                logger.info("No tool calls requested by model")
+                response_text = response.content if hasattr(response, 'content') else str(response)
+                
+                # If response is empty or very short, provide helpful message
+                if not response_text or len(response_text.strip()) < 10:
+                    if session_id in self.session_kb:
+                        response_text = "I'm not sure how to help with that. Try asking about shipment tracking (e.g., 'Track QS250001') or company policies (e.g., 'What are your shipping rates?')."
+                    else:
+                        response_text = "I'm not sure how to help with that. Try asking about shipment tracking (e.g., 'Track QS250001')."
+            
+            # Add agent response to history
+            self.conversations[session_id].append({
+                "role": "assistant",
+                "content": response_text
+            })
+            
+            return {
+                "response": response_text,
+                "session_id": session_id,
+                "success": True
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in agent chat: {e}", exc_info=True)
+            error_response = "I apologize, but I encountered an error. Please try again or contact support."
+            
+            self.conversations[session_id].append({
+                "role": "assistant",
+                "content": error_response
+            })
+            
+            return {
+                "response": error_response,
+                "session_id": session_id,
+                "success": False,
+                "error": str(e)
+            }
+    
+    def get_conversation_history(self, session_id: str) -> List[Dict]:
+        """Get conversation history for a session"""
+        return self.conversations.get(session_id, [])
+    
+    def reset_conversation(self, session_id: str) -> bool:
+        """Reset conversation history for a session"""
+        if session_id in self.conversations:
+            del self.conversations[session_id]
+            return True
+        return False
+
+
+# Global agent service instance
+agent_service = AgentService()
+
+
+===============================================
+File: ARCHITECTURE.md
+===============================================
+
+# QuickShip AI Agent - Architecture
+
+## System Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         USER INTERFACE                          │
+│  (Streamlit UI / Web App / Mobile App / API Client)            │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      FASTAPI ROUTER                             │
+│  POST /agent/chat                                               │
+│  GET  /agent/history/{session_id}                               │
+│  POST /agent/reset/{session_id}                                 │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     AGENT SERVICE                               │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  Query Classification                                     │  │
+│  │  - Database queries (shipment tracking)                  │  │
+│  │  - Knowledge base queries (policies, FAQs)               │  │
+│  │  - Out of scope detection                                │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                             │                                    │
+│                             ▼                                    │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  ReAct Agent (LangChain + Google Gemini)                 │  │
+│  │  - Reasoning: Understand user intent                     │  │
+│  │  - Acting: Select and execute tools                      │  │
+│  │  - Response: Generate natural language response          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                ┌────────────┴────────────┐
+                │                         │
+                ▼                         ▼
+┌───────────────────────────┐  ┌──────────────────────────┐
+│   DATABASE TOOLS          │  │  KNOWLEDGE BASE TOOLS    │
+│                           │  │                          │
+│  • get_shipment_status    │  │  • search_knowledge_base │
+│  • search_by_customer     │  │  • list_knowledge_bases  │
+│  • track_by_number        │  │                          │
+│  • get_delivery_estimate  │  │                          │
+│  • check_payment_status   │  │                          │
+│  • get_complaint_status   │  │                          │
+└────────────┬──────────────┘  └────────────┬─────────────┘
+             │                              │
+             ▼                              ▼
+┌───────────────────────────┐  ┌──────────────────────────┐
+│   DATABASE                │  │  RAG SERVICE             │
+│   (SQLite/PostgreSQL)     │  │  (Qdrant + Embeddings)   │
+│                           │  │                          │
+│  • shipments              │  │  • Document retrieval    │
+│  • customers              │  │  • Semantic search       │
+│  • payments               │  │  • Context generation    │
+│  • complaints             │  │                          │
+│  • delivery_boys          │  │                          │
+└───────────────────────────┘  └────────────┬─────────────┘
+                                            │
+                                            ▼
+                              ┌──────────────────────────┐
+                              │  QDRANT VECTOR DB        │
+                              │  • Policies collection   │
+                              │  • FAQ collection        │
+                              │  • Procedures collection │
+                              └──────────────────────────┘
+```
+
+## Component Details
+
+### 1. Agent Service (`agent_service.py`)
+
+**Responsibilities:**
+- Manage conversation sessions
+- Classify user queries
+- Orchestrate tool execution
+- Generate responses
+
+**Key Methods:**
+```python
+chat(session_id, message, knowledge_base) -> Dict
+get_conversation_history(session_id) -> List[Dict]
+reset_conversation(session_id) -> bool
+```
+
+**Query Classification:**
+```
+User Query → Classifier
+    ├── Database Query → Direct tool execution
+    ├── Knowledge Base Query → RAG search
+    ├── Out of Scope → Polite rejection
+    └── Unknown → LLM with tools
+```
+
+### 2. Tools Layer
+
+#### Database Tools (`tools/database_tools.py`)
+
+Each tool follows this pattern:
+```python
+@tool
+def tool_name(param: str) -> str:
+    """Tool description for LLM"""
+    # 1. Connect to database
+    # 2. Execute query
+    # 3. Format results
+    # 4. Return formatted string
+```
+
+**Tool Selection Logic:**
+```
+User mentions shipment ID → get_shipment_status
+User provides phone/email → search_shipments_by_customer
+User provides tracking # → track_by_tracking_number
+User asks "when" → get_delivery_estimate
+User asks about payment → check_cod_payment_status
+User mentions complaint → get_complaint_status
+```
+
+#### Knowledge Base Tools (`tools/knowledge_base_tools.py`)
+
+**RAG Flow:**
+```
+User Query
+    ↓
+Embedding Generation (HuggingFace)
+    ↓
+Vector Search (Qdrant)
+    ↓
+Top-K Documents Retrieved
+    ↓
+Context + Query → LLM
+    ↓
+Generated Answer
+```
+
+### 3. Services Layer
+
+#### RAG Service (`services/rag_service.py`)
+
+**Components:**
+- **Retriever**: Qdrant vector search
+- **Embeddings**: HuggingFace sentence-transformers
+- **LLM**: Google Gemini for answer generation
+- **Prompt**: Structured prompt with context
+
+**Chain Structure:**
+```python
+RunnablePassthrough.assign(
+    context=retrieve_and_format,
+    chat_history=format_chat_history
+) | qa_prompt | llm | StrOutputParser()
+```
+
+#### Qdrant Service (`services/qdrant_service.py`)
+
+**Purpose:**
+- Initialize Qdrant client
+- Manage vector database connections
+
+### 4. FastAPI Router (`router.py`)
+
+**Endpoints:**
+
+```python
+POST /agent/chat
+Request: {
+    "session_id": "optional",
+    "message": "user query",
+    "knowledge_base": "optional"
+}
+Response: {
+    "response": "agent response",
+    "session_id": "uuid",
+    "success": true,
+    "error": null
+}
+
+GET /agent/history/{session_id}
+Response: {
+    "session_id": "uuid",
+    "messages": [...]
+}
+
+POST /agent/reset/{session_id}
+Response: {
+    "message": "success message",
+    "success": true
+}
+```
+
+## Data Flow Examples
+
+### Example 1: Shipment Tracking
+
+```
+User: "Track QS250001"
+    ↓
+Agent Service
+    ↓
+Query Classification: "database"
+    ↓
+Pattern Match: QS250\d{3}
+    ↓
+Tool: get_shipment_status("QS250001")
+    ↓
+Database Query: SELECT * FROM shipments WHERE shipment_id = ?
+    ↓
+Format Response: Shipment details with emoji
+    ↓
+Return to User
+```
+
+### Example 2: Policy Question
+
+```
+User: "What is your return policy?"
+    ↓
+Agent Service
+    ↓
+Query Classification: "knowledge_base"
+    ↓
+Tool: search_knowledge_base("policies", "return policy")
+    ↓
+RAG Service
+    ├── Generate embedding for query
+    ├── Search Qdrant for similar documents
+    ├── Retrieve top 3 documents
+    └── Generate answer with LLM
+    ↓
+Return formatted answer to User
+```
+
+### Example 3: Multi-turn Conversation
+
+```
+Turn 1:
+User: "Where is my order?"
+Agent: "I need your shipment ID or phone number"
+
+Turn 2:
+User: "My phone is 9224217802"
+    ↓
+Agent Service (with conversation history)
+    ↓
+Tool: search_shipments_by_customer(phone="9224217802")
+    ↓
+Database: Find all shipments for customer
+    ↓
+Agent: "I found 2 shipments: QS250001 (Delivered), QS250022 (In Transit)"
+```
+
+## Session Management
+
+```
+Session Storage (In-Memory)
+{
+    "session-123": [
+        {"role": "user", "content": "Track my order"},
+        {"role": "assistant", "content": "I need your shipment ID"},
+        {"role": "user", "content": "QS250001"},
+        {"role": "assistant", "content": "Your shipment..."}
+    ]
+}
+```
+
+**For Production:**
+Replace with Redis or database:
+```python
+redis.setex(f"session:{session_id}", 3600, json.dumps(messages))
+```
+
+## Error Handling
+
+```
+Try-Catch Hierarchy:
+    ├── Router Level: HTTP exceptions
+    ├── Service Level: Business logic errors
+    ├── Tool Level: Database/API errors
+    └── Logging: All levels logged
+```
+
+## Configuration Management
+
+```
+Environment Variables (.env)
+    ↓
+config.py (loads and validates)
+    ↓
+Services (import from config)
+```
+
+**Configuration Hierarchy:**
+1. Environment variables (highest priority)
+2. .env file
+3. Default values in config.py
+
+## Security Architecture
+
+```
+API Request
+    ↓
+Rate Limiting (optional)
+    ↓
+Authentication (optional)
+    ↓
+Input Validation
+    ↓
+Agent Processing
+    ↓
+Output Sanitization
+    ↓
+Response
+```
+
+## Scalability Considerations
+
+### Horizontal Scaling
+```
+Load Balancer
+    ├── Agent Instance 1
+    ├── Agent Instance 2
+    └── Agent Instance 3
+         ↓
+    Shared Redis (sessions)
+         ↓
+    Database (read replicas)
+```
+
+### Caching Strategy
+```
+Request → Cache Check
+    ├── Hit: Return cached response
+    └── Miss: Process → Cache → Return
+```
+
+### Async Processing
+```
+User Request → Queue → Worker Pool → Response
+```
+
+## Monitoring Points
+
+```
+Metrics to Track:
+├── Request count
+├── Response time
+├── Error rate
+├── Tool usage frequency
+├── Session duration
+├── Database query time
+├── LLM API latency
+└── Cache hit rate
+```
+
+## Extension Points
+
+### Adding New Tools
+```python
+# 1. Create tool
+@tool
+def my_tool(param: str) -> str:
+    """Description"""
+    return result
+
+# 2. Register in agent_service.py
+self.tools.append(my_tool)
+
+# 3. Update system prompt
+# 4. Test
+```
+
+### Adding New Data Sources
+```python
+# 1. Create new tool file
+# tools/api_tools.py
+
+# 2. Implement tools
+@tool
+def call_external_api(query: str) -> str:
+    response = requests.get(f"https://api.example.com?q={query}")
+    return response.json()
+
+# 3. Register tools
+```
+
+### Changing LLM Provider
+```python
+# Replace in agent_service.py
+from langchain_openai import ChatOpenAI
+
+self.llm = ChatOpenAI(
+    model="gpt-4",
+    api_key=OPENAI_API_KEY
+)
+```
+
+## Performance Optimization
+
+### Database
+- Use connection pooling
+- Add indexes on frequently queried columns
+- Use read replicas for scaling
+
+### Caching
+- Cache frequent queries
+- Cache embeddings
+- Cache LLM responses (with caution)
+
+### LLM
+- Use streaming for long responses
+- Batch requests when possible
+- Use cheaper models for simple queries
+
+---
+
+This architecture is designed to be:
+- **Modular**: Easy to swap components
+- **Scalable**: Can handle increasing load
+- **Maintainable**: Clear separation of concerns
+- **Extensible**: Easy to add new features
+- **Testable**: Each component can be tested independently
+
+
+===============================================
+File: CHECKLIST.md
+===============================================
+
+# QuickShip AI Agent - Integration Checklist
+
+Use this checklist to ensure successful integration of the QuickShip AI Agent package.
+
+## 📋 Pre-Integration Checklist
+
+### Environment Setup
+- [ ] Python 3.8+ installed
+- [ ] Virtual environment created and activated
+- [ ] Git repository initialized (if needed)
+
+### API Keys & Credentials
+- [ ] Google Gemini API key obtained
+- [ ] Qdrant account created (if using knowledge base)
+- [ ] Qdrant URL and API key obtained
+- [ ] Database file/connection available
+
+## 📦 Installation Checklist
+
+### Package Setup
+- [ ] Package copied to project directory
+- [ ] Dependencies installed: `pip install -r requirements.txt`
+- [ ] `.env` file created from `.env.example`
+- [ ] Environment variables configured:
+  - [ ] `GOOGLE_API_KEY`
+  - [ ] `QDRANT_URL` (if using KB)
+  - [ ] `QDRANT_API_KEY` (if using KB)
+  - [ ] `QUICKSHIP_DB_PATH`
+
+### Verification
+- [ ] Import test successful: `from quickship_agent import AgentService`
+- [ ] Basic usage example runs without errors
+- [ ] Database connection works
+- [ ] Qdrant connection works (if using KB)
+
+## 🔧 Customization Checklist
+
+### Database Adaptation
+- [ ] Database schema reviewed
+- [ ] SQL queries updated in `database_tools.py`
+- [ ] Table names match your schema
+- [ ] Column names match your schema
+- [ ] Database connection method updated (if not SQLite)
+- [ ] Test queries executed successfully
+
+### Agent Customization
+- [ ] System prompt updated in `agent_service.py`
+- [ ] Agent personality matches your brand
+- [ ] Tool descriptions updated
+- [ ] Response formats match your needs
+- [ ] Out-of-scope indicators updated
+
+### Tool Management
+- [ ] Unnecessary tools removed
+- [ ] Custom tools added (if needed)
+- [ ] Tools registered in `agent_service.py`
+- [ ] Tool descriptions clear for LLM
+- [ ] All tools tested individually
+
+## 🚀 Integration Checklist
+
+### FastAPI Integration
+- [ ] Router imported: `from quickship_agent.router import router`
+- [ ] Router registered with prefix
+- [ ] Tags configured
+- [ ] Health check endpoint added
+- [ ] CORS configured (if needed)
+- [ ] API documentation accessible
+
+### Streamlit Integration
+- [ ] Agent service imported
+- [ ] Session state initialized
+- [ ] Chat interface implemented
+- [ ] Message history displayed
+- [ ] Reset button added
+- [ ] Error handling implemented
+
+### Direct Python Integration
+- [ ] Agent service instantiated
+- [ ] Session management implemented
+- [ ] Error handling added
+- [ ] Logging configured
+- [ ] Response format handled
+
+## 🧪 Testing Checklist
+
+### Unit Tests
+- [ ] Database tools tested
+- [ ] Knowledge base tools tested
+- [ ] Agent service tested
+- [ ] Router endpoints tested
+- [ ] Error cases tested
+
+### Integration Tests
+- [ ] End-to-end chat flow tested
+- [ ] Multi-turn conversations tested
+- [ ] Session management tested
+- [ ] Knowledge base search tested
+- [ ] Database queries tested
+
+### User Acceptance Tests
+- [ ] Common queries tested
+- [ ] Edge cases tested
+- [ ] Error messages user-friendly
+- [ ] Response times acceptable
+- [ ] Accuracy verified
+
+### Test Scenarios
+- [ ] Track shipment by ID
+- [ ] Search by phone number
+- [ ] Search by email
+- [ ] Track by tracking number
+- [ ] Check delivery estimate
+- [ ] Check payment status
+- [ ] Check complaint status
+- [ ] Search knowledge base
+- [ ] Out-of-scope query handling
+- [ ] Missing information handling
+- [ ] Multi-turn conversation
+- [ ] Session reset
+
+## 📚 Documentation Checklist
+
+### Code Documentation
+- [ ] Docstrings added to custom functions
+- [ ] Comments added for complex logic
+- [ ] Type hints added
+- [ ] README updated with custom info
+
+### User Documentation
+- [ ] API documentation generated
+- [ ] Usage examples created
+- [ ] Integration guide updated
+- [ ] Troubleshooting section added
+
+### Team Documentation
+- [ ] Architecture documented
+- [ ] Deployment process documented
+- [ ] Monitoring setup documented
+- [ ] Maintenance procedures documented
+
+## 🔒 Security Checklist
+
+### Credentials
+- [ ] API keys not in code
+- [ ] `.env` file in `.gitignore`
+- [ ] Secrets manager configured (production)
+- [ ] Environment variables validated
+
+### API Security
+- [ ] Rate limiting implemented
+- [ ] Authentication added (if needed)
+- [ ] Authorization added (if needed)
+- [ ] Input validation implemented
+- [ ] SQL injection prevention verified
+- [ ] XSS prevention implemented
+
+### Data Security
+- [ ] Sensitive data not logged
+- [ ] Database connections secured
+- [ ] HTTPS enforced (production)
+- [ ] Session data encrypted (if needed)
+
+## 🚀 Deployment Checklist
+
+### Pre-Deployment
+- [ ] All tests passing
+- [ ] Code reviewed
+- [ ] Documentation complete
+- [ ] Performance tested
+- [ ] Security audit completed
+
+### Production Setup
+- [ ] Environment variables configured
+- [ ] Database optimized (indexes, etc.)
+- [ ] Logging configured
+- [ ] Monitoring setup
+- [ ] Error tracking setup (Sentry, etc.)
+- [ ] Backup strategy implemented
+
+### Deployment
+- [ ] Application deployed
+- [ ] Health checks passing
+- [ ] Smoke tests completed
+- [ ] Load testing completed
+- [ ] Rollback plan ready
+
+### Post-Deployment
+- [ ] Monitoring dashboards checked
+- [ ] Error rates normal
+- [ ] Response times acceptable
+- [ ] User feedback collected
+- [ ] Documentation updated
+
+## 📊 Monitoring Checklist
+
+### Metrics
+- [ ] Request count tracked
+- [ ] Response time tracked
+- [ ] Error rate tracked
+- [ ] Tool usage tracked
+- [ ] Session duration tracked
+- [ ] Database query time tracked
+- [ ] LLM API latency tracked
+
+### Alerts
+- [ ] High error rate alert
+- [ ] Slow response alert
+- [ ] API quota alert
+- [ ] Database connection alert
+- [ ] Disk space alert
+
+### Dashboards
+- [ ] Real-time metrics dashboard
+- [ ] Error tracking dashboard
+- [ ] Usage analytics dashboard
+- [ ] Performance dashboard
+
+## 🔄 Maintenance Checklist
+
+### Regular Tasks
+- [ ] Monitor error logs daily
+- [ ] Review performance metrics weekly
+- [ ] Update dependencies monthly
+- [ ] Review and update prompts quarterly
+- [ ] Security audit quarterly
+
+### Optimization
+- [ ] Identify slow queries
+- [ ] Optimize database indexes
+- [ ] Cache frequent queries
+- [ ] Review and improve prompts
+- [ ] Update tool descriptions
+
+### Updates
+- [ ] LangChain version updated
+- [ ] Gemini model updated
+- [ ] Dependencies updated
+- [ ] Documentation updated
+- [ ] Tests updated
+
+## ✅ Go-Live Checklist
+
+### Final Verification
+- [ ] All above checklists completed
+- [ ] Stakeholders informed
+- [ ] Support team trained
+- [ ] Rollback plan tested
+- [ ] Communication plan ready
+
+### Launch
+- [ ] Feature flag enabled (if using)
+- [ ] Gradual rollout started (if applicable)
+- [ ] Monitoring active
+- [ ] Support team on standby
+- [ ] Users notified
+
+### Post-Launch
+- [ ] Monitor for 24 hours
+- [ ] Collect user feedback
+- [ ] Address critical issues
+- [ ] Document lessons learned
+- [ ] Plan improvements
+
+## 📝 Notes
+
+Use this space to track your progress and notes:
+
+```
+Date Started: _______________
+Date Completed: _______________
+
+Issues Encountered:
+1. 
+2. 
+3. 
+
+Solutions Applied:
+1. 
+2. 
+3. 
+
+Custom Modifications:
+1. 
+2. 
+3. 
+
+Team Members Involved:
+1. 
+2. 
+3. 
+```
+
+---
+
+**Tip**: Print this checklist and check off items as you complete them!
+
+
+===============================================
+File: config.py
+===============================================
+
+"""
+Configuration for QuickShip AI Agent
+Load settings from environment variables
+"""
+
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# --- Google Gemini API Configuration ---
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# --- Qdrant Configuration (for knowledge base features) ---
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+
+# --- Embedding Model Configuration ---
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
+EMBEDDING_VECTOR_SIZE = int(os.getenv("EMBEDDING_VECTOR_SIZE", "384"))
+DISTANCE_METRIC = os.getenv("DISTANCE_METRIC", "Cosine")
+
+# --- Database Configuration ---
+QUICKSHIP_DB_PATH = os.getenv("QUICKSHIP_DB_PATH", "QuickShip.db")
+
+# --- Agent Configuration ---
+AGENT_MODEL = os.getenv("AGENT_MODEL", "gemini-2.5-flash-lite")
+AGENT_TEMPERATURE = float(os.getenv("AGENT_TEMPERATURE", "0.3"))
+
+
+===============================================
+File: INTEGRATION_GUIDE.md
+===============================================
+
+# QuickShip AI Agent - Integration Guide
+
+This guide shows you how to integrate the QuickShip AI Agent into your existing application.
+
+## Table of Contents
+
+1. [Installation](#installation)
+2. [Basic Setup](#basic-setup)
+3. [Database Adaptation](#database-adaptation)
+4. [FastAPI Integration](#fastapi-integration)
+5. [Streamlit Integration](#streamlit-integration)
+6. [Customization](#customization)
+7. [Production Deployment](#production-deployment)
+
+---
+
+## Installation
+
+### Option 1: Install from source
+
+```bash
+cd quickship_agent
+pip install -e .
+```
+
+### Option 2: Install from requirements
+
+```bash
+cd quickship_agent
+pip install -r requirements.txt
+```
+
+---
+
+## Basic Setup
+
+### 1. Configure Environment Variables
+
+Copy `.env.example` to `.env` and fill in your credentials:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```env
+GOOGLE_API_KEY=your_actual_gemini_api_key
+QDRANT_URL=your_qdrant_url
+QDRANT_API_KEY=your_qdrant_api_key
+QUICKSHIP_DB_PATH=path/to/your/database.db
+```
+
+### 2. Test Basic Functionality
+
+```python
+from quickship_agent import AgentService
+
+agent = AgentService()
+response = agent.chat(
+    session_id="test-123",
+    message="Track QS250001"
+)
+print(response["response"])
+```
+
+---
+
+## Database Adaptation
+
+The agent comes with tools for a QuickShip logistics database. To adapt it to your database:
+
+### Step 1: Understand Your Schema
+
+Identify the tables and columns you need to query. For example:
+- Orders table
+- Customers table
+- Products table
+- etc.
+
+### Step 2: Modify Database Tools
+
+Edit `quickship_agent/tools/database_tools.py`:
+
+```python
+@tool
+def get_order_status(order_id: str) -> str:
+    """
+    Get order status from your database.
+    Adapt the SQL query to match your schema.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # MODIFY THIS QUERY FOR YOUR SCHEMA
+        query = """
+        SELECT o.order_id, o.status, o.customer_name, o.total_amount
+        FROM orders o
+        WHERE o.order_id = ?
+        """
+        
+        cursor.execute(query, (order_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return f"No order found with ID {order_id}"
+        
+        # Format response
+        return f"""
+Order ID: {result['order_id']}
+Status: {result['status']}
+Customer: {result['customer_name']}
+Total: ${result['total_amount']}
+"""
+    except Exception as e:
+        return f"Error: {str(e)}"
+```
+
+### Step 3: Update System Prompt
+
+Edit `quickship_agent/agent_service.py` and modify `SYSTEM_PROMPT` to reflect your business domain:
+
+```python
+SYSTEM_PROMPT = """You are a helpful customer service agent for [YOUR COMPANY].
+
+Your role:
+- Help customers with their orders
+- Answer questions about products
+- Provide support and assistance
+
+Available Tools:
+- get_order_status(order_id): Get order details
+- search_orders_by_customer(email): Find customer orders
+- [Add your tools here]
+
+Guidelines:
+1. Always be polite and professional
+2. Use tools to get accurate information
+3. Never make up information
+...
+"""
+```
+
+### Step 4: Update Database Connection
+
+If you're using PostgreSQL, MySQL, or another database, modify `get_db_connection()` in `database_tools.py`:
+
+```python
+# For PostgreSQL
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
+def get_db_connection():
+    conn = psycopg2.connect(
+        host="your_host",
+        database="your_db",
+        user="your_user",
+        password="your_password"
+    )
+    conn.cursor_factory = RealDictCursor
+    return conn
+
+# For MySQL
+import mysql.connector
+
+def get_db_connection():
+    conn = mysql.connector.connect(
+        host="your_host",
+        database="your_db",
+        user="your_user",
+        password="your_password"
+    )
+    return conn
+```
+
+---
+
+## FastAPI Integration
+
+### Full Example
+
+```python
+from fastapi import FastAPI
+from quickship_agent.router import router as agent_router
+
+app = FastAPI(title="My App with AI Agent")
+
+# Include agent router
+app.include_router(
+    agent_router,
+    prefix="/api/v1",
+    tags=["AI Agent"]
+)
+
+# Your existing routes
+@app.get("/")
+async def root():
+    return {"message": "Welcome to My App"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+### API Endpoints
+
+Once integrated, you'll have these endpoints:
+
+- `POST /api/v1/agent/chat` - Chat with agent
+- `GET /api/v1/agent/history/{session_id}` - Get conversation history
+- `POST /api/v1/agent/reset/{session_id}` - Reset conversation
+
+### Example API Call
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/agent/chat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "user-123",
+    "message": "Track my order",
+    "knowledge_base": "faq"
+  }'
+```
+
+---
+
+## Streamlit Integration
+
+### Example Streamlit App
+
+```python
+import streamlit as st
+from quickship_agent import AgentService
+import uuid
+
+# Initialize agent
+if 'agent' not in st.session_state:
+    st.session_state.agent = AgentService()
+
+# Initialize session ID
+if 'session_id' not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+
+# Initialize chat history
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+
+st.title("🤖 AI Customer Service Agent")
+
+# Display chat history
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# Chat input
+if prompt := st.chat_input("Ask me anything..."):
+    # Display user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    # Get agent response
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            response = st.session_state.agent.chat(
+                session_id=st.session_state.session_id,
+                message=prompt
+            )
+            st.markdown(response["response"])
+    
+    # Add to history
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": response["response"]
+    })
+
+# Sidebar
+with st.sidebar:
+    if st.button("Reset Conversation"):
+        st.session_state.agent.reset_conversation(st.session_state.session_id)
+        st.session_state.messages = []
+        st.rerun()
+```
+
+---
+
+## Customization
+
+### Adding New Tools
+
+Create a new file `my_custom_tools.py`:
+
+```python
+from langchain.tools import tool
+
+@tool
+def check_inventory(product_id: str) -> str:
+    """Check product inventory levels"""
+    # Your logic here
+    return f"Product {product_id} has 50 units in stock"
+```
+
+Register in your agent:
+
+```python
+from quickship_agent import AgentService
+from my_custom_tools import check_inventory
+
+class MyAgentService(AgentService):
+    def __init__(self):
+        super().__init__()
+        self.tools.append(check_inventory)
+        self.llm_with_tools = self.llm.bind_tools(self.tools)
+
+# Use your custom agent
+agent = MyAgentService()
+```
+
+### Changing the LLM Model
+
+Edit `config.py` or set environment variable:
+
+```env
+AGENT_MODEL=gemini-1.5-pro
+AGENT_TEMPERATURE=0.5
+```
+
+### Customizing Response Format
+
+Modify the tool return values in `database_tools.py` to match your preferred format (JSON, plain text, markdown, etc.).
+
+---
+
+## Production Deployment
+
+### 1. Environment Variables
+
+Use a secrets manager (AWS Secrets Manager, Azure Key Vault, etc.) instead of `.env` files.
+
+### 2. Session Storage
+
+Replace in-memory session storage with Redis or a database:
+
+```python
+import redis
+
+class AgentService:
+    def __init__(self):
+        # ... existing code ...
+        self.redis_client = redis.Redis(
+            host='localhost',
+            port=6379,
+            decode_responses=True
+        )
+    
+    def get_conversation_history(self, session_id: str):
+        history = self.redis_client.get(f"session:{session_id}")
+        return json.loads(history) if history else []
+    
+    def _save_conversation(self, session_id: str, messages: list):
+        self.redis_client.setex(
+            f"session:{session_id}",
+            3600,  # 1 hour TTL
+            json.dumps(messages)
+        )
+```
+
+### 3. Logging
+
+Add proper logging:
+
+```python
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('agent.log'),
+        logging.StreamHandler()
+    ]
+)
+```
+
+### 4. Error Handling
+
+Add retry logic and circuit breakers for external API calls.
+
+### 5. Monitoring
+
+Add metrics and monitoring:
+
+```python
+from prometheus_client import Counter, Histogram
+
+chat_requests = Counter('agent_chat_requests_total', 'Total chat requests')
+chat_duration = Histogram('agent_chat_duration_seconds', 'Chat duration')
+
+@chat_duration.time()
+def chat(self, session_id, message, knowledge_base=None):
+    chat_requests.inc()
+    # ... existing code ...
+```
+
+### 6. Rate Limiting
+
+Implement rate limiting to prevent abuse:
+
+```python
+from fastapi import Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
+@router.post("/agent/chat")
+@limiter.limit("10/minute")
+async def chat_with_agent(request: Request, chat_request: ChatRequest):
+    # ... existing code ...
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**Issue**: "GOOGLE_API_KEY not set"
+- **Solution**: Make sure `.env` file exists and contains valid API key
+
+**Issue**: "Database connection error"
+- **Solution**: Check `QUICKSHIP_DB_PATH` points to correct database file
+
+**Issue**: "Qdrant connection failed"
+- **Solution**: Verify `QDRANT_URL` and `QDRANT_API_KEY` are correct
+
+**Issue**: Agent gives wrong answers
+- **Solution**: Review and update the `SYSTEM_PROMPT` to be more specific
+
+---
+
+## Support
+
+For issues or questions:
+- Check the examples in `examples/` directory
+- Review the main README.md
+- Open an issue on GitHub
+
+---
+
+## License
+
+MIT License - See LICENSE file for details
+
+
+===============================================
+File: LICENSE
+===============================================
+
+MIT License
+
+Copyright (c) 2025 QuickShip Team
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+===============================================
+File: MIGRATION_GUIDE.md
+===============================================
+
+# Migration Guide: Using QuickShip Agent in Your Existing Application
+
+This guide helps you integrate the standalone QuickShip AI Agent package into your existing QuickShip application or any other application.
+
+## Quick Migration Steps
+
+### Step 1: Copy the Package
+
+Copy the entire `quickship_agent` folder to your project:
+
+```bash
+# From your project root
+cp -r /path/to/quickship_agent ./quickship_agent
+```
+
+Or install it as a package:
+
+```bash
+cd quickship_agent
+pip install -e .
+```
+
+### Step 2: Update Your Imports
+
+**Before (in your existing app):**
+```python
+from app.services.agent_service_beta import agent_service
+from app.routers.agent_router_beta import router
+```
+
+**After (using the standalone package):**
+```python
+from quickship_agent import agent_service
+from quickship_agent.router import router
+```
+
+### Step 3: Update FastAPI Router Registration
+
+**Before:**
+```python
+# In app/main.py
+from app.routers import agent_router_beta
+
+if ENABLE_REACT_AGENT:
+    app.include_router(
+        agent_router_beta.router,
+        prefix="/api/v1/beta",
+        tags=["Agent Beta"]
+    )
+```
+
+**After:**
+```python
+# In app/main.py or your main file
+from quickship_agent.router import router as agent_router
+
+app.include_router(
+    agent_router,
+    prefix="/api/v1/beta",
+    tags=["AI Agent"]
+)
+```
+
+### Step 4: Update Environment Variables
+
+The standalone package uses the same environment variables, so no changes needed if you already have:
+
+```env
+GOOGLE_API_KEY=your_key
+QDRANT_URL=your_url
+QDRANT_API_KEY=your_key
+QUICKSHIP_DB_PATH=QuickShip.db
+```
+
+### Step 5: Update UI Integration (if using Streamlit)
+
+**Before:**
+```python
+# In ui/app.py
+from app.services.agent_service_beta import agent_service
+```
+
+**After:**
+```python
+# In ui/app.py
+from quickship_agent import agent_service
+```
+
+## Side-by-Side Comparison
+
+### File Structure Mapping
+
+| Original Location | New Location |
+|------------------|--------------|
+| `app/services/agent_service_beta.py` | `quickship_agent/agent_service.py` |
+| `app/services/agent_tools.py` | `quickship_agent/tools/database_tools.py` + `knowledge_base_tools.py` |
+| `app/routers/agent_router_beta.py` | `quickship_agent/router.py` |
+| `app/services/query_service.py` | `quickship_agent/services/rag_service.py` |
+| `app/services/qdrant_service.py` | `quickship_agent/services/qdrant_service.py` |
+
+### API Endpoints (No Changes)
+
+The API endpoints remain the same:
+- `POST /api/v1/beta/agent/chat`
+- `GET /api/v1/beta/agent/history/{session_id}`
+- `POST /api/v1/beta/agent/reset/{session_id}`
+
+### Request/Response Format (No Changes)
+
+The request and response formats are identical:
+
+```json
+// Request
+{
+  "session_id": "optional-uuid",
+  "message": "Track QS250001",
+  "knowledge_base": "optional-kb-name"
+}
+
+// Response
+{
+  "response": "...",
+  "session_id": "uuid",
+  "success": true,
+  "error": null
+}
+```
+
+## Using in a Different Application
+
+If you want to use this agent in a completely different application (not QuickShip):
+
+### 1. Adapt Database Tools
+
+Edit `quickship_agent/tools/database_tools.py` to match your database schema:
+
+```python
+# Change table names, column names, and queries
+@tool
+def get_order_status(order_id: str) -> str:
+    """Your custom implementation"""
+    query = """
+    SELECT * FROM your_orders_table
+    WHERE order_id = ?
+    """
+    # ... rest of your logic
+```
+
+### 2. Update System Prompt
+
+Edit `quickship_agent/agent_service.py` to change the agent's personality and instructions:
+
+```python
+SYSTEM_PROMPT = """You are [YOUR COMPANY]'s AI assistant.
+
+Your role:
+- [Your specific role]
+- [Your specific tasks]
+
+Available Tools:
+- [Your tools]
+
+Guidelines:
+- [Your guidelines]
+"""
+```
+
+### 3. Add/Remove Tools
+
+Remove tools you don't need:
+
+```python
+# In agent_service.py
+self.tools = [
+    # Remove tools you don't need
+    # get_shipment_status,  # Remove this
+    # Add your custom tools
+    my_custom_tool,
+]
+```
+
+### 4. Configure for Your Database
+
+Update `config.py` or environment variables:
+
+```env
+# For PostgreSQL
+DATABASE_URL=postgresql://user:pass@localhost/dbname
+
+# For MySQL
+DATABASE_URL=mysql://user:pass@localhost/dbname
+
+# For MongoDB
+DATABASE_URL=mongodb://localhost:27017/dbname
+```
+
+Then update `database_tools.py` to use your database connection.
+
+## Testing After Migration
+
+### 1. Test Basic Functionality
+
+```python
+from quickship_agent import AgentService
+
+agent = AgentService()
+response = agent.chat(
+    session_id="test-123",
+    message="Hello"
+)
+print(response)
+```
+
+### 2. Test API Endpoints
+
+```bash
+# Start your server
+python run_app.py
+
+# Test the endpoint
+curl -X POST "http://localhost:8000/api/v1/beta/agent/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Track QS250001"}'
+```
+
+### 3. Test UI Integration
+
+If you have a Streamlit UI, test the chat interface to ensure it works correctly.
+
+## Rollback Plan
+
+If you need to rollback to the original implementation:
+
+1. Keep the original files in `app/services/` and `app/routers/`
+2. Switch imports back to the original:
+   ```python
+   from app.services.agent_service_beta import agent_service
+   ```
+3. Re-register the original router in `main.py`
+
+## Benefits of Using the Standalone Package
+
+✅ **Reusability**: Use the same agent in multiple applications
+✅ **Maintainability**: Easier to update and maintain
+✅ **Portability**: Share with other teams or projects
+✅ **Versioning**: Can version the package independently
+✅ **Testing**: Easier to test in isolation
+✅ **Documentation**: Self-contained with examples
+
+## Common Migration Issues
+
+### Issue 1: Import Errors
+
+**Problem**: `ModuleNotFoundError: No module named 'quickship_agent'`
+
+**Solution**: 
+```bash
+# Install the package
+cd quickship_agent
+pip install -e .
+```
+
+### Issue 2: Database Connection Errors
+
+**Problem**: Agent can't connect to database
+
+**Solution**: Verify `QUICKSHIP_DB_PATH` in `.env` points to correct location
+
+### Issue 3: Qdrant Connection Errors
+
+**Problem**: Knowledge base search fails
+
+**Solution**: Check `QDRANT_URL` and `QDRANT_API_KEY` are correct
+
+### Issue 4: Different Response Format
+
+**Problem**: UI expects different response format
+
+**Solution**: Add a wrapper function:
+```python
+def legacy_chat(session_id, message, kb=None):
+    response = agent_service.chat(session_id, message, kb)
+    # Transform to legacy format if needed
+    return response
+```
+
+## Next Steps
+
+1. ✅ Complete the migration
+2. ✅ Test all functionality
+3. ✅ Update documentation
+4. ✅ Train team on new structure
+5. ✅ Monitor for issues
+6. ✅ Consider adding new features
+
+## Support
+
+For migration help:
+- Review `INTEGRATION_GUIDE.md` for detailed integration steps
+- Check `examples/` directory for usage examples
+- Review `README.md` for API reference
+
+---
+
+**Note**: The standalone package maintains 100% compatibility with the original implementation, so migration should be seamless!
+
+
+===============================================
+File: PACKAGE_SUMMARY.md
+===============================================
+
+# QuickShip AI Agent - Package Summary
+
+## 📦 What's Included
+
+This standalone package contains everything needed to run the QuickShip AI Agent in any application.
+
+### Core Components
+
+```
+quickship_agent/
+├── __init__.py                 # Package entry point
+├── config.py                   # Configuration management
+├── agent_service.py            # Main agent logic (ReAct pattern)
+├── router.py                   # FastAPI REST endpoints
+│
+├── tools/                      # Agent tools
+│   ├── __init__.py
+│   ├── database_tools.py       # Database query tools
+│   └── knowledge_base_tools.py # RAG/KB search tools
+│
+├── services/                   # Supporting services
+│   ├── __init__.py
+│   ├── qdrant_service.py       # Vector DB client
+│   └── rag_service.py          # RAG implementation
+│
+├── examples/                   # Usage examples
+│   ├── basic_usage.py          # Simple Python usage
+│   ├── fastapi_integration.py  # FastAPI integration
+│   └── custom_tools.py         # Adding custom tools
+│
+├── README.md                   # Main documentation
+├── INTEGRATION_GUIDE.md        # Detailed integration guide
+├── MIGRATION_GUIDE.md          # Migration from original app
+├── requirements.txt            # Python dependencies
+├── setup.py                    # Package installation
+├── .env.example                # Environment template
+└── LICENSE                     # MIT License
+```
+
+## 🚀 Quick Start
+
+### 1. Install
+
+```bash
+cd quickship_agent
+pip install -r requirements.txt
+```
+
+### 2. Configure
+
+```bash
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+### 3. Use
+
+```python
+from quickship_agent import AgentService
+
+agent = AgentService()
+response = agent.chat(
+    session_id="user-123",
+    message="Track QS250001"
+)
+print(response["response"])
+```
+
+## 🎯 Key Features
+
+✅ **Conversational AI**: Natural language understanding with Google Gemini
+✅ **ReAct Pattern**: Reasoning + Acting for intelligent tool use
+✅ **Database Tools**: Query shipments, customers, payments, complaints
+✅ **Knowledge Base**: RAG-powered document search with Qdrant
+✅ **Multi-turn Conversations**: Session-based conversation history
+✅ **FastAPI Ready**: Pre-built REST API endpoints
+✅ **Customizable**: Easy to add new tools and modify behavior
+✅ **Production Ready**: Error handling, logging, type hints
+
+## 🔧 Customization Points
+
+### 1. Database Schema
+Edit `tools/database_tools.py` to match your database structure.
+
+### 2. System Prompt
+Edit `agent_service.py` to change agent personality and instructions.
+
+### 3. Add Tools
+Create new tools and register them in `agent_service.py`.
+
+### 4. LLM Model
+Change `AGENT_MODEL` in config to use different Gemini models.
+
+### 5. Response Format
+Modify tool return values to match your preferred format.
+
+## 📊 Architecture
+
+```
+User Query
+    ↓
+Agent Service (agent_service.py)
+    ↓
+ReAct Agent (LangChain + Gemini)
+    ↓
+Tool Selection & Execution
+    ├── Database Tools → SQLite/PostgreSQL/MySQL
+    └── KB Tools → Qdrant (RAG) → Gemini
+    ↓
+Response Generation
+    ↓
+User Response
+```
+
+## 🔌 Integration Options
+
+### Option 1: Python Library
+```python
+from quickship_agent import AgentService
+agent = AgentService()
+```
+
+### Option 2: FastAPI
+```python
+from quickship_agent.router import router
+app.include_router(router, prefix="/api/v1")
+```
+
+### Option 3: Streamlit
+```python
+from quickship_agent import agent_service
+response = agent_service.chat(session_id, message)
+```
+
+## 📝 Available Tools
+
+### Database Tools (6)
+1. `get_shipment_status` - Get shipment details by ID
+2. `search_shipments_by_customer` - Find shipments by phone/email
+3. `track_by_tracking_number` - Track using tracking number
+4. `get_delivery_estimate` - Get delivery date estimates
+5. `check_cod_payment_status` - Check payment status
+6. `get_complaint_status` - Check complaints
+
+### Knowledge Base Tools (2)
+1. `search_knowledge_base` - Search documents with RAG
+2. `list_available_knowledge_bases` - List available KBs
+
+## 🌐 API Endpoints
+
+When using the FastAPI router:
+
+- `POST /agent/chat` - Chat with agent
+- `GET /agent/history/{session_id}` - Get conversation history
+- `POST /agent/reset/{session_id}` - Reset conversation
+
+## 📚 Documentation
+
+- **README.md** - Overview and quick start
+- **INTEGRATION_GUIDE.md** - Detailed integration steps
+- **MIGRATION_GUIDE.md** - Migrate from original app
+- **examples/** - Working code examples
+
+## 🔒 Security Considerations
+
+- Store API keys in environment variables, not code
+- Use secrets manager in production
+- Implement rate limiting on API endpoints
+- Validate and sanitize user inputs
+- Use HTTPS in production
+- Implement authentication/authorization
+
+## 🚀 Production Checklist
+
+- [ ] Move secrets to secrets manager
+- [ ] Implement persistent session storage (Redis)
+- [ ] Add proper logging and monitoring
+- [ ] Set up error tracking (Sentry, etc.)
+- [ ] Implement rate limiting
+- [ ] Add health check endpoints
+- [ ] Set up CI/CD pipeline
+- [ ] Configure auto-scaling
+- [ ] Set up backup and recovery
+- [ ] Document API for users
+
+## 📈 Performance
+
+- **Response Time**: 1-3 seconds (depends on tool execution)
+- **Concurrent Users**: Scales with your infrastructure
+- **Session Storage**: In-memory (use Redis for production)
+- **Database**: Optimized queries with indexes
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Import Error**: Install package with `pip install -e .`
+2. **API Key Error**: Check `.env` file exists and has valid keys
+3. **Database Error**: Verify `QUICKSHIP_DB_PATH` is correct
+4. **Qdrant Error**: Check `QDRANT_URL` and `QDRANT_API_KEY`
+
+## 🤝 Contributing
+
+To extend or modify:
+
+1. Fork/copy the package
+2. Make your changes
+3. Test thoroughly
+4. Update documentation
+5. Share with team
+
+## 📄 License
+
+MIT License - Free to use, modify, and distribute
+
+## 🎓 Learning Resources
+
+- **LangChain Docs**: https://python.langchain.com/
+- **Google Gemini**: https://ai.google.dev/
+- **Qdrant Docs**: https://qdrant.tech/documentation/
+- **FastAPI Docs**: https://fastapi.tiangolo.com/
+
+## 💡 Use Cases
+
+This agent can be adapted for:
+
+- 📦 Logistics and shipping
+- 🛒 E-commerce customer service
+- 🏥 Healthcare appointment booking
+- 🏦 Banking customer support
+- 🎓 Educational assistance
+- 🏨 Hotel booking and support
+- 🚗 Vehicle service tracking
+- 📱 Telecom customer service
+
+## 🔮 Future Enhancements
+
+Potential additions:
+- Multi-language support
+- Voice interface
+- Sentiment analysis
+- Proactive notifications
+- Analytics dashboard
+- A/B testing framework
+- Integration with more LLMs
+- Streaming responses
+
+## 📞 Support
+
+For questions or issues:
+1. Check the documentation
+2. Review examples
+3. Check troubleshooting section
+4. Open an issue on GitHub
+
+---
+
+**Version**: 1.0.0  
+**Last Updated**: November 2025  
+**Status**: Production Ready ✅
+
+
+===============================================
+File: QUICK_REFERENCE.md
+===============================================
+
+# QuickShip AI Agent - Quick Reference Card
+
+## 🚀 Installation (30 seconds)
+
+```bash
+cd quickship_agent
+pip install -r requirements.txt
+cp .env.example .env
+# Edit .env with your keys
+```
+
+## 💻 Basic Usage (3 lines)
+
+```python
+from quickship_agent import AgentService
+agent = AgentService()
+response = agent.chat("session-123", "Track QS250001")
+```
+
+## 🔌 FastAPI Integration (4 lines)
+
+```python
+from fastapi import FastAPI
+from quickship_agent.router import router
+
+app = FastAPI()
+app.include_router(router, prefix="/api/v1")
+```
+
+## 📡 API Endpoints
+
+```bash
+# Chat
+POST /api/v1/agent/chat
+Body: {"session_id": "123", "message": "Track order", "knowledge_base": "faq"}
+
+# History
+GET /api/v1/agent/history/{session_id}
+
+# Reset
+POST /api/v1/agent/reset/{session_id}
+```
+
+## 🛠️ Available Tools
+
+### Database Tools (6)
+1. `get_shipment_status(shipment_id)` - Get shipment details
+2. `search_shipments_by_customer(phone, email)` - Find by contact
+3. `track_by_tracking_number(tracking_number)` - Track by number
+4. `get_delivery_estimate(shipment_id)` - Get delivery date
+5. `check_cod_payment_status(shipment_id)` - Check payment
+6. `get_complaint_status(shipment_id)` - Check complaints
+
+### Knowledge Base Tools (2)
+1. `search_knowledge_base(collection, query)` - Search docs
+2. `list_available_knowledge_bases()` - List KBs
+
+## 🎨 Customization Points
+
+### 1. System Prompt
+```python
+# In agent_service.py
+SYSTEM_PROMPT = """Your custom prompt here"""
+```
+
+### 2. Add Tool
+```python
+from langchain.tools import tool
+
+@tool
+def my_tool(param: str) -> str:
+    """Description"""
+    return result
+
+# Register in agent_service.py
+self.tools.append(my_tool)
+```
+
+### 3. Database Query
+```python
+# In tools/database_tools.py
+@tool
+def my_query(param: str) -> str:
+    conn = get_db_connection()
+    cursor.execute("SELECT * FROM table WHERE id = ?", (param,))
+    return format_result(cursor.fetchone())
+```
+
+### 4. Change Model
+```env
+# In .env
+AGENT_MODEL=gemini-1.5-pro
+AGENT_TEMPERATURE=0.5
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+```env
+GOOGLE_API_KEY=your_key
+QDRANT_URL=your_url
+QDRANT_API_KEY=your_key
+QUICKSHIP_DB_PATH=path/to/db
+AGENT_MODEL=gemini-2.5-flash-lite
+AGENT_TEMPERATURE=0.3
+```
+
+## 📊 Response Format
+
+```python
+{
+    "response": "Agent's answer",
+    "session_id": "uuid",
+    "success": true,
+    "error": null
+}
+```
+
+## 🐛 Common Issues
+
+### Import Error
+```bash
+pip install -e .
+```
+
+### API Key Error
+```bash
+# Check .env file exists and has valid key
+cat .env | grep GOOGLE_API_KEY
+```
+
+### Database Error
+```bash
+# Verify database path
+ls -la QuickShip.db
+```
+
+## 📁 File Structure
+
+```
+quickship_agent/
+├── agent_service.py      # Main agent logic
+├── router.py             # FastAPI endpoints
+├── config.py             # Configuration
+├── tools/
+│   ├── database_tools.py # DB tools
+│   └── knowledge_base_tools.py # KB tools
+├── services/
+│   ├── qdrant_service.py # Vector DB
+│   └── rag_service.py    # RAG logic
+└── examples/             # Usage examples
+```
+
+## 🧪 Quick Test
+
+```python
+# Test 1: Basic chat
+from quickship_agent import agent_service
+r = agent_service.chat("test", "Track QS250001")
+print(r["response"])
+
+# Test 2: Multi-turn
+r1 = agent_service.chat("test2", "Where is my order?")
+r2 = agent_service.chat("test2", "My phone is 9224217802")
+print(r2["response"])
+
+# Test 3: History
+history = agent_service.get_conversation_history("test2")
+print(f"Messages: {len(history)}")
+```
+
+## 🔄 Migration from Original
+
+```python
+# Before
+from app.services.agent_service_beta import agent_service
+from app.routers.agent_router_beta import router
+
+# After
+from quickship_agent import agent_service
+from quickship_agent.router import router
+```
+
+## 📚 Documentation Files
+
+- **README.md** - Overview & quick start
+- **INTEGRATION_GUIDE.md** - Detailed integration
+- **MIGRATION_GUIDE.md** - Migration steps
+- **ARCHITECTURE.md** - System design
+- **CHECKLIST.md** - Integration checklist
+- **PACKAGE_SUMMARY.md** - Package overview
+
+## 🎯 Example Queries
+
+```python
+# Shipment tracking
+"Track QS250001"
+"Where is my order?"
+"My phone is 9224217802"
+"Track TRK123456789"
+
+# Delivery info
+"When will my package arrive?"
+"Delivery estimate for QS250001"
+
+# Payment
+"Check payment status for QS250001"
+"Has COD been collected?"
+
+# Knowledge base
+"What is your return policy?"
+"What are your shipping rates?"
+"How long does delivery take?"
+```
+
+## 🚀 Production Deployment
+
+```python
+# 1. Use secrets manager
+import boto3
+secrets = boto3.client('secretsmanager')
+
+# 2. Add Redis for sessions
+import redis
+redis_client = redis.Redis(host='localhost', port=6379)
+
+# 3. Add monitoring
+from prometheus_client import Counter
+requests_total = Counter('agent_requests_total', 'Total requests')
+
+# 4. Add rate limiting
+from slowapi import Limiter
+limiter = Limiter(key_func=get_remote_address)
+
+# 5. Run with gunicorn
+gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app
+```
+
+## 💡 Pro Tips
+
+1. **Cache frequent queries** for better performance
+2. **Use streaming** for long responses
+3. **Implement retry logic** for API calls
+4. **Monitor token usage** to control costs
+5. **Update prompts regularly** based on user feedback
+6. **Use connection pooling** for database
+7. **Implement circuit breakers** for external APIs
+8. **Log all interactions** for debugging
+9. **Version your prompts** for A/B testing
+10. **Set up alerts** for high error rates
+
+## 📞 Quick Help
+
+```bash
+# View logs
+tail -f agent.log
+
+# Check dependencies
+pip list | grep langchain
+
+# Test database connection
+python -c "from quickship_agent.tools.database_tools import get_db_connection; print(get_db_connection())"
+
+# Test Qdrant connection
+python -c "from quickship_agent.services.qdrant_service import get_qdrant_client; print(get_qdrant_client().get_collections())"
+```
+
+## 🎓 Learning Path
+
+1. ✅ Read README.md (5 min)
+2. ✅ Try basic_usage.py (5 min)
+3. ✅ Read INTEGRATION_GUIDE.md (15 min)
+4. ✅ Customize for your needs (30 min)
+5. ✅ Test thoroughly (30 min)
+6. ✅ Deploy to production (varies)
+
+---
+
+**Keep this card handy for quick reference!** 📌
+
+Print it out or bookmark this page for easy access.
+
+
+===============================================
+File: requirements.txt
+===============================================
+
+# Core Dependencies
+python-dotenv
+
+# LangChain & Google Gemini
+langchain==0.1.16
+langchain-core==0.1.52
+langchain-google-genai==1.0.2
+langchain-qdrant==0.1.1
+langchain-community==0.0.34
+google-generativeai
+
+# Vector Database
+qdrant-client
+
+# Embeddings
+sentence-transformers
+torch
+
+# FastAPI (optional - for REST API)
+fastapi
+uvicorn
+pydantic
+
+
+===============================================
+File: router.py
+===============================================
+
+"""
+FastAPI Router for QuickShip AI Agent
+Provides REST API endpoints for the agent
+"""
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import List, Dict, Optional
+import uuid
+import logging
+
+from .agent_service import agent_service
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+class ChatRequest(BaseModel):
+    session_id: Optional[str] = None
+    message: str
+    knowledge_base: Optional[str] = None  # Selected KB from sidebar
+
+
+class ChatResponse(BaseModel):
+    response: str
+    session_id: str
+    success: bool
+    error: Optional[str] = None
+
+
+class ConversationHistory(BaseModel):
+    session_id: str
+    messages: List[Dict]
+
+
+@router.post("/agent/chat", response_model=ChatResponse)
+async def chat_with_agent(request: ChatRequest):
+    """
+    Chat with the QuickShip AI agent
+    
+    - **session_id**: Optional session ID (will be generated if not provided)
+    - **message**: User message/query
+    - **knowledge_base**: Optional knowledge base name to search (from sidebar selection)
+    """
+    try:
+        # Generate session ID if not provided
+        session_id = request.session_id or str(uuid.uuid4())
+        
+        logger.info(f"Agent chat request - Session: {session_id}, Message: {request.message}, KB: {request.knowledge_base}")
+        
+        # Process message through agent with selected KB
+        result = agent_service.chat(session_id, request.message, knowledge_base=request.knowledge_base)
+        
+        return ChatResponse(**result)
+        
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/agent/history/{session_id}", response_model=ConversationHistory)
+async def get_conversation_history(session_id: str):
+    """
+    Get conversation history for a session
+    
+    - **session_id**: Session identifier
+    """
+    try:
+        messages = agent_service.get_conversation_history(session_id)
+        
+        return ConversationHistory(
+            session_id=session_id,
+            messages=messages
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting conversation history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/agent/reset/{session_id}")
+async def reset_conversation(session_id: str):
+    """
+    Reset conversation history for a session
+    
+    - **session_id**: Session identifier
+    """
+    try:
+        success = agent_service.reset_conversation(session_id)
+        
+        return {
+            "message": "Conversation reset successfully" if success else "Session not found",
+            "success": success
+        }
+        
+    except Exception as e:
+        logger.error(f"Error resetting conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+===============================================
+File: setup.py
+===============================================
+
+"""
+Setup script for QuickShip AI Agent
+"""
+
+from setuptools import setup, find_packages
+
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
+
+with open("requirements.txt", "r", encoding="utf-8") as fh:
+    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+
+setup(
+    name="quickship-agent",
+    version="1.0.0",
+    author="QuickShip Team",
+    description="A reusable conversational AI agent for logistics and customer service",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/yourusername/quickship-agent",
+    packages=find_packages(),
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+    ],
+    python_requires=">=3.8",
+    install_requires=requirements,
+    extras_require={
+        "dev": [
+            "pytest>=7.0",
+            "black>=22.0",
+            "flake8>=4.0",
+            "mypy>=0.950",
+        ],
+    },
+)
+
+
+===============================================
+File: USAGE_DIAGRAM.md
+===============================================
+
+# QuickShip AI Agent - Usage Diagram
+
+## 🎯 Three Ways to Use the Agent
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    QUICKSHIP AI AGENT PACKAGE                   │
+│                         (quickship_agent/)                       │
+└─────────────────────────────────────────────────────────────────┘
+                                 │
+                    ┌────────────┼────────────┐
+                    │            │            │
+                    ▼            ▼            ▼
+         ┌──────────────┐ ┌──────────┐ ┌──────────────┐
+         │   Option 1   │ │ Option 2 │ │   Option 3   │
+         │ Direct Python│ │  FastAPI │ │  Streamlit   │
+         └──────────────┘ └──────────┘ └──────────────┘
+```
+
+---
+
+## Option 1: Direct Python Usage
+
+### Use Case
+- Python scripts
+- Jupyter notebooks
+- Background jobs
+- CLI applications
+
+### Code
+```python
+from quickship_agent import AgentService
+
+# Initialize
+agent = AgentService()
+
+# Chat
+response = agent.chat(
+    session_id="user-123",
+    message="Track QS250001"
+)
+
+print(response["response"])
+```
+
+### Flow Diagram
+```
+Your Python Code
+       ↓
+   AgentService
+       ↓
+   ReAct Agent
+       ↓
+   Tools (DB/KB)
+       ↓
+   Response Dict
+```
+
+---
+
+## Option 2: FastAPI Integration
+
+### Use Case
+- REST API
+- Microservice
+- Web backend
+- Mobile app backend
+
+### Code
+```python
+from fastapi import FastAPI
+from quickship_agent.router import router
+
+app = FastAPI()
+app.include_router(router, prefix="/api/v1")
+```
+
+### Flow Diagram
+```
+HTTP Client (curl/Postman/Frontend)
+       ↓
+POST /api/v1/agent/chat
+       ↓
+   FastAPI Router
+       ↓
+   AgentService
+       ↓
+   ReAct Agent
+       ↓
+   Tools (DB/KB)
+       ↓
+   JSON Response
+```
+
+### API Call Example
+```bash
+curl -X POST "http://localhost:8000/api/v1/agent/chat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "user-123",
+    "message": "Track QS250001",
+    "knowledge_base": "faq"
+  }'
+```
+
+---
+
+## Option 3: Streamlit Integration
+
+### Use Case
+- Interactive UI
+- Demo application
+- Internal tools
+- Proof of concept
+
+### Code
+```python
+import streamlit as st
+from quickship_agent import agent_service
+
+st.title("AI Customer Service")
+
+if prompt := st.chat_input("Ask me anything..."):
+    response = agent_service.chat(
+        session_id=st.session_state.session_id,
+        message=prompt
+    )
+    st.write(response["response"])
+```
+
+### Flow Diagram
+```
+Streamlit UI
+       ↓
+   User Input
+       ↓
+   agent_service.chat()
+       ↓
+   ReAct Agent
+       ↓
+   Tools (DB/KB)
+       ↓
+   Display Response
+```
+
+---
+
+## 🔄 Complete Request Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         USER REQUEST                            │
+│  "Track my order QS250001"                                      │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      AGENT SERVICE                              │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ Step 1: Query Classification                             │  │
+│  │ - Analyze user intent                                    │  │
+│  │ - Determine query type (DB/KB/Out-of-scope)             │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                             │                                    │
+│                             ▼                                    │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ Step 2: Pattern Matching (for DB queries)               │  │
+│  │ - Extract shipment ID: QS250001                          │  │
+│  │ - Select appropriate tool                                │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                             │                                    │
+│                             ▼                                    │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ Step 3: Tool Execution                                   │  │
+│  │ - Call: get_shipment_status("QS250001")                  │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      DATABASE TOOL                              │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ 1. Connect to database                                   │  │
+│  │ 2. Execute SQL query                                     │  │
+│  │ 3. Fetch results                                         │  │
+│  │ 4. Format response with emojis                           │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      FORMATTED RESPONSE                         │
+│  📦 Shipment Details:                                           │
+│  Shipment ID: QS250001                                          │
+│  Status: Delivered                                              │
+│  Tracking: TRK123456789                                         │
+│  🔗 Track Online: https://quickship.in/track?id=TRK123456789   │
+│  ...                                                            │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         USER SEES                               │
+│  Beautiful formatted response with all shipment details         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🎨 Customization Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    YOUR REQUIREMENTS                            │
+│  "I need to track orders in my e-commerce app"                 │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    STEP 1: ADAPT DATABASE                       │
+│  Edit: tools/database_tools.py                                  │
+│  - Change table names (shipments → orders)                      │
+│  - Update SQL queries                                           │
+│  - Modify response format                                       │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    STEP 2: UPDATE PROMPT                        │
+│  Edit: agent_service.py                                         │
+│  - Change SYSTEM_PROMPT                                         │
+│  - Update agent personality                                     │
+│  - Modify guidelines                                            │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    STEP 3: ADD CUSTOM TOOLS                     │
+│  Create: tools/custom_tools.py                                  │
+│  - Define new tools                                             │
+│  - Register in agent_service.py                                 │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    STEP 4: TEST                                 │
+│  Run: python examples/basic_usage.py                            │
+│  - Test all scenarios                                           │
+│  - Verify responses                                             │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    READY TO USE!                                │
+│  Your customized AI agent is ready                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔀 Multi-Turn Conversation Flow
+
+```
+Turn 1:
+User: "Where is my order?"
+       ↓
+Agent: Classify → Missing info
+       ↓
+Response: "I need your shipment ID or phone number"
+
+Turn 2:
+User: "My phone is 9224217802"
+       ↓
+Agent: Extract phone → search_shipments_by_customer
+       ↓
+Database: Find 2 shipments
+       ↓
+Response: "Found 2 shipments: QS250001 (Delivered), QS250022 (In Transit)"
+
+Turn 3:
+User: "Tell me about QS250022"
+       ↓
+Agent: Extract ID → get_shipment_status
+       ↓
+Database: Get full details
+       ↓
+Response: [Full shipment details]
+```
+
+---
+
+## 🏗️ Architecture Layers
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      PRESENTATION LAYER                         │
+│  FastAPI Router / Streamlit UI / Python Script                  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      BUSINESS LOGIC LAYER                       │
+│  Agent Service (ReAct Pattern)                                  │
+│  - Query classification                                         │
+│  - Tool selection                                               │
+│  - Response generation                                          │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                ┌────────────┴────────────┐
+                │                         │
+                ▼                         ▼
+┌───────────────────────────┐  ┌──────────────────────────┐
+│      TOOLS LAYER          │  │    TOOLS LAYER           │
+│  Database Tools           │  │  Knowledge Base Tools    │
+│  - get_shipment_status    │  │  - search_knowledge_base │
+│  - search_by_customer     │  │  - list_knowledge_bases  │
+│  - track_by_number        │  │                          │
+│  - get_delivery_estimate  │  │                          │
+│  - check_payment_status   │  │                          │
+│  - get_complaint_status   │  │                          │
+└────────────┬──────────────┘  └────────────┬─────────────┘
+             │                              │
+             ▼                              ▼
+┌───────────────────────────┐  ┌──────────────────────────┐
+│      DATA LAYER           │  │    DATA LAYER            │
+│  SQLite/PostgreSQL/MySQL  │  │  Qdrant Vector DB        │
+│  - shipments              │  │  - Document embeddings   │
+│  - customers              │  │  - Semantic search       │
+│  - payments               │  │                          │
+│  - complaints             │  │                          │
+└───────────────────────────┘  └──────────────────────────┘
+```
+
+---
+
+## 🚀 Deployment Options
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DEPLOYMENT OPTIONS                           │
+└─────────────────────────────────────────────────────────────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+        ▼                    ▼                    ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│   Option A   │    │   Option B   │    │   Option C   │
+│  Standalone  │    │ Microservice │    │  Integrated  │
+│   Server     │    │              │    │   in App     │
+└──────────────┘    └──────────────┘    └──────────────┘
+        │                    │                    │
+        ▼                    ▼                    ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│ Run FastAPI  │    │ Docker       │    │ Import in    │
+│ with agent   │    │ Container    │    │ existing app │
+│ router       │    │              │    │              │
+└──────────────┘    └──────────────┘    └──────────────┘
+```
+
+---
+
+## 📊 Data Flow Summary
+
+```
+Input → Classification → Tool Selection → Execution → Response
+
+Where:
+- Input: User message
+- Classification: DB/KB/Out-of-scope
+- Tool Selection: Choose appropriate tool
+- Execution: Run tool and get data
+- Response: Format and return to user
+```
+
+---
+
+## 🎯 Decision Tree
+
+```
+User Query
+    │
+    ├─ Contains shipment ID? → get_shipment_status
+    │
+    ├─ Contains phone/email? → search_shipments_by_customer
+    │
+    ├─ Contains tracking #? → track_by_tracking_number
+    │
+    ├─ Asks "when"? → get_delivery_estimate
+    │
+    ├─ Asks about payment? → check_cod_payment_status
+    │
+    ├─ Asks about complaint? → get_complaint_status
+    │
+    ├─ Asks about policy/rate? → search_knowledge_base
+    │
+    ├─ Out of scope? → Polite rejection
+    │
+    └─ Unknown? → LLM with tools
+```
+
+---
+
+**Use these diagrams to understand and explain the agent's behavior!**
+
+
+===============================================
+File: .env.example
+===============================================
+
+# Google Gemini API Configuration
+GOOGLE_API_KEY=your_gemini_api_key_here
+
+# Qdrant Vector Database Configuration (for knowledge base features)
+QDRANT_URL=https://your-qdrant-instance.cloud.qdrant.io:6333
+QDRANT_API_KEY=your_qdrant_api_key_here
+
+# Embedding Model Configuration
+EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
+EMBEDDING_VECTOR_SIZE=384
+DISTANCE_METRIC=Cosine
+
+# Database Configuration
+QUICKSHIP_DB_PATH=QuickShip.db
+
+# Agent Configuration
+AGENT_MODEL=gemini-2.5-flash-lite
+AGENT_TEMPERATURE=0.3
+
+
+===============================================
+File: examples\basic_usage.py
+===============================================
+
+"""
+Basic Usage Example for QuickShip AI Agent
+"""
+
+from quickship_agent import AgentService
+
+# Initialize the agent
+agent = AgentService()
+
+# Example 1: Track a shipment
+print("=" * 50)
+print("Example 1: Track a shipment")
+print("=" * 50)
+response = agent.chat(
+    session_id="demo-session-1",
+    message="Track QS250001"
+)
+print(response["response"])
+print()
+
+# Example 2: Search by phone number
+print("=" * 50)
+print("Example 2: Search by phone number")
+print("=" * 50)
+response = agent.chat(
+    session_id="demo-session-2",
+    message="My phone is 9224217802"
+)
+print(response["response"])
+print()
+
+# Example 3: Multi-turn conversation
+print("=" * 50)
+print("Example 3: Multi-turn conversation")
+print("=" * 50)
+session_id = "demo-session-3"
+
+# First message
+response = agent.chat(
+    session_id=session_id,
+    message="Where is my order?"
+)
+print(f"User: Where is my order?")
+print(f"Agent: {response['response']}")
+print()
+
+# Follow-up message
+response = agent.chat(
+    session_id=session_id,
+    message="My phone is 8786649843"
+)
+print(f"User: My phone is 8786649843")
+print(f"Agent: {response['response']}")
+print()
+
+# Get conversation history
+history = agent.get_conversation_history(session_id)
+print(f"Conversation history has {len(history)} messages")
+print()
+
+# Reset conversation
+agent.reset_conversation(session_id)
+print("Conversation reset successfully")
+
+
+===============================================
+File: examples\custom_tools.py
+===============================================
+
+"""
+Example: Adding Custom Tools to the Agent
+"""
+
+from langchain.tools import tool
+from quickship_agent import AgentService
+
+# Define a custom tool
+@tool
+def get_weather(city: str) -> str:
+    """
+    Get weather information for a city.
+    Use this when customer asks about weather.
+    
+    Args:
+        city: Name of the city
+    
+    Returns:
+        Weather information
+    """
+    # In a real implementation, you would call a weather API
+    return f"The weather in {city} is sunny with a temperature of 25°C."
+
+
+@tool
+def calculate_shipping_cost(weight: float, distance: float) -> str:
+    """
+    Calculate shipping cost based on weight and distance.
+    
+    Args:
+        weight: Package weight in kg
+        distance: Distance in km
+    
+    Returns:
+        Calculated shipping cost
+    """
+    base_rate = 50
+    weight_rate = 10  # per kg
+    distance_rate = 2  # per km
+    
+    total_cost = base_rate + (weight * weight_rate) + (distance * distance_rate)
+    return f"Shipping cost: ₹{total_cost:.2f} (Base: ₹{base_rate}, Weight: {weight}kg, Distance: {distance}km)"
+
+
+# Create agent with custom tools
+class CustomAgentService(AgentService):
+    def __init__(self):
+        super().__init__()
+        # Add custom tools to the existing tools
+        self.tools.extend([get_weather, calculate_shipping_cost])
+        # Re-bind tools to the model
+        self.llm_with_tools = self.llm.bind_tools(self.tools)
+
+
+# Use the custom agent
+if __name__ == "__main__":
+    agent = CustomAgentService()
+    
+    # Test custom tool
+    response = agent.chat(
+        session_id="custom-demo",
+        message="What's the weather in Mumbai?"
+    )
+    print(response["response"])
+    
+    # Test another custom tool
+    response = agent.chat(
+        session_id="custom-demo",
+        message="Calculate shipping cost for 5kg package over 100km"
+    )
+    print(response["response"])
+
+
+===============================================
+File: examples\fastapi_integration.py
+===============================================
+
+"""
+FastAPI Integration Example for QuickShip AI Agent
+"""
+
+from fastapi import FastAPI
+from quickship_agent.router import router as agent_router
+
+# Create FastAPI app
+app = FastAPI(
+    title="QuickShip AI Agent API",
+    description="Conversational AI for logistics and customer service",
+    version="1.0.0"
+)
+
+# Include the agent router
+app.include_router(agent_router, prefix="/api/v1", tags=["Agent"])
+
+# Add a health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "QuickShip AI Agent"}
+
+# Run with: uvicorn fastapi_integration:app --reload
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+===============================================
+File: services\__init__.py
+===============================================
+
+"""
+Services for QuickShip AI Agent
+"""
+
+from .qdrant_service import get_qdrant_client
+from .rag_service import execute_query
+
+__all__ = ["get_qdrant_client", "execute_query"]
+
+
+===============================================
+File: services\qdrant_service.py
+===============================================
+
+"""
+Qdrant Service for Vector Database Operations
+"""
+
+from qdrant_client import QdrantClient
+from ..config import QDRANT_URL, QDRANT_API_KEY
+
+
+def get_qdrant_client():
+    """
+    Initializes and returns the Qdrant client using credentials from the config.
+    """
+    if not QDRANT_URL or not QDRANT_API_KEY:
+        raise ValueError("QDRANT_URL and QDRANT_API_KEY must be set in environment variables.")
+    
+    client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    return client
+
+
+===============================================
+File: services\rag_service.py
+===============================================
+
+"""
+RAG (Retrieval Augmented Generation) Service
+Handles knowledge base search and question answering
+"""
+
+import logging
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_qdrant import Qdrant
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.documents import Document
+
+from ..config import (
+    GOOGLE_API_KEY,
+    QDRANT_URL,
+    QDRANT_API_KEY,
+    EMBEDDING_MODEL_NAME,
+    AGENT_MODEL
+)
+
+logger = logging.getLogger(__name__)
+
+
+def get_llm():
+    """Initializes and returns the Gemini LLM."""
+    if not GOOGLE_API_KEY:
+        raise ValueError("GOOGLE_API_KEY must be set in environment variables.")
+    return ChatGoogleGenerativeAI(
+        model=AGENT_MODEL,
+        google_api_key=GOOGLE_API_KEY,
+        temperature=0.1
+    )
+
+
+def get_retriever(collection_name: str):
+    """Initializes and returns a Qdrant retriever for a specific collection."""
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+    qdrant_store = Qdrant.from_existing_collection(
+        url=QDRANT_URL,
+        api_key=QDRANT_API_KEY,
+        collection_name=collection_name,
+        embedding=embeddings,
+        content_payload_key="text",
+    )
+    return qdrant_store.as_retriever(search_kwargs={"k": 3})
+
+
+def format_docs(docs: list[Document]) -> str:
+    """Formats a list of Documents into a single string."""
+    return "\n\n".join(doc.page_content for doc in docs)
+
+
+def create_rag_chain(collection_name: str):
+    """Creates a stateful RAG chain with conversation memory using LCEL."""
+    retriever = get_retriever(collection_name)
+    llm = get_llm()
+
+    # Stateful Answering Prompt with chat history
+    qa_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("human", """You are a helpful assistant. Based on the company documents provided in the context below, answer the user's question.
+
+Context from documents:
+{context}
+
+Question: {question}
+
+Instructions:
+- Read through the documents carefully
+- Extract relevant information to answer the question
+- If you can find information related to the question in the documents, provide a clear answer
+- If the documents don't contain information to answer the question, say "I don't know"
+
+Answer:"""),
+        ]
+    )
+
+    # Define the retrieval function
+    def retrieve_and_format(inputs):
+        question = inputs["question"]
+        docs = retriever.invoke(question)
+        formatted_context = format_docs(docs)
+        logger.info(f"Context being passed to LLM: {formatted_context[:200]}...")
+        return formatted_context
+    
+    # Define the chat history formatting function
+    def format_chat_history(inputs):
+        chat_history = inputs.get("chat_history", [])
+        if not chat_history:
+            return "No previous conversation."
+        
+        formatted_history = []
+        for i, message in enumerate(chat_history):
+            if i % 2 == 0:
+                formatted_history.append(f"Human: {message.content}")
+            else:
+                formatted_history.append(f"Assistant: {message.content}")
+        
+        return "\n".join(formatted_history)
+
+    # Define the stateful RAG chain
+    rag_chain = (
+        RunnablePassthrough.assign(
+            context=RunnableLambda(retrieve_and_format),
+            chat_history=RunnableLambda(format_chat_history)
+        )
+        | RunnableLambda(lambda x: logger.info(f"Final inputs to prompt: question={x.get('question')}, has_history={bool(x.get('chat_history'))}") or x)
+        | qa_prompt
+        | llm
+        | StrOutputParser()
+    )
+    
+    return rag_chain
+
+
+def execute_query(collection_name: str, query: str, chat_history: list = None) -> str:
+    """
+    Executes a query against the stateful RAG chain with conversation history.
+    
+    Args:
+        collection_name: Name of the Qdrant collection to search
+        query: User's question
+        chat_history: Optional conversation history
+        
+    Returns:
+        Answer from the RAG system
+    """
+    if chat_history is None:
+        chat_history = []
+    
+    rag_chain = create_rag_chain(collection_name)
+    
+    # Log the retrieval for debugging
+    retriever = get_retriever(collection_name)
+    retrieved_docs = retriever.invoke(query)
+    formatted_context = format_docs(retrieved_docs)
+    logger.info(f"Retrieved Context: {formatted_context[:200]}...")
+
+    # Invoke the rag_chain with the query and chat history
+    answer = rag_chain.invoke({
+        "question": query,
+        "chat_history": chat_history
+    })
+    
+    return answer
+
+
+===============================================
+File: tools\__init__.py
+===============================================
+
+"""
+Tools for the QuickShip AI Agent
+"""
+
+from .database_tools import (
+    get_shipment_status,
+    search_shipments_by_customer,
+    track_by_tracking_number,
+    get_delivery_estimate,
+    check_cod_payment_status,
+    get_complaint_status,
+)
+
+from .knowledge_base_tools import (
+    search_knowledge_base,
+    list_available_knowledge_bases
+)
+
+__all__ = [
+    "get_shipment_status",
+    "search_shipments_by_customer",
+    "track_by_tracking_number",
+    "get_delivery_estimate",
+    "check_cod_payment_status",
+    "get_complaint_status",
+    "search_knowledge_base",
+    "list_available_knowledge_bases",
+]
+
+
+===============================================
+File: tools\database_tools.py
+===============================================
+
+"""
+Database Tools for QuickShip Logistics
+These tools allow the ReAct agent to query the QuickShip database.
+"""
+
+import sqlite3
+import logging
+from langchain.tools import tool
+from ..config import QUICKSHIP_DB_PATH
+
+logger = logging.getLogger(__name__)
+
+
+def get_db_connection():
+    """Helper function to get database connection"""
+    try:
+        conn = sqlite3.connect(QUICKSHIP_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception as e:
+        logger.error(f"Database connection error: {e}")
+        raise
+
+
+@tool
+def get_shipment_status(shipment_id: str) -> str:
+    """
+    Retrieves the current status of a shipment by shipment ID.
+    Use this when customer provides their shipment ID (format: QS250XXX).
+    
+    Args:
+        shipment_id: The shipment ID (e.g., QS250001)
+    
+    Returns:
+        Shipment status, tracking number, delivery address, expected delivery date,
+        actual delivery date (if delivered), charges, COD amount, and remarks
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query = """
+        SELECT s.shipment_id, s.tracking_number, s.status, 
+               s.delivery_address, s.pincode, s.expected_delivery_date, 
+               s.actual_delivery_date, s.charges, s.cod_amount, s.remarks,
+               c.name as customer_name, c.phone, c.email,
+               d.name as delivery_boy_name, d.phone as delivery_boy_phone
+        FROM shipments s
+        JOIN customers c ON s.customer_id = c.customer_id
+        LEFT JOIN delivery_boys d ON s.delivery_boy_id = d.boy_id
+        WHERE s.shipment_id = ?
+        """
+        
+        cursor.execute(query, (shipment_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return f"No shipment found with ID {shipment_id}. Please check the shipment ID and try again."
+        
+        # Build tracking link
+        tracking_link = f"https://quickship.in/track?id={result['tracking_number']}"
+        
+        response = f"""
+📦 Shipment Details:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Shipment ID: {result['shipment_id']}
+Tracking Number: {result['tracking_number']}
+Status: {result['status']}
+
+🔗 Track Online: {tracking_link}
+
+📍 Delivery Information:
+Address: {result['delivery_address']}
+Pincode: {result['pincode']}
+Expected Delivery: {result['expected_delivery_date']}
+Actual Delivery: {result['actual_delivery_date'] or 'Not yet delivered'}
+
+💰 Payment Details:
+Charges: ₹{result['charges']}
+COD Amount: ₹{result['cod_amount']}
+
+👤 Customer: {result['customer_name']} ({result['phone']})
+"""
+        
+        if result['delivery_boy_name']:
+            response += f"\n🚚 Delivery Person: {result['delivery_boy_name']} ({result['delivery_boy_phone']})"
+        
+        if result['remarks']:
+            response += f"\n📝 Remarks: {result['remarks']}"
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in get_shipment_status: {e}")
+        return f"Error retrieving shipment information: {str(e)}"
+
+
+@tool
+def search_shipments_by_customer(phone: str = None, email: str = None) -> str:
+    """
+    Search for shipments by customer phone or email.
+    Use when customer doesn't have shipment ID but provides contact info.
+    
+    Args:
+        phone: Customer phone number (10 digits)
+        email: Customer email address
+    
+    Returns:
+        List of shipments for that customer with status and dates
+    """
+    if not phone and not email:
+        return "Please provide either phone number or email address to search for shipments."
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        if phone:
+            query = """
+            SELECT s.shipment_id, s.tracking_number, s.status, 
+                   s.shipment_date, s.expected_delivery_date, s.actual_delivery_date,
+                   s.delivery_address, s.charges, c.name
+            FROM shipments s
+            JOIN customers c ON s.customer_id = c.customer_id
+            WHERE c.phone = ?
+            ORDER BY s.shipment_date DESC
+            """
+            cursor.execute(query, (phone,))
+        else:
+            query = """
+            SELECT s.shipment_id, s.tracking_number, s.status, 
+                   s.shipment_date, s.expected_delivery_date, s.actual_delivery_date,
+                   s.delivery_address, s.charges, c.name
+            FROM shipments s
+            JOIN customers c ON s.customer_id = c.customer_id
+            WHERE c.email = ?
+            ORDER BY s.shipment_date DESC
+            """
+            cursor.execute(query, (email,))
+        
+        results = cursor.fetchall()
+        conn.close()
+        
+        if not results:
+            return f"No shipments found for {'phone ' + phone if phone else 'email ' + email}."
+        
+        response = f"Found {len(results)} shipment(s) for {results[0]['name']}:\n\n"
+        
+        for i, row in enumerate(results, 1):
+            tracking_link = f"https://quickship.in/track?id={row['tracking_number']}"
+            response += f"{i}. {row['shipment_id']} - {row['status']}\n"
+            response += f"   Tracking: {row['tracking_number']}\n"
+            response += f"   🔗 Track: {tracking_link}\n"
+            response += f"   Shipped: {row['shipment_date']}\n"
+            response += f"   Expected: {row['expected_delivery_date']}\n"
+            if row['actual_delivery_date']:
+                response += f"   Delivered: {row['actual_delivery_date']}\n"
+            response += f"   Charges: ₹{row['charges']}\n\n"
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in search_shipments_by_customer: {e}")
+        return f"Error searching for shipments: {str(e)}"
+
+
+@tool
+def track_by_tracking_number(tracking_number: str) -> str:
+    """
+    Get detailed tracking information using tracking number.
+    Use when customer provides tracking number (format: TRKXXXXXXXXX).
+    
+    Args:
+        tracking_number: Shipment tracking number
+    
+    Returns:
+        Current status, location, expected delivery, and delivery boy details
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query = """
+        SELECT s.*, c.name as customer_name, c.phone, c.city as customer_city,
+               d.name as delivery_boy_name, d.phone as delivery_boy_phone, d.vehicle_number
+        FROM shipments s
+        JOIN customers c ON s.customer_id = c.customer_id
+        LEFT JOIN delivery_boys d ON s.delivery_boy_id = d.boy_id
+        WHERE s.tracking_number = ?
+        """
+        
+        cursor.execute(query, (tracking_number,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return f"No shipment found with tracking number {tracking_number}."
+        
+        # Build tracking link
+        tracking_link = f"https://quickship.in/track?id={result['tracking_number']}"
+        
+        response = f"""
+🔍 Tracking Information:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Tracking Number: {result['tracking_number']}
+Shipment ID: {result['shipment_id']}
+Current Status: {result['status']}
+
+🔗 Track Online: {tracking_link}
+
+📦 Shipment Journey:
+From: {result['pickup_address']}
+To: {result['delivery_address']} ({result['pincode']})
+
+📅 Timeline:
+Shipped: {result['shipment_date']}
+Expected Delivery: {result['expected_delivery_date']}
+"""
+        
+        if result['actual_delivery_date']:
+            response += f"Delivered On: {result['actual_delivery_date']}\n"
+        
+        if result['delivery_boy_name']:
+            response += f"\n🚚 Delivery Person:\n"
+            response += f"Name: {result['delivery_boy_name']}\n"
+            response += f"Phone: {result['delivery_boy_phone']}\n"
+            response += f"Vehicle: {result['vehicle_number']}\n"
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in track_by_tracking_number: {e}")
+        return f"Error tracking shipment: {str(e)}"
+
+
+@tool
+def get_delivery_estimate(shipment_id: str) -> str:
+    """
+    Get estimated or actual delivery date for a shipment.
+    Use when customer asks "when will my shipment arrive?"
+    
+    Args:
+        shipment_id: The shipment ID
+    
+    Returns:
+        Expected delivery date, actual delivery date (if delivered), and current status
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query = """
+        SELECT shipment_id, status, shipment_date, expected_delivery_date, 
+               actual_delivery_date, delivery_address
+        FROM shipments
+        WHERE shipment_id = ?
+        """
+        
+        cursor.execute(query, (shipment_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return f"No shipment found with ID {shipment_id}."
+        
+        if result['status'] == 'Delivered':
+            return f"✅ Your shipment {shipment_id} was delivered on {result['actual_delivery_date']}."
+        elif result['status'] == 'In Transit':
+            return f"🚚 Your shipment {shipment_id} is currently in transit. Expected delivery: {result['expected_delivery_date']}."
+        elif result['status'] == 'Out for Delivery':
+            return f"📦 Great news! Your shipment {shipment_id} is out for delivery today. Expected delivery: {result['expected_delivery_date']}."
+        elif result['status'] == 'Booked':
+            return f"📋 Your shipment {shipment_id} has been booked. Expected delivery: {result['expected_delivery_date']}."
+        elif result['status'] == 'Lost':
+            return f"⚠️ Unfortunately, shipment {shipment_id} is marked as lost. Please contact customer support for assistance."
+        elif result['status'] == 'Returned':
+            return f"↩️ Shipment {shipment_id} has been returned. Please contact customer support for more details."
+        else:
+            return f"Shipment {shipment_id} status: {result['status']}. Expected delivery: {result['expected_delivery_date']}."
+        
+    except Exception as e:
+        logger.error(f"Error in get_delivery_estimate: {e}")
+        return f"Error getting delivery estimate: {str(e)}"
+
+
+@tool
+def check_cod_payment_status(shipment_id: str) -> str:
+    """
+    Check if COD payment has been collected for a shipment.
+    Use when customer asks about payment or COD collection.
+    
+    Args:
+        shipment_id: The shipment ID
+    
+    Returns:
+        Payment mode, amount, payment status, and collection date
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query = """
+        SELECT p.payment_mode, p.amount_paid, p.payment_date, p.cod_collected_date,
+               s.cod_amount, s.charges, s.status
+        FROM payments p
+        JOIN shipments s ON p.shipment_id = s.shipment_id
+        WHERE p.shipment_id = ?
+        """
+        
+        cursor.execute(query, (shipment_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return f"No payment information found for shipment {shipment_id}."
+        
+        response = f"""
+💳 Payment Information:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Shipment ID: {shipment_id}
+Payment Mode: {result['payment_mode']}
+Shipment Charges: ₹{result['charges']}
+"""
+        
+        if result['payment_mode'] == 'COD':
+            response += f"COD Amount: ₹{result['cod_amount']}\n"
+            if result['cod_collected_date']:
+                response += f"✅ COD Collected On: {result['cod_collected_date']}\n"
+            else:
+                response += f"⏳ COD Not Yet Collected\n"
+        else:
+            response += f"✅ Prepaid - Amount Paid: ₹{result['amount_paid']}\n"
+            response += f"Payment Date: {result['payment_date']}\n"
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in check_cod_payment_status: {e}")
+        return f"Error checking payment status: {str(e)}"
+
+
+@tool
+def get_complaint_status(shipment_id: str) -> str:
+    """
+    Check if there are any complaints for a shipment.
+    Use when customer asks about issues or complaints.
+    
+    Args:
+        shipment_id: The shipment ID
+    
+    Returns:
+        Complaint details, status, type, and refund information
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query = """
+        SELECT complaint_id, complaint_type, date, status, refund_amount
+        FROM complaints
+        WHERE shipment_id = ?
+        ORDER BY date DESC
+        """
+        
+        cursor.execute(query, (shipment_id,))
+        results = cursor.fetchall()
+        conn.close()
+        
+        if not results:
+            return f"No complaints found for shipment {shipment_id}. ✅"
+        
+        response = f"Found {len(results)} complaint(s) for shipment {shipment_id}:\n\n"
+        
+        for i, row in enumerate(results, 1):
+            response += f"{i}. Complaint #{row['complaint_id']}\n"
+            response += f"   Type: {row['complaint_type']}\n"
+            response += f"   Date: {row['date']}\n"
+            response += f"   Status: {row['status']}\n"
+            if row['refund_amount']:
+                response += f"   Refund: ₹{row['refund_amount']}\n"
+            response += "\n"
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in get_complaint_status: {e}")
+        return f"Error checking complaints: {str(e)}"
+
+
+===============================================
+File: tools\knowledge_base_tools.py
+===============================================
+
+"""
+Knowledge Base Tools for QuickShip Logistics
+These tools allow the ReAct agent to search through company documents using RAG.
+"""
+
+import logging
+from langchain.tools import tool
+
+logger = logging.getLogger(__name__)
+
+
+@tool
+def search_knowledge_base(collection_name: str, query: str) -> str:
+    """
+    Search through company knowledge base documents for information.
+    Use this when customer asks about policies, procedures, FAQs, or general information
+    that is not in the shipment database.
+    
+    Args:
+        collection_name: The knowledge base to search (e.g., 'policies', 'faq', 'procedures')
+        query: The question or search query
+    
+    Returns:
+        Relevant information from the knowledge base documents
+    """
+    try:
+        # Import here to avoid circular dependencies
+        from ..services.rag_service import execute_query
+        
+        # Execute RAG query
+        answer = execute_query(collection_name, query, chat_history=[])
+        
+        return f"Knowledge Base ({collection_name}):\n{answer}"
+        
+    except Exception as e:
+        logger.error(f"Error in search_knowledge_base: {e}")
+        return f"I couldn't search the knowledge base. Error: {str(e)}"
+
+
+@tool
+def list_available_knowledge_bases() -> str:
+    """
+    List all available knowledge bases that can be searched.
+    Use this when you need to know what knowledge bases are available.
+    
+    Returns:
+        List of available knowledge base names
+    """
+    try:
+        # Import here to avoid circular dependencies
+        from ..services.qdrant_service import get_qdrant_client
+        
+        client = get_qdrant_client()
+        collections = client.get_collections()
+        
+        if not collections.collections:
+            return "No knowledge bases are currently available."
+        
+        kb_list = [col.name for col in collections.collections]
+        return f"Available knowledge bases: {', '.join(kb_list)}"
+        
+    except Exception as e:
+        logger.error(f"Error in list_available_knowledge_bases: {e}")
+        return f"Error listing knowledge bases: {str(e)}"
+

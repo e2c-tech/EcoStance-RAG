@@ -19,7 +19,7 @@ def get_llm():
     """Initializes and returns the Gemini LLM."""
     if not GOOGLE_API_KEY:
         raise ValueError("GOOGLE_API_KEY must be set in environment variables.")
-    return ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=GOOGLE_API_KEY)
+    return ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=GOOGLE_API_KEY, temperature=0.1)
 
 def get_retriever(collection_name: str):
     """Initializes and returns a Qdrant retriever for a specific collection."""
@@ -31,35 +31,37 @@ def get_retriever(collection_name: str):
         embedding=embeddings,
         content_payload_key="text",
     )
-    return qdrant_store.as_retriever(search_kwargs={"k": 3})
+    # Increase k to retrieve more chunks for better coverage
+    return qdrant_store.as_retriever(search_kwargs={"k": 5})
 
 def format_docs(docs: list[Document]) -> str:
     """Formats a list of Documents into a single string."""
     return "\n\n".join(doc.page_content for doc in docs)
 
 def create_rag_chain(collection_name: str):
-    """Creates a stateless RAG chain using LCEL."""
+    """Creates a stateful RAG chain with conversation memory using LCEL."""
     retriever = get_retriever(collection_name)
     llm = get_llm()
 
-    # Answering Prompt - Using human message instead of system for better Gemini compatibility
+    # Stateful Answering Prompt with chat history
     qa_prompt = ChatPromptTemplate.from_messages(
         [
-            ("human", """You are an expert assistant. Answer the following question based EXCLUSIVELY on the provided context below.
+            ("human", """You are a helpful assistant. Answer the user's question using ONLY the information provided in the context below.
 
-IMPORTANT RULES:
-- If the context contains the answer, provide it directly and concisely
-- If the context does not contain the answer, respond with "I don't know"
-- DO NOT use any external knowledge or training data
-- DO NOT make up information
-- ONLY use information from the context provided
-
-CONTEXT:
+Context:
 {context}
 
-QUESTION: {question}
+Question: {question}
 
-ANSWER:"""),
+CRITICAL INSTRUCTIONS:
+- Answer ONLY based on information explicitly stated in the context above
+- Do NOT make assumptions or infer information not directly stated
+- Do NOT combine unrelated pieces of information
+- Quote or paraphrase directly from the context when answering
+- If the context does not contain the specific information needed to answer the question, respond with: "I don't have information about that in the knowledge base."
+- Be accurate and precise - do not add extra details not found in the context
+
+Answer:"""),
         ]
     )
 
@@ -70,11 +72,29 @@ ANSWER:"""),
         formatted_context = format_docs(docs)
         logger.info(f"Context being passed to LLM: {formatted_context}")
         return formatted_context
+    
+    # Define the chat history formatting function
+    def format_chat_history(inputs):
+        chat_history = inputs.get("chat_history", [])
+        if not chat_history:
+            return "No previous conversation."
+        
+        formatted_history = []
+        for i, message in enumerate(chat_history):
+            if i % 2 == 0:
+                formatted_history.append(f"Human: {message.content}")
+            else:
+                formatted_history.append(f"Assistant: {message.content}")
+        
+        return "\n".join(formatted_history)
 
-    # Define the stateless RAG chain
+    # Define the stateful RAG chain
     rag_chain = (
-        RunnablePassthrough.assign(context=RunnableLambda(retrieve_and_format))
-        | RunnableLambda(lambda x: logger.info(f"Final inputs to prompt: {x}") or x)
+        RunnablePassthrough.assign(
+            context=RunnableLambda(retrieve_and_format),
+            chat_history=RunnableLambda(format_chat_history)
+        )
+        | RunnableLambda(lambda x: logger.info(f"Final inputs to prompt: question={x.get('question')}, has_history={bool(x.get('chat_history'))}") or x)
         | qa_prompt
         | llm
         | StrOutputParser()
@@ -82,22 +102,31 @@ ANSWER:"""),
     
     return rag_chain
 
-def execute_query(collection_name: str, query: str) -> str:
+def execute_query(collection_name: str, query: str, chat_history: list = None, tenant_id: str = None) -> str:
     """
-    Executes a query against the stateless RAG chain.
+    Executes a query against the stateful RAG chain with conversation history.
+    
+    Args:
+        collection_name: Qdrant collection name
+        query: User query
+        chat_history: Previous conversation messages
+        tenant_id: Tenant identifier for filtering (optional, for future use)
     """
+    if chat_history is None:
+        chat_history = []
+    
     rag_chain = create_rag_chain(collection_name)
     
-    # The chain is invoked with the 'question' key
-    # To log context, we need to modify the chain to return it explicitly
-    # For now, we'll run the retriever separately to log context.
-    
+    # Log the retrieval for debugging
     retriever = get_retriever(collection_name)
     retrieved_docs = retriever.invoke(query)
     formatted_context = format_docs(retrieved_docs)
-    logger.info(f"Retrieved Context: {formatted_context}")
+    logger.info(f"Retrieved Context for tenant {tenant_id}: {formatted_context}")
 
-    # Invoke the rag_chain with the query
-    answer = rag_chain.invoke({"question": query})
+    # Invoke the rag_chain with the query and chat history
+    answer = rag_chain.invoke({
+        "question": query,
+        "chat_history": chat_history
+    })
     
     return answer
