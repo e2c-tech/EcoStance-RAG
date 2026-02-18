@@ -29,18 +29,6 @@ class ValidationMiddleware(BaseHTTPMiddleware):
     MAX_JSON_SIZE = 10 * 1024 * 1024  # 10MB for JSON payloads
     
     # Dangerous patterns (SQL injection, XSS)
-    SQL_INJECTION_PATTERNS = [
-        r"(\bUNION\b.*\bSELECT\b)",
-        r"(\bDROP\b.*\bTABLE\b)",
-        r"(\bINSERT\b.*\bINTO\b)",
-        r"(\bDELETE\b.*\bFROM\b)",
-        r"(\bUPDATE\b.*\bSET\b)",
-        r"(--\s*$)",
-        r"(;\s*DROP\b)",
-        r"(\bEXEC\b.*\()",
-        r"(\bEXECUTE\b.*\()",
-    ]
-    
     XSS_PATTERNS = [
         r"<script[^>]*>.*?</script>",
         r"javascript:",
@@ -67,18 +55,6 @@ class ValidationMiddleware(BaseHTTPMiddleware):
             return True
         except (ValueError, AttributeError):
             return False
-    
-    @staticmethod
-    def contains_sql_injection(text: str) -> bool:
-        """Check if text contains SQL injection patterns."""
-        if not isinstance(text, str):
-            return False
-        
-        text_upper = text.upper()
-        for pattern in ValidationMiddleware.SQL_INJECTION_PATTERNS:
-            if re.search(pattern, text_upper, re.IGNORECASE):
-                return True
-        return False
     
     @staticmethod
     def contains_xss(text: str) -> bool:
@@ -166,17 +142,6 @@ class ValidationMiddleware(BaseHTTPMiddleware):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={"detail": "Invalid X-Tenant-ID header. Must be a valid UUID."}
             )
-        
-        # Check for SQL injection in query parameters
-        for key, value in query_params.items():
-            if self.contains_sql_injection(value):
-                logger.warning(
-                    f"SQL injection attempt detected in query param '{key}': {value[:100]}"
-                )
-                return JSONResponse(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    content={"detail": "Invalid input detected. Request blocked for security reasons."}
-                )
         
         # For file uploads, validate in the endpoint (can't easily check here)
         # For JSON payloads, validation happens in Pydantic models

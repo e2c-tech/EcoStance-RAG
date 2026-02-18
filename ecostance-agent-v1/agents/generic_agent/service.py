@@ -12,7 +12,7 @@ from langchain_core.messages import HumanMessage
 
 from .config import AGENT_MODEL, GOOGLE_API_KEY, GROQ_API_KEY, LLM_PROVIDER, AGENT_TEMPERATURE
 from .tools.kb_tools import create_search_knowledge_base_tool, create_list_knowledge_bases_tool
-from .tools.db_tools import create_db_query_tool
+from .tools.db_tools import create_db_query_tool, create_list_db_tables_tool
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,10 @@ Respond in the same language as the customer's question.
 
 GUIDELINES:
 1. Use `search_knowledge_base` to find info in documents (FAQs, policies, etc.)
-2. Use `query_database` for structured data if you know the schema.
-3. Be concise and professional.
-4. If you don't know the answer, say so.
+2. Use `list_database_tables` to see which tables are available in the SQL database.
+3. Use `query_database` for structured data if you know the schema.
+4. Be concise and professional.
+5. If you don't know the answer, say so.
 """,
     "es": """Eres un Asistente de IA servicial para {company_name}.
 Tu objetivo es responder preguntas utilizando la base de conocimientos y la base de datos disponibles.
@@ -101,11 +102,14 @@ class GenericAgentService(MultilingualAgentMixin):
                 create_list_knowledge_bases_tool(tenant_id)
             ])
         
-        # Add DB tool if white-listed AND db_path is provided
+        # Add DB tools if white-listed
         if "database_query" in self.allowed_tools:
             db_path = kwargs.get('database_connection')
-            if db_path:
-                 self.tools.append(create_db_query_tool(db_path))
+            # Always add tools, they handle fallback to global active connection themselves
+            self.tools.extend([
+                create_db_query_tool(db_path, tenant_id=tenant_id),
+                create_list_db_tables_tool(db_path, tenant_id=tenant_id)
+            ])
              
         self.tool_map = {tool.name: tool for tool in self.tools}
         self.conversations: Dict[str, List[Dict]] = {}

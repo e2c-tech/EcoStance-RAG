@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAIAgent } from '../hooks/useAIAgent';
+import { parseAgentResponse } from '../lib/agent-utils';
+
 
 export const AIAgentChat: React.FC = () => {
   const [input, setInput] = useState('');
@@ -69,13 +71,20 @@ export const AIAgentChat: React.FC = () => {
             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                msg.role === 'user'
+              className={`max-w-[70%] rounded-lg px-4 py-2 ${msg.role === 'user'
                   ? 'bg-primary text-white'
                   : 'bg-background text-text border border-border'
-              }`}
+                }`}
             >
-              <p className="whitespace-pre-wrap">{msg.content}</p>
+              <div className="whitespace-pre-wrap">
+                {(() => {
+                  const content = parseAgentResponse(msg.content);
+                  if (typeof content === 'object' && content !== null) {
+                    return <pre className="text-xs bg-black/5 p-2 rounded max-w-full overflow-x-auto">{JSON.stringify(content, null, 2)}</pre>;
+                  }
+                  return content;
+                })()}
+              </div>
               <p className="text-xs mt-1 opacity-70">
                 {new Date(msg.timestamp).toLocaleTimeString()}
               </p>

@@ -7,6 +7,8 @@ import type { AgentChatResponse } from '../services/api.types';
 import { useAuth } from '../context/AuthContext.v2';
 import { useKnowledgeBases } from '../context/KnowledgeBaseContext';
 import { cn } from '../lib/utils';
+import { parseAgentResponse } from '../lib/agent-utils';
+
 
 const PERSONA_CONFIG: Record<string, { label: string; icon: any; description: string }> = {
   security_analyst: {
@@ -648,12 +650,7 @@ export default function AIAgentPage() {
 
                   <div className="text-text whitespace-pre-wrap">
                     {(() => {
-                      let content = msg.content;
-                      if (typeof content === 'string' && content.trim().startsWith('{')) {
-                        try {
-                          content = JSON.parse(content);
-                        } catch (e) { }
-                      }
+                      const content = parseAgentResponse(msg.content);
 
                       if (typeof content === 'object' && content !== null) {
                         const type = content.type || content.component;
@@ -687,9 +684,10 @@ export default function AIAgentPage() {
                               />
                             );
                           default:
-                            return <pre className="text-xs bg-background p-2 rounded">{JSON.stringify(content, null, 2)}</pre>;
+                            return <pre className="text-xs bg-background p-2 rounded max-w-full overflow-x-auto">{JSON.stringify(content, null, 2)}</pre>;
                         }
                       }
+
                       return content;
                     })()}
                   </div>

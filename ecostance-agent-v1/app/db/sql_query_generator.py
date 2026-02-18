@@ -1,23 +1,59 @@
 import google.genai as genai
 import os
+import logging
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
+from langchain_core.messages import HumanMessage
+
+logger = logging.getLogger(__name__)
 
 class SQLQueryGenerator:
     """
-    Generates SQL queries from natural language questions using a Gemini model.
+    Generates SQL queries from natural language questions using an LLM.
     """
-    def __init__(self, schema, model="gemini-2.5-flash-lite"):
+    def __init__(self, schema, model=None):
         """
         Initializes the SQLQueryGenerator.
         """
         self.schema = schema
-        # Configure API key from environment
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            raise ValueError("GOOGLE_API_KEY must be set in environment variables")
+        self.provider = os.getenv("LLM_PROVIDER", "gemini").lower()
         
-        # Initialize the client with the new google.genai package
-        self.client = genai.Client(api_key=api_key)
-        self.model_name = model
+        # Determine model and provider
+        if not model:
+            model = os.getenv("AGENT_MODEL")
+            
+        if self.provider == "groq":
+            api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                raise ValueError("GROQ_API_KEY must be set when LLM_PROVIDER is 'groq'")
+            
+            # Default Groq model if not provided
+            if not model or "gemini" in model.lower():
+                model = "llama-3.3-70b-versatile"
+                
+            self.llm = ChatGroq(
+                model=model,
+                groq_api_key=api_key,
+                temperature=0.1
+            )
+            self.model_name = model
+            logger.info(f"SQLQueryGenerator initialized with Groq model: {model}")
+        else:
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                raise ValueError("GOOGLE_API_KEY must be set in environment variables")
+            
+            # Default Gemini model if not provided
+            if not model or "llama" in model.lower():
+                model = "gemini-1.5-flash"
+                
+            self.llm = ChatGoogleGenerativeAI(
+                model=model,
+                google_api_key=api_key,
+                temperature=0.1
+            )
+            self.model_name = model
+            logger.info(f"SQLQueryGenerator initialized with Gemini model: {model}")
 
     async def generate_query(self, user_question):
         """
@@ -26,12 +62,9 @@ class SQLQueryGenerator:
         prompt = self._create_prompt(user_question)
         
         try:
-            # Use the new google.genai API
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=[{"parts": [{"text": prompt}]}]
-            )
-            generated_text = response.candidates[0].content.parts[0].text.strip()
+            # Use LangChain LLM for provider abstraction
+            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            generated_text = response.content.strip()
             
             sql_query = self._extract_sql_from_response(generated_text)
             explanation = self._extract_explanation(generated_text)
@@ -43,6 +76,9 @@ class SQLQueryGenerator:
                 "safety_check": safety_check
             }
         except Exception as e:
+            logger.error(f"SQL Generation Error: {str(e)}")
+            # If Gemini failed with 403 (leaked), and we have a Groq alternative, we could potentially retry here.
+            # But for now, let's just surface the error or fix the initialization.
             return {"error": f"Failed to generate SQL query: {str(e)}"}
 
     def _create_prompt(self, user_question):

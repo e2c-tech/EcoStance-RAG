@@ -15,6 +15,8 @@ from .tools.certificate_tools import get_certificate_details, search_certificate
 from .tools.shopping_tools import search_eco_products, get_eco_impact_summary
 from .tools.kb_tools import create_ecostance_kb_tools
 
+from agents.generic_agent.tools.db_tools import create_db_query_tool
+
 # Shared tools from the platform
 from app.tools.shared_tools import (
     create_search_knowledge_base_tool,
@@ -48,21 +50,23 @@ You MUST use these tags to render cards:
 ### KNOWLEDGE BASE HINTS
 - For product/project searches, typically use `kb_name="eco-product-list"`.
 
+### DATABASE USAGE
+- If a database connection is active, you can use `query_database` to look up structured information that might not be in the knowledge base.
+
 CRITICAL: Always use type: "text" in your response containing the tags.
 """
 }
 
-SAFE_TOOLS = {"certificates", "shopping", "impact", "faq", "knowledge_base", "tracking", "payments", "complaints"}
+SAFE_TOOLS = {"certificates", "shopping", "impact", "faq", "knowledge_base", "tracking", "payments", "complaints", "database_query"}
 
 class EcoStanceAgentService(MultilingualAgentMixin):
-    def __init__(self, tenant_id: str = None, allowed_tools: List[str] = None, **kwargs):
+    def __init__(self, tenant_id: str = None, allowed_tools: List[str] = None, database_connection: str = None, **kwargs):
         super().__init__(system_prompts=ECOSTANCE_SYSTEM_PROMPTS)
         
         if str(LLM_PROVIDER).lower() == "groq":
             self.llm = ChatGroq(
                 model=AGENT_MODEL,
                 groq_api_key=GROQ_API_KEY,
-                model_name=AGENT_MODEL,
                 temperature=AGENT_TEMPERATURE
             )
         else:
@@ -72,6 +76,7 @@ class EcoStanceAgentService(MultilingualAgentMixin):
                 temperature=AGENT_TEMPERATURE
             )
         self.tenant_id = tenant_id
+        self.database_connection = database_connection
         
         # Build tools
         self.tools = []
@@ -97,9 +102,11 @@ class EcoStanceAgentService(MultilingualAgentMixin):
             ])
             
         # Add Database tools
-        for category in ["tracking", "payments", "complaints", "delivery_estimates"]:
-            if category in requested_tools and category in TOOL_CATEGORIES:
-                self.tools.extend(TOOL_CATEGORIES[category])
+        if "database_query" in requested_tools:
+            # Fallback connection handled in tools themselves if self.database_connection is None
+            self.tools.append(create_db_query_tool(self.database_connection, tenant_id=self.tenant_id))
+            self.tools.append(create_list_db_tables_tool(self.database_connection, tenant_id=self.tenant_id))
+            
             
         self.tool_map = {tool.name: tool for tool in self.tools}
         self.conversations: Dict[str, List[Dict]] = {}

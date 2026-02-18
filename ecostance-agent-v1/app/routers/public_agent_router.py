@@ -198,10 +198,24 @@ async def chat_with_public_agent(
             "security_analyst": SecurityAnalystService,
         }
         
+        # Determine which KB to use (Request override > first allowed KB)
+        kb_name = request_data.knowledge_base or (allowed_kbs[0] if allowed_kbs and features.get("enable_knowledge_base") else None)
+        
+        # Determine which DB to use (Request override > first allowed DB)
+        db_connection = request_data.database_connection or (allowed_dbs[0] if allowed_dbs and features.get("enable_database_tools") else None)
+        
+        # Validate that the requested KB/DB are in the allowed list for this tenant
+        if kb_name and kb_name not in allowed_kbs:
+            logger.warning(f"Tenant {tenant_id} attempted to use unauthorized KB: {kb_name}")
+            kb_name = allowed_kbs[0] if allowed_kbs else None
+
+        if db_connection and db_connection not in allowed_dbs:
+            logger.warning(f"Tenant {tenant_id} attempted to use unauthorized DB: {db_connection}")
+            db_connection = allowed_dbs[0] if allowed_dbs else None
+
         # Determine agent type: Request override > Config
         target_agent_type = request_data.agent_type or config.agent_type
         AgentServiceClass = AGENT_MAPPING.get(target_agent_type, GenericAgentService)
-        logger.info(f"Using agent type: {target_agent_type} (Requested: {request_data.agent_type}, Config: {config.agent_type}) for tenant {tenant_id}")
         
         # Get naming info for neutral generic agent from config
         branding = json.loads(config.branding) if isinstance(config.branding, str) else config.branding
@@ -213,28 +227,13 @@ async def chat_with_public_agent(
         agent = AgentServiceClass(
             tenant_id=tenant_id, 
             allowed_tools=allowed_tools,
-            company_name=company_name
+            company_name=company_name,
+            database_connection=db_connection,
+            knowledge_base=kb_name
         )
-        
-        # Determine which KB to use (Request override > first allowed KB)
-        kb_name = request_data.knowledge_base or (allowed_kbs[0] if allowed_kbs and features.get("enable_knowledge_base") else None)
-        
-        # Determine which DB to use (Request override > first allowed DB)
-        db_connection = request_data.database_connection or (allowed_dbs[0] if allowed_dbs and features.get("enable_database_tools") else None)
         
         logger.info(f"Public agent chat for tenant {tenant_id}")
         logger.info(f"Message: {request_data.message}")
-        logger.info(f"KB: {kb_name}, DB: {db_connection}")
-        logger.info(f"Allowed tools: {allowed_tools}")
-        
-        # Validate that the requested KB/DB are in the allowed list for this tenant
-        if kb_name and kb_name not in allowed_kbs:
-            logger.warning(f"Tenant {tenant_id} attempted to use unauthorized KB: {kb_name}")
-            kb_name = allowed_kbs[0] if allowed_kbs else None
-
-        if db_connection and db_connection not in allowed_dbs:
-            logger.warning(f"Tenant {tenant_id} attempted to use unauthorized DB: {db_connection}")
-            db_connection = allowed_dbs[0] if allowed_dbs else None
 
         # Fetch persisted history for context
         # Note: service.add_message just added the current user message to DB

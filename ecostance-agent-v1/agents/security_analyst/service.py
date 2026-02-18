@@ -22,7 +22,7 @@ from agents.generic_agent.tools.kb_tools import (
     create_search_knowledge_base_tool,
     create_list_knowledge_bases_tool
 )
-from agents.generic_agent.tools.db_tools import create_db_query_tool
+from agents.generic_agent.tools.db_tools import create_db_query_tool, create_list_db_tables_tool
 
 # Use SIEM Discovery tools
 from .tools.siem_tools import (
@@ -34,14 +34,19 @@ from app.services.multilingual_utils import MultilingualAgentMixin
 logger = logging.getLogger(__name__)
 
 SECURITY_SYSTEM_PROMPTS = {
-    "en": """You are a Senior Security Analyst. Your role is to monitor, investigate, and analyze various data sources including security documentation, system logs, and company reference files.
-You have access to a Knowledge Base containing diverse data: system logs, company policies, SOPs, and even reference lists (like CSV contractor directories). You also have a Database for Asset Inventory.
+    "en": """You are a Senior Security Analyst. You have access to two primary data sources:
+1. **Database (SQL)**: Best for structured data, asset inventory, and quantitative analysis (e.g., "top 10 IPs", "count of alerts", "list of servers").
+2. **Knowledge Base (RAG)**: Best for unstructured text, investigation notes, SOPs, policies, and raw exported log documents.
 
-GUIDELINES:
-1. **Be a Data Detective**: Use the Knowledge Base to find any specific information requested, whether it's a log error, a policy rule, or contact details from an uploaded list.
-2. **Interrogate, Then Answer**: Cross-reference data sources. If you see suspicious activity documented in logs, look up the affected entity in the asset database.
-3. **Be Precise**: Use technical terminology correctly when appropriate, but be helpful with all inquiries. Cite your sources (e.g., "According to the GSA Contractor List in the knowledge base...").
-4. **Respond Professionally**: Maintain an analytical, helpful, and objective tone.
+### DATA SOURCE SELECTION RULES:
+- **USE DATABASE** for any question involving "Top", "Count", "Sum", "List of Assets", or "Frequency". If you need to analyze logs and a database is connected, check the database tables first to see if logs are stored there in a structured format.
+- **USE KNOWLEDGE BASE** for questions about "How to", "Policy on", "SOP for", or searching through raw imported log files/text documents.
+- **CROSS-REFERENCE**: Use the KB to find a policy, then use the DB to check if assets are compliant. Or find a suspicious IP in the KB logs and look up its owner in the DB.
+
+### GUIDELINES:
+1. **Quantitative = Database**: If the user asks for "top source IPs" or "how many", your first instinct MUST be to check the database.
+2. **Qualitative = Knowledge Base**: If the user asks "how do I handle a breach", your first instinct MUST be the KB.
+3. **Professional Tone**: Maintain an analytical, helpful, and objective tone. Cite your source clearly.
 """
 }
 
@@ -63,19 +68,17 @@ class SecurityAnalystService(MultilingualAgentMixin):
             )
             
         self.tenant_id = tenant_id
+        db_conn = kwargs.get('database_connection')
         
         # Initialize basic tools
         self.tools = [
             create_search_knowledge_base_tool(tenant_id),
             create_list_knowledge_bases_tool(tenant_id),
             search_siem_logs,
-            get_log_volume_stats
+            get_log_volume_stats,
+            create_db_query_tool(db_conn, tenant_id=tenant_id),
+            create_list_db_tables_tool(db_conn, tenant_id=tenant_id)
         ]
-        
-        # Only add DB tool if a connection is provided
-        db_conn = kwargs.get('database_connection')
-        if db_conn:
-            self.tools.append(create_db_query_tool(db_conn))
             
         self.tool_map = {tool.name: tool for tool in self.tools}
         self.conversations: Dict[str, List[Dict]] = {}
@@ -86,17 +89,23 @@ class SecurityAnalystService(MultilingualAgentMixin):
         
         tool_details = []
         if "search_knowledge_base" in self.tool_map:
-            tool_details.append("- search_knowledge_base: ACCESS LOGS & DOCS. Search for system logs, SOPs, security policies, and incident response playbooks.")
+            tool_details.append("- search_knowledge_base: ACCESS DOCS & LOG FILES. Use for policies, SOPs, and raw document searches.")
         if "list_available_knowledge_bases" in self.tool_map:
-            tool_details.append("- list_available_knowledge_bases: List the names of all log collections or policy folders available.")
+            tool_details.append("- list_available_knowledge_bases: List the names of available document collections.")
+        if "list_database_tables" in self.tool_map:
+             tool_details.append("- list_database_tables: DISCOVER DATA SCHEMA. List all tables in the SQL database. CALL THIS FIRST if you need to perform quantitative analysis.")
         if "query_database" in self.tool_map:
-            tool_details.append("- query_database: DB ACCESS. Query the asset inventory or user directory table.")
+            tool_details.append("- query_database: SQL ANALYSIS. Run SELECT queries for analytics, counts, and asset lookups.")
 
         active_sources = []
         if kb_name:
-            active_sources.append(f"- **Active Knowledge Base**: '{kb_name}'. Search this knowledge base first for any logs, documents or lists.")
+            active_sources.append(f"- **Active Knowledge Base**: '{kb_name}'. Use for documentation search.")
         if db_name:
-            active_sources.append(f"- **Active Database**: '{db_name}'. Use this connection for database queries.")
+            active_sources.append(f"- **Active Database**: '{db_name}'. **PRIORITIZE THIS** for analytics, top counts, and structured data.")
+        else:
+            from app.routers import db_router
+            if db_router.db_connector and (db_router.db_connector.engine or db_router.db_connector.client):
+                 active_sources.append("- **Active Database**: [CONNECTED]. **PRIORITIZE THIS** for analytical queries like 'top IPs' or 'count'. Check tables via list_database_tables first.")
 
         sources_section = f"### CURRENTLY SELECTED SOURCES:\n{chr(10).join(active_sources)}\n\n" if active_sources else ""
 
@@ -106,12 +115,10 @@ class SecurityAnalystService(MultilingualAgentMixin):
 {chr(10).join(tool_details)}
 
 ### INVESTIGATION STRATEGY:
-- **IMPORTANT**: If you do not know the exact name of the log collection or knowledge base, you MUST call `list_available_knowledge_bases` first. Do not guess names like 'policies' or use filenames as the `kb_name`.
-- All system logs, task IDs, contractor lists (CSV/XLSX), and policies are stored in the Knowledge Base. Use `search_knowledge_base` to find any information asked by the user once you have the correct collection name.
-{f"- When using `search_knowledge_base`, use kb_name='{kb_name}' as requested by the user." if kb_name else ""}
-- Use `query_database` to look up hardware or user details related to findings in the logs or documents.
-- If the user asks about an external company or vendor, check the Knowledge Base first for any uploaded directories or contractor lists.
-- If `search_knowledge_base` fails with an "Error: Knowledge base '...' does not exist", immediately call `list_available_knowledge_bases` to correct your knowledge and try again.
+- **STEP 1**: If the query involves "Top", "Count", "Summary", or "Analytics", you **MUST** call `list_database_tables` and then `query_database`.
+- **STEP 2**: If the query involves "Policy", "Procedure", "SOP", or "Raw Logs", call `search_knowledge_base`.
+- **STEP 3**: If you search the Knowledge Base and see results that look like structured log entries, check if those logs are also available in the Database for better analytical querying.
+- Do not guess table names. Always call `list_database_tables` if a database is connected.
 """
 
     def chat(self, session_id: str, message: str, user_language: str = None, chat_history: List[Dict] = None, **kwargs) -> Dict:
