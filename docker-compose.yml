@@ -1,26 +1,6 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database (for CRM only)
-  db:
-    image: postgres:16-alpine
-    container_name: crm-postgres
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-crm_db}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
-
   # Ecostance Agent Backend
   ecostance-agent:
     build:
@@ -70,28 +50,6 @@ services:
     networks:
       - app-network
 
-  # CRM Backend
-  crm-backend:
-    build:
-      context: ./c-crm-be
-      dockerfile: Dockerfile
-    container_name: crm-backend
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-crm_db}
-      - GOOGLE_CLIENT_ID=${CRM_GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${CRM_GOOGLE_CLIENT_SECRET}
-      - GOOGLE_REDIRECT_URI=${CRM_GOOGLE_REDIRECT_URI}
-      - CRM_SECRET_KEY=${CRM_SECRET_KEY}
-      - ALGORITHM=${ALGORITHM:-HS256}
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "9001:9001"
-    restart: unless-stopped
-    networks:
-      - app-network
-
   # Ecostance UI Frontend
   ecostance-ui:
     build:
@@ -110,27 +68,7 @@ services:
     networks:
       - app-network
 
-  # CRM Frontend
-  crm-frontend:
-    build:
-      context: ./c-crm-fe
-      dockerfile: Dockerfile
-      args:
-        - VITE_CRM_API_BASE_URL=${VITE_CRM_API_BASE_URL:-http://localhost:9001/api/v1}
-        - VITE_ENVIRONMENT=${VITE_ENVIRONMENT:-production}
-    container_name: crm-frontend
-    depends_on:
-      - crm-backend
-    ports:
-      - "9003:9003"
-    restart: unless-stopped
-    networks:
-      - app-network
-
-volumes:
-  postgres_data:
-    driver: local
-
 networks:
   app-network:
     driver: bridge
+

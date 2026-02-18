@@ -16,28 +16,9 @@ python -m pip install -r requirements.txt
 python -m nltk.downloader punkt punkt_tab
 Set-Location ..
 
-# 2. Setup CRM Backend
-Write-Host "`n--- Setting up CRM Backend ---" -ForegroundColor Yellow
-Set-Location w:\ecostance-rag-docker\c-crm-be
-if (!(Test-Path ".venv")) {
-    Write-Host "Creating virtual environment..."
-    python -m venv .venv
-}
-Write-Host "Installing requirements..."
-. .venv\Scripts\activate
-python -m pip install -r requirements.txt
-Set-Location ..
-
 # 3. Setup Ecostance UI Frontend
 Write-Host "`n--- Setting up Ecostance UI Frontend ---" -ForegroundColor Yellow
 Set-Location w:\ecostance-rag-docker\ecostance-ui-v1
-Write-Host "Installing npm packages..."
-npm install
-Set-Location ..
-
-# 4. Setup CRM Frontend
-Write-Host "`n--- Setting up CRM Frontend ---" -ForegroundColor Yellow
-Set-Location w:\ecostance-rag-docker\c-crm-fe
 Write-Host "Installing npm packages..."
 npm install
 Set-Location ..

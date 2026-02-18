@@ -4,8 +4,6 @@
 Dockerize the multi-project workspace containing:
 - **ecostance-agent-v1**: Python FastAPI backend (RAG system) - Port 9000
 - **ecostance-ui-v1**: React/Vite frontend - Port 9002
-- **c-crm-be**: Python FastAPI backend (CRM) - Port 9001
-- **c-crm-fe**: React/Vite frontend - Port 9003
 
 ## Architecture
 
@@ -14,23 +12,19 @@ Dockerize the multi-project workspace containing:
 │                     Docker Compose Stack                     │
 ├─────────────────────────────────────────────────────────────┤
 │                                                               │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ ecostance-ui │  │  c-crm-fe    │  │   nginx      │      │
-│  │   (React)    │  │   (React)    │  │  (reverse    │      │
-│  │   :9002      │  │   :9003      │  │   proxy)     │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                  │                  │              │
-│  ┌──────▼───────┐  ┌──────▼───────┐         │              │
-│  │ ecostance-   │  │  c-crm-be    │         │              │
-│  │  agent-v1    │  │  (FastAPI)   │         │              │
-│  │  (FastAPI)   │  │   :9001      │         │              │
-│  │   :9000      │  └──────┬───────┘         │              │
-│  └──────┬───────┘         │                  │              │
-│         │                  │                  │              │
-│         │          ┌───────▼──────────────────▼──────┐      │
-│         │          │     PostgreSQL (CRM DB)         │      │
-│         │          │          :5432                   │      │
-│         │          └─────────────────────────────────┘      │
+│  ┌──────────────┐                                            │
+│  │ ecostance-ui │                                            │
+│  │   (React)    │                                            │
+│  │   :9002      │                                            │
+│  └──────┬───────┘                                            │
+│         │                                                    │
+│  ┌──────▼───────┐                                            │
+│  │ ecostance-   │                                            │
+│  │  agent-v1    │                                            │
+│  │  (FastAPI)   │                                            │
+│  │   :9000      │                                            │
+│  └──────┬───────┘                                            │
+│         │                                                    │
 │         │                                                    │
 │         └──────────► Cloud PostgreSQL (Aiven/Supabase)      │
 │                      Cloud Qdrant Vector DB                  │
