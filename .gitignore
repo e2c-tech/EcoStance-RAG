@@ -69,7 +69,6 @@ dist-ssr/
 *.sqlite3
 crm.db
 QuickShip.db
-.db_connections/
 
 # Uploads & Data
 uploads/
