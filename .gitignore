@@ -73,7 +73,7 @@ QuickShip.db
 
 # Uploads & Data
 uploads/
-data/
+
 *.csv
 *.xlsx
 
