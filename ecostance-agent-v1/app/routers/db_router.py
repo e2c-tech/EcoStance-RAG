@@ -63,7 +63,8 @@ def parse_db_uri(db_uri: str) -> dict:
             'port': parsed.port or 3306,
             'username': parsed.username,
             'password': parsed.password,
-            'database': parsed.path.lstrip('/')
+            'database': parsed.path.lstrip('/'),
+            'query': parsed.query
         }
     elif parsed.scheme == 'mongodb':
         return {

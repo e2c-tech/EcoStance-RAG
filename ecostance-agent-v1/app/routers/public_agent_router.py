@@ -216,11 +216,11 @@ async def chat_with_public_agent(
             company_name=company_name
         )
         
-        # Determine which KB to use (first allowed KB)
-        kb_name = allowed_kbs[0] if allowed_kbs and features.get("enable_knowledge_base") else None
+        # Determine which KB to use (Request override > first allowed KB)
+        kb_name = request_data.knowledge_base or (allowed_kbs[0] if allowed_kbs and features.get("enable_knowledge_base") else None)
         
-        # Determine which DB to use (first allowed DB)
-        db_connection = allowed_dbs[0] if allowed_dbs and features.get("enable_database_tools") else None
+        # Determine which DB to use (Request override > first allowed DB)
+        db_connection = request_data.database_connection or (allowed_dbs[0] if allowed_dbs and features.get("enable_database_tools") else None)
         
         logger.info(f"Public agent chat for tenant {tenant_id}")
         logger.info(f"Message: {request_data.message}")

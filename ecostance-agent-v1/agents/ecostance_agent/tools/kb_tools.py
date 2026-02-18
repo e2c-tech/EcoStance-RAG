@@ -15,8 +15,8 @@ def create_ecostance_kb_tools(tenant_id: str):
         Search for answers to EcoStance sustainability questions, policies, and FAQs.
         """
         try:
-            from agents.quickship_agent.services.rag_service import execute_query
-            from agents.quickship_agent.services.qdrant_service import get_qdrant_client
+            from app.services.query_service import execute_query
+            from app.services.qdrant_service import get_qdrant_client
             from app.services.tenant_service import get_tenant_service
             
             qdrant_client = get_qdrant_client()

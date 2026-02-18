@@ -106,11 +106,8 @@ def get_retriever(collection_name: str, top_k: int = 5):
         )
         
         # Use singletons
-        base_model = load_embedding_model()
-        embeddings = HuggingFaceEmbeddings(
-            model_name=EMBEDDING_MODEL_NAME,
-            client=base_model
-        )
+        from .embedding_service import get_langchain_embeddings
+        embeddings = get_langchain_embeddings()
         
         client = get_qdrant_client()
         
@@ -121,11 +118,75 @@ def get_retriever(collection_name: str, top_k: int = 5):
             content_payload_key="text",
         )
         
-        retriever = qdrant_store.as_retriever(search_kwargs={"k": top_k})
+        # 1. Initial Retrieval Configuration
+        # Fetch more candidates to give reranker enough choices
+        # Initial threshold is lower (0.35) to cast a wider net
+        initial_k = max(10, top_k * 3)
+        
+        search_params = {
+            "k": initial_k,
+            "score_threshold": 0.35
+        }
+        
+        base_retriever = qdrant_store.as_retriever(
+            search_type="similarity_score_threshold",
+            search_kwargs=search_params
+        )
+        
+        # 2. Define the reranking retrieval function
+        from .reranker_service import get_reranker_service
+        
+        def retrieve_and_rerank(query: str) -> list[Document]:
+            try:
+                # A. Vector Search
+                logger.info(f"Initial retrieval (k={initial_k}) for: '{query[:50]}...'")
+                candidate_docs = base_retriever.invoke(query)
+                
+                if not candidate_docs:
+                    logger.info("No candidates found in vector search")
+                    return []
+                
+                # B. Reranking
+                doc_texts = [d.page_content for d in candidate_docs]
+                
+                try:
+                    reranker = get_reranker_service()
+                    # Get (text, score) tuples
+                    ranked_results = reranker.rerank(query, doc_texts, top_k=top_k)
+                except Exception as re:
+                     logger.error(f"Reranker service failed: {re}. Returning top candidates directly.")
+                     return candidate_docs[:top_k]
+
+                final_docs = []
+                logger.info(f"--- Reranker Scores (Top {top_k}) ---")
+                
+                for text, score in ranked_results:
+                    # Find original document to preserve metadata
+                    # Note: text content must match exactly
+                    original_doc = next((d for d in candidate_docs if d.page_content == text), None)
+                    
+                    if original_doc:
+                        # Add score to metadata and log it
+                        original_doc.metadata["reranker_score"] = float(score)
+                        final_docs.append(original_doc)
+                        logger.info(f"Score: {score:.4f} | Source: {original_doc.metadata.get('source', 'unknown')}")
+                
+                return final_docs
+                
+            except Exception as e:
+                logger.error(f"Reranking/Retrieval Process Failed: {e}", exc_info=True)
+                return []
+
+        # Return a simple object with invoke() method to mimic a Retriever
+        class RerankRetriever:
+            def invoke(self, query):
+                return retrieve_and_rerank(query)
+                
+        retriever = RerankRetriever()
         
         log_operation_success(
             logger, 
-            "initialize_retriever", 
+            "initialize_retriever_with_reranker", 
             collection_name=collection_name
         )
         return retriever

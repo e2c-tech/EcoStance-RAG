@@ -4,6 +4,8 @@ from typing import Dict, List, Any, Optional
 import json
 
 
+
+# Trigger reload
 class DatabaseConnector:
     def __init__(self):
         self.connection = None
@@ -67,6 +69,8 @@ class DatabaseConnector:
             f"mysql+mysqlconnector://{config['username']}:{config['password']}"
             f"@{config['host']}:{config.get('port', 3306)}/{config['database']}"
         )
+        if config.get('query'):
+            connection_string += f"?{config['query']}"
         self.engine = create_engine(connection_string)
         self.connection = self.engine.connect()
         return True

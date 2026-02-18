@@ -7,9 +7,10 @@ import json
 import re
 from typing import List, Dict, Optional
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 
-from .config import AGENT_MODEL, GOOGLE_API_KEY, AGENT_TEMPERATURE
+from .config import AGENT_MODEL, GOOGLE_API_KEY, GROQ_API_KEY, LLM_PROVIDER, AGENT_TEMPERATURE
 from .tools.product_tools import find_products, get_all_categories, get_my_orders
 
 from app.services.multilingual_utils import MultilingualAgentMixin
@@ -85,11 +86,18 @@ class EcommerceAgentService(MultilingualAgentMixin):
         # Initialize Mixin for multilingual support
         super().__init__(system_prompts=ECOMMERCE_SYSTEM_PROMPTS)
         
-        self.llm = ChatGoogleGenerativeAI(
-            model=AGENT_MODEL,
-            google_api_key=GOOGLE_API_KEY,
-            temperature=AGENT_TEMPERATURE
-        )
+        if LLM_PROVIDER == "groq":
+            self.llm = ChatGroq(
+                model=AGENT_MODEL,
+                groq_api_key=GROQ_API_KEY,
+                temperature=AGENT_TEMPERATURE
+            )
+        else:
+            self.llm = ChatGoogleGenerativeAI(
+                model=AGENT_MODEL,
+                google_api_key=GOOGLE_API_KEY,
+                temperature=AGENT_TEMPERATURE
+            )
         self.tenant_id = tenant_id
         
         # Validate allowed tools

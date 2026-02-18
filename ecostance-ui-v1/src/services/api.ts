@@ -555,20 +555,50 @@ export const documentProcessingAPI = {
   },
 };
 
+// Memory cache for knowledge base data
+const kbCache = {
+  list: null as any,
+  details: {} as Record<string, any>,
+  lastFetchedList: 0,
+};
+
+const KB_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // Knowledge Base Management API
 export const knowledgeBaseAPI = {
-  list: async () => {
-    console.log('API: Fetching knowledge bases from /manage/knowledge-bases/');
+  list: async (forceRefresh = false) => {
+    const now = Date.now();
+    if (!forceRefresh && kbCache.list && (now - kbCache.lastFetchedList < KB_CACHE_TTL)) {
+      console.log('API: Returning cached knowledge base list');
+      return kbCache.list;
+    }
+
+    console.log('API: Fetching knowledge bases from /manage/knowledge-bases/', forceRefresh ? '(forced)' : '');
     const response = await fetchWithAuth('/manage/knowledge-bases/');
-    console.log('API: Response status:', response.status);
     const data = await handleResponse(response);
-    console.log('API: Parsed data:', data);
+
+    kbCache.list = data;
+    kbCache.lastFetchedList = now;
     return data;
   },
 
-  getDetails: async (kbName: string) => {
+  getDetails: async (kbName: string, forceRefresh = false) => {
+    const now = Date.now();
+    const cachedItem = kbCache.details[kbName];
+
+    if (!forceRefresh && cachedItem && (now - cachedItem.timestamp < KB_CACHE_TTL)) {
+      console.log(`API: Returning cached details for ${kbName}`);
+      return cachedItem.data;
+    }
+
     const response = await fetchWithAuth(`/manage/knowledge-bases/${kbName}/details`);
-    return handleResponse(response);
+    const data = await handleResponse(response);
+
+    kbCache.details[kbName] = {
+      data,
+      timestamp: now
+    };
+    return data;
   },
 
   getFiles: async (kbName: string) => {
@@ -580,6 +610,8 @@ export const knowledgeBaseAPI = {
     const response = await fetchWithAuth(`/manage/knowledge-bases/${kbName}/files/${filename}`, {
       method: 'DELETE',
     });
+    // Invalidate details cache when a file is deleted as document count changes
+    delete kbCache.details[kbName];
     return handleResponse(response);
   },
 
@@ -587,6 +619,9 @@ export const knowledgeBaseAPI = {
     const response = await fetchWithAuth(`/manage/knowledge-bases/${kbName}`, {
       method: 'DELETE',
     });
+    // Invalidate list cache
+    kbCache.list = null;
+    delete kbCache.details[kbName];
     return handleResponse(response);
   },
 
@@ -603,6 +638,8 @@ export const knowledgeBaseAPI = {
       method: 'POST',
       body: JSON.stringify({ kb_name: kbName }),
     });
+    // Invalidate list cache
+    kbCache.list = null;
     return handleResponse(response);
   },
 
@@ -617,16 +654,15 @@ export const knowledgeBaseAPI = {
 // RAG Query API
 export const ragQueryAPI = {
   query: async (kbName: string, query: string, chatHistory?: string[]) => {
-    const formData = new FormData();
-    formData.append('kb_name', kbName);
-    formData.append('query', query);
-    if (chatHistory) {
-      chatHistory.forEach(msg => formData.append('chat_history', msg));
-    }
+    const body = {
+      kb_name: kbName,
+      query: query,
+      chat_history: chatHistory || []
+    };
 
     const response = await fetchWithAuth('/query/', {
       method: 'POST',
-      body: formData,
+      body: JSON.stringify(body),
     });
     return handleResponse(response);
   },
@@ -827,14 +863,20 @@ export const agentAPI = {
     message: string,
     sessionId?: string,
     knowledgeBase?: string,
-    databaseConnection?: string
+    databaseConnection?: string,
+    agentType?: string
   ) => {
-    const body: Record<string, string> = {
+    const body: any = {
       message,
     };
 
     if (sessionId) body.session_id = sessionId;
-    if (knowledgeBase) body.knowledge_base = knowledgeBase;
+    if (agentType) body.agent_type = agentType;
+    if (knowledgeBase) {
+      body.knowledge_base = knowledgeBase;
+      body.kb_name = knowledgeBase; // Added for compatibility
+      body.knowledge_bases = [knowledgeBase]; // Added for plural compatibility
+    }
     if (databaseConnection) body.database_connection = databaseConnection;
 
     const response = await fetchWithAuth('/beta/agent/chat', {

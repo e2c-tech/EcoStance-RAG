@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 # Global embedding model instance (singleton pattern)
 _embedding_model: Optional[SentenceTransformer] = None
+_langchain_embeddings: Optional[Any] = None
 _embedding_model_lock = Lock()
 
 
@@ -38,7 +39,8 @@ def load_embedding_model() -> SentenceTransformer:
                 logger.info(f"Loading embedding model singleton on device: {device}")
                 
                 # Load a pre-trained model.
-                model_name = os.getenv('EMBEDDING_MODEL_NAME', 'BAAI/bge-m3')
+                from app.config import EMBEDDING_MODEL_NAME as CONFIG_MODEL_NAME
+                model_name = os.getenv('EMBEDDING_MODEL_NAME', CONFIG_MODEL_NAME or 'BAAI/bge-m3')
                 logger.info(f"Using embedding model: {model_name}")
                 _embedding_model = SentenceTransformer(model_name, device=device)
                 
@@ -46,28 +48,57 @@ def load_embedding_model() -> SentenceTransformer:
     
     return _embedding_model
 
+def get_langchain_embeddings():
+    """
+    Returns a singleton LangChain-compatible embeddings object.
+    
+    This avoids re-initializing the heavy model when using LangChain components like VectorStores.
+    """
+    global _langchain_embeddings
+    
+    if _langchain_embeddings is None:
+        with _embedding_model_lock:
+            if _langchain_embeddings is None:
+                from langchain_community.embeddings import HuggingFaceEmbeddings
+                from app.config import EMBEDDING_MODEL_NAME as CONFIG_MODEL_NAME
+                
+                # Ensure the base model is loaded
+                base_model = load_embedding_model()
+                
+                logger.info("Creating LangChain embeddings wrapper for singleton model")
+                _langchain_embeddings = HuggingFaceEmbeddings(
+                    model_name=os.getenv('EMBEDDING_MODEL_NAME', CONFIG_MODEL_NAME or 'BAAI/bge-m3'),
+                    client=base_model
+                )
+    
+    return _langchain_embeddings
+
 
 def unload_embedding_model():
     """
     Unload the embedding model from memory.
     Should be called on application shutdown.
     """
-    global _embedding_model
+    global _embedding_model, _langchain_embeddings
     
-    if _embedding_model is not None:
+    if _embedding_model is not None or _langchain_embeddings is not None:
         with _embedding_model_lock:
-            if _embedding_model is not None:
-                try:
+            try:
+                if _langchain_embeddings is not None:
+                    del _langchain_embeddings
+                    _langchain_embeddings = None
+                
+                if _embedding_model is not None:
                     del _embedding_model
                     _embedding_model = None
-                    
-                    # Clear CUDA cache if using GPU
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    
-                    logger.info("✓ Embedding model unloaded successfully")
-                except Exception as e:
-                    logger.error(f"Error unloading embedding model: {e}")
+                
+                # Clear CUDA cache if using GPU
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                
+                logger.info("✓ Embedding model and wrapper unloaded successfully")
+            except Exception as e:
+                logger.error(f"Error unloading embedding model: {e}")
 
 # --- Embedding Creation ---
 @trace_embedding

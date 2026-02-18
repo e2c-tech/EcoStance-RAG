@@ -6,11 +6,11 @@ export function useKnowledgeBase() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const listKnowledgeBases = useCallback(async () => {
+  const listKnowledgeBases = useCallback(async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
-      return await knowledgeBaseAPI.list();
+      return await knowledgeBaseAPI.list(forceRefresh);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to list knowledge bases');
       setError(error);
@@ -20,11 +20,11 @@ export function useKnowledgeBase() {
     }
   }, []);
 
-  const getKBDetails = useCallback(async (kbName: string): Promise<KnowledgeBaseDetails | null> => {
+  const getKBDetails = useCallback(async (kbName: string, forceRefresh = false): Promise<KnowledgeBaseDetails | null> => {
     try {
       setLoading(true);
       setError(null);
-      return await knowledgeBaseAPI.getDetails(kbName) as KnowledgeBaseDetails;
+      return await knowledgeBaseAPI.getDetails(kbName, forceRefresh) as KnowledgeBaseDetails;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to get KB details');
       setError(error);

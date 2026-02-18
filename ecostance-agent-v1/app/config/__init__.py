@@ -12,6 +12,14 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 # --- Google Gemini API Configuration ---
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
+# --- Groq API Configuration ---
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+# --- LLM Provider Configuration ---
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "google")
+AGENT_MODEL = os.getenv("AGENT_MODEL", "gemini-2.5-flash-lite")
+AGENT_TEMPERATURE = float(os.getenv("AGENT_TEMPERATURE", "0.3"))
+
 # --- Embedding Model Configuration ---
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME")
 EMBEDDING_VECTOR_SIZE = int(os.getenv("EMBEDDING_VECTOR_SIZE"))

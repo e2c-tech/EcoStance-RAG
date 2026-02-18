@@ -35,8 +35,8 @@ def create_search_knowledge_base_tool(tenant_id: str):
         """
         try:
             # Import here to avoid circular dependencies
-            from ..services.rag_service import execute_query
-            from ..services.qdrant_service import get_qdrant_client
+            from app.services.query_service import execute_query
+            from app.services.qdrant_service import get_qdrant_client
             from app.services.tenant_service import get_tenant_service
             
             # Get tenant-specific collection name
@@ -79,7 +79,7 @@ def create_list_knowledge_bases_tool(tenant_id: str):
         """
         try:
             # Import here to avoid circular dependencies
-            from ..services.qdrant_service import get_qdrant_client
+            from app.services.qdrant_service import get_qdrant_client
             from app.services.tenant_service import get_tenant_service
             
             client = get_qdrant_client()

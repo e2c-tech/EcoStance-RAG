@@ -120,50 +120,90 @@ def _extract_html(file_path: str) -> Tuple[List[Dict[str, Any]], str]:
 # --- DOCX Extraction Service ---
 def _extract_docx(file_path: str) -> Tuple[List[Dict[str, Any]], str]:
     """
-    Extracts text from a .docx file, preserving paragraphs and their styles (e.g., headings).
+    Extracts text from a .docx file, grouping paragraphs by headings to preserve context.
+    
+    Instead of treating each paragraph as a separate block, this function accumulates 
+    body text under the preceding heading. This ensures that sections like 
+    "1. General Policy" and its following content are kept together for the chunker.
 
     Args:
         file_path (str): The path to the .docx file.
 
     Returns:
-        A list of blocks, where each block is a paragraph with its style, and the doc type 'docx'.
+        A list of grouped blocks and the doc type 'docx'.
     """
     blocks = []
     try:
         doc = docx.Document(file_path)
+        
+        current_text_parts = []
+        current_metadata = {
+            "source_filename": os.path.basename(file_path),
+            "start_paragraph_index": 0,
+            "style": "body",
+            "extraction_method": "python-docx-grouped"
+        }
+        
         for i, para in enumerate(doc.paragraphs):
+            text = para.text.strip()
+            if not text:
+                continue
+                
             style_name = para.style.name
-            # Capture heading levels, default to 'paragraph' if not a heading
-            if style_name.startswith('Heading'):
-                level = style_name.split(' ')[-1]
-                block_type = f"h{level}"
-            else:
-                block_type = "paragraph"
+            is_heading = style_name.startswith('Heading')
             
-            blocks.append({
-                "text": para.text,
-                "metadata": {
+            # If we hit a new heading and we have accumulated text, save the current block
+            if is_heading and current_text_parts:
+                # Save previous block
+                full_text = "\n".join(current_text_parts)
+                blocks.append({
+                    "text": full_text,
+                    "metadata": current_metadata
+                })
+                
+                # Reset for new section
+                current_text_parts = []
+                # Determine new style level
+                level = style_name.split(' ')[-1] if ' ' in style_name else '1'
+                current_metadata = {
                     "source_filename": os.path.basename(file_path),
-                    "paragraph_index": i,
-                    "style": block_type,
-                    "extraction_method": "python-docx"
+                    "start_paragraph_index": i,
+                    "style": f"h{level}",
+                    "extraction_method": "python-docx-grouped"
                 }
+            
+            # Add current paragraph (heading or body) to the accumulator
+            current_text_parts.append(text)
+            
+            # If this was the first paragraph of the doc (and maybe not a heading), set metadata
+            if not blocks and not current_text_parts[:-1]:
+                 if not is_heading:
+                     current_metadata["style"] = "body"
+        
+        # Append the final block if content remains
+        if current_text_parts:
+            full_text = "\n".join(current_text_parts)
+            blocks.append({
+                "text": full_text,
+                "metadata": current_metadata
             })
 
-        # Basic table extraction
+        # Basic table extraction (kept separate for now as tables are distinct structures)
         for table_idx, table in enumerate(doc.tables):
             for row_idx, row in enumerate(table.rows):
-                row_text = " | ".join(cell.text for cell in row.cells)
-                blocks.append({
-                    "text": f"Table Row: {row_text}",
-                    "metadata": {
-                        "source_filename": os.path.basename(file_path),
-                        "style": "table_row",
-                        "table_index": table_idx,
-                        "row_index": row_idx,
-                        "extraction_method": "python-docx"
-                    }
-                })
+                row_cells = [cell.text.strip() for cell in row.cells]
+                row_text = " | ".join(filter(None, row_cells))
+                if row_text:
+                    blocks.append({
+                        "text": f"Table Row: {row_text}",
+                        "metadata": {
+                            "source_filename": os.path.basename(file_path),
+                            "style": "table_row",
+                            "table_index": table_idx,
+                            "row_index": row_idx,
+                            "extraction_method": "python-docx"
+                        }
+                    })
 
     except Exception as e:
         print(f"Error processing DOCX {file_path}: {e}")

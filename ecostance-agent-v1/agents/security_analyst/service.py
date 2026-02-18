@@ -80,7 +80,7 @@ class SecurityAnalystService(MultilingualAgentMixin):
         self.tool_map = {tool.name: tool for tool in self.tools}
         self.conversations: Dict[str, List[Dict]] = {}
 
-    def _get_dynamic_system_prompt(self, lang: str = "en"):
+    def _get_dynamic_system_prompt(self, lang: str = "en", kb_name: str = None, db_name: str = None):
         """Generate system prompt filtered by actually available tools."""
         base_prompt = SECURITY_SYSTEM_PROMPTS.get(lang, SECURITY_SYSTEM_PROMPTS["en"])
         
@@ -92,14 +92,23 @@ class SecurityAnalystService(MultilingualAgentMixin):
         if "query_database" in self.tool_map:
             tool_details.append("- query_database: DB ACCESS. Query the asset inventory or user directory table.")
 
+        active_sources = []
+        if kb_name:
+            active_sources.append(f"- **Active Knowledge Base**: '{kb_name}'. Search this knowledge base first for any logs, documents or lists.")
+        if db_name:
+            active_sources.append(f"- **Active Database**: '{db_name}'. Use this connection for database queries.")
+
+        sources_section = f"### CURRENTLY SELECTED SOURCES:\n{chr(10).join(active_sources)}\n\n" if active_sources else ""
+
         return f"""{base_prompt}
 
-### AVAILABLE TOOLS:
+{sources_section}### AVAILABLE TOOLS:
 {chr(10).join(tool_details)}
 
 ### INVESTIGATION STRATEGY:
 - **IMPORTANT**: If you do not know the exact name of the log collection or knowledge base, you MUST call `list_available_knowledge_bases` first. Do not guess names like 'policies' or use filenames as the `kb_name`.
 - All system logs, task IDs, contractor lists (CSV/XLSX), and policies are stored in the Knowledge Base. Use `search_knowledge_base` to find any information asked by the user once you have the correct collection name.
+{f"- When using `search_knowledge_base`, use kb_name='{kb_name}' as requested by the user." if kb_name else ""}
 - Use `query_database` to look up hardware or user details related to findings in the logs or documents.
 - If the user asks about an external company or vendor, check the Knowledge Base first for any uploaded directories or contractor lists.
 - If `search_knowledge_base` fails with an "Error: Knowledge base '...' does not exist", immediately call `list_available_knowledge_bases` to correct your knowledge and try again.
@@ -119,7 +128,10 @@ class SecurityAnalystService(MultilingualAgentMixin):
             
             self.conversations[session_id].append({"role": "user", "content": message})
             
-            system_prompt = self._get_dynamic_system_prompt(preferred_lang)
+            kb_name = kwargs.get('knowledge_base')
+            db_name = kwargs.get('database_connection')
+            
+            system_prompt = self._get_dynamic_system_prompt(preferred_lang, kb_name=kb_name, db_name=db_name)
             tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in self.tools])
             
             max_iterations = 8
@@ -147,21 +159,26 @@ class SecurityAnalystService(MultilingualAgentMixin):
 ### MANDATORY RESPONSE FORMAT:
 You MUST respond with a valid JSON object only. 
 
-If you need more data (e.g. searching the GSA list), use a tool:
-{{
-    "tool": "tool_name",
-    "args": {{"kb_name": "...", "query": "..."}},
-    "reasoning": "Why I need this"
-}}
+1. ANALYZE PREVIOUS TOOL RESULTS:
+   - If the previous tool result contains the answer, output the final answer using the 'none' tool immediately.
+   - Do NOT search again for the same thing.
 
-If you have found the final answer (e.g. the address) or this is your last turn:
-{{
-    "tool": "none",
-    "response": "Final answer for the user goes here",
-    "type": "text"
-}}
+2. CHOOSE YOUR ACTION:
+   - If you need more data (e.g. searching logs):
+     {{
+         "tool": "tool_name",
+         "args": {{"kb_name": "...", "query": "..."}},
+         "reasoning": "What specific new information I need."
+     }}
+   
+   - If you have the answer OR if the search failed multiple times:
+     {{
+         "tool": "none",
+         "response": "Final answer for the user goes here",
+         "type": "text"
+     }}
 
-{ "CRITICAL: This is your LAST turn of 8 allowed. You MUST provide the final response in the 'none' tool now. Do not call any other tools." if is_last_turn else f"Turn {iteration}/{max_iterations}. If previous search failed, use 'list_available_knowledge_bases' immediately." }
+{ "CRITICAL: This is your LAST turn of 8. You MUST provide the final response in the 'none' tool now." if is_last_turn else f"Turn {iteration}/{max_iterations}." }
 """
                 lc_messages.append(SystemMessage(content=instruction))
                 
@@ -193,13 +210,31 @@ If you have found the final answer (e.g. the address) or this is your last turn:
                 
                 if tool_name in self.tool_map:
                     args = decision.get('args', {})
+                    
+                    # Force selected knowledge base if provided via UI
+                    if tool_name == "search_knowledge_base" and kb_name:
+                        if args.get("kb_name") != kb_name:
+                            logger.info(f"Forcing knowledge base from '{args.get('kb_name')}' to '{kb_name}'")
+                            args["kb_name"] = kb_name
+
                     logger.info(f"Executing {tool_name} with {args}")
+                    
+                    # CRITICAL FIX: Add the assistant's thought/tool call to history so it knows it just asked for this
+                    self.conversations[session_id].append({
+                        "role": "assistant",
+                        "content": json.dumps(decision)
+                    })
+
                     try:
                         tool_result = self.tool_map[tool_name].invoke(args)
                         # Add tool result as system message and loop
+                        result_content = str(tool_result)
+                        if len(result_content) > 5000:
+                            result_content = result_content[:5000] + "... [truncated]"
+                        
                         self.conversations[session_id].append({
                             "role": "system", 
-                            "content": f"Result for {tool_name}({args}): {str(tool_result)}"
+                            "content": f"TOOL_RESULT ({tool_name}): {result_content}"
                         })
                     except Exception as te:
                         logger.error(f"Tool error: {te}")

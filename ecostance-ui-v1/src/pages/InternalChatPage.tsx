@@ -6,52 +6,23 @@ import { ChatInput } from '../components/chat/ChatInput';
 import { KBSelector, KnowledgeBase } from '../components/chat/KBSelector';
 import { Message } from '../components/chat/MessageBubble';
 import { Badge } from '../components/ui/Badge';
+import { cn } from '../lib/utils';
 import { useKnowledgeBase } from '../hooks/useKnowledgeBase';
-import { knowledgeBaseAPI } from '../services/api';
+import { useKnowledgeBases } from '../context/KnowledgeBaseContext';
 
 const InternalChatPage: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedKBs, setSelectedKBs] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isQuerying, setIsQuerying] = useState(false);
   const [showKBSelector, setShowKBSelector] = useState(false);
-  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
-  
-  const { listKnowledgeBases, queryKB } = useKnowledgeBase();
 
-  // Fetch knowledge bases on mount
+  const { knowledgeBases, fetchKnowledgeBases, isLoading: isKBLoading } = useKnowledgeBases();
+  const { queryKB } = useKnowledgeBase();
+
+  // Fetch knowledge bases on mount - will use cache if already loaded
   useEffect(() => {
-    const fetchKBs = async () => {
-      try {
-        const response = await listKnowledgeBases();
-        console.log('KB API Response:', response); // Debug log
-        
-        if (response && Array.isArray(response)) {
-          const transformedKBs: KnowledgeBase[] = response.map((kb: any) => {
-            // Handle both string array and object array formats
-            if (typeof kb === 'string') {
-              return {
-                id: kb,
-                name: kb,
-                documentCount: 0,
-                status: 'Ready' as const,
-              };
-            }
-            return {
-              id: kb.name || kb.id,
-              name: kb.name || kb.id,
-              documentCount: kb.document_count || kb.documentCount || 0,
-              status: 'Ready' as const,
-            };
-          });
-          console.log('Transformed KBs:', transformedKBs); // Debug log
-          setKnowledgeBases(transformedKBs);
-        }
-      } catch (error) {
-        console.error('Failed to fetch knowledge bases:', error);
-      }
-    };
-    fetchKBs();
-  }, [listKnowledgeBases]);
+    fetchKnowledgeBases();
+  }, [fetchKnowledgeBases]);
 
   // Query knowledge bases using real API
   const handleSendMessage = async (content: string) => {
@@ -70,14 +41,14 @@ const InternalChatPage: React.FC = () => {
     setMessages((prev) => [...prev, userMessage]);
 
     // Query the knowledge bases using real API
-    setIsLoading(true);
+    setIsQuerying(true);
     try {
       // Query the first selected KB (you can enhance this to query multiple KBs)
       const kbName = selectedKBs[0];
       const chatHistory = messages.map(m => `${m.role}: ${m.content}`);
-      
+
       const response = await queryKB(kbName, content, chatHistory);
-      
+
       if (response) {
         const assistantMessage: Message = {
           id: `msg-${Date.now()}-response`,
@@ -105,7 +76,7 @@ const InternalChatPage: React.FC = () => {
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
-      setIsLoading(false);
+      setIsQuerying(false);
     }
   };
 
@@ -121,14 +92,18 @@ const InternalChatPage: React.FC = () => {
   };
 
   const handleCopyMessage = (messageId: string) => {
-    console.log('Copied message:', messageId);
+    const message = messages.find(m => m.id === messageId);
+    if (message) {
+      navigator.clipboard.writeText(message.content);
+    }
   };
 
   const handleFeedback = (messageId: string, type: 'positive' | 'negative') => {
     console.log('Feedback:', messageId, type);
+    // You could implement an API call here to save feedback
   };
 
-  const selectedKBNames = knowledgeBases
+  const selectedKBNames = (knowledgeBases as KnowledgeBase[])
     .filter((kb) => selectedKBs.includes(kb.id))
     .map((kb) => kb.name);
 
@@ -161,11 +136,12 @@ const InternalChatPage: React.FC = () => {
             variant="outline"
             onClick={() => setShowKBSelector(!showKBSelector)}
             className="flex items-center space-x-2"
+            disabled={isKBLoading}
           >
-            <Icons.Database className="h-4 w-4" />
+            <Icons.Database className={cn("h-4 w-4", isKBLoading && "animate-spin")} />
             <span>
               {selectedKBs.length === 0
-                ? 'Select Knowledge Bases'
+                ? isKBLoading ? 'Loading KBs...' : 'Select Knowledge Bases'
                 : `${selectedKBs.length} KB${selectedKBs.length > 1 ? 's' : ''} Selected`}
             </span>
             <Icons.ChevronDown className="h-4 w-4" />
@@ -187,7 +163,7 @@ const InternalChatPage: React.FC = () => {
       {showKBSelector && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <KBSelector
-            knowledgeBases={knowledgeBases}
+            knowledgeBases={knowledgeBases as KnowledgeBase[]}
             selectedKBs={selectedKBs}
             onSelectionChange={setSelectedKBs}
             onClose={() => setShowKBSelector(false)}
@@ -200,7 +176,7 @@ const InternalChatPage: React.FC = () => {
         {/* Messages */}
         <MessageList
           messages={messages}
-          isLoading={isLoading}
+          isLoading={isQuerying}
           onCopyMessage={handleCopyMessage}
           onFeedback={handleFeedback}
         />
@@ -208,7 +184,7 @@ const InternalChatPage: React.FC = () => {
         {/* Input */}
         <ChatInput
           onSend={handleSendMessage}
-          disabled={isLoading || selectedKBs.length === 0}
+          disabled={isQuerying || selectedKBs.length === 0}
           placeholder={
             selectedKBs.length === 0
               ? 'Select a knowledge base to start chatting...'

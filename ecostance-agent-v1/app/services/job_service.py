@@ -55,12 +55,20 @@ class JobTracker:
                 return True
             return False
     
-    def complete_job(self, job_id: str) -> bool:
+    def complete_job(self, job_id: str, result: Optional[Dict] = None) -> bool:
         """Mark a job as completed."""
         with self._lock:
             if job_id in self._jobs:
-                self._jobs[job_id].status = JobStatus.COMPLETED
-                self._jobs[job_id].completed_at = datetime.now()
+                job = self._jobs[job_id]
+                job.status = JobStatus.COMPLETED
+                job.completed_at = datetime.now()
+                if result:
+                    # Store result in job object directly or in a new field if needed
+                    # For now just log it or attach to progress message for visibility
+                    if "collection_name" in result:
+                        job.collection_name = result["collection_name"]
+                    if "message" in result:
+                        job.progress_message = result.get("message")
                 return True
             return False
     

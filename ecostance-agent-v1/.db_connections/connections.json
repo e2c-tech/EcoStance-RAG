@@ -1,0 +1,40 @@
+{
+  "qragent": {
+    "type": "postgresql",
+    "host": "buddi-db-buddi.k.aivencloud.com",
+    "port": "15387",
+    "username": "qr-agent",
+    "password": "gAAAAABpIECPSeXrgIvD3cJTk8AIbd0kh089cdmZ-1V2C2rAquDTT_0TTGVdypx1vx59or4--fjepbi7GPoV4woBcRasui8oYxlGiQb8pXlNhYxZSJnAzYc=",
+    "database": "qr-agent-db",
+    "db_path": null
+  },
+  "logistics-demo": {
+    "type": "sqlite",
+    "host": "",
+    "port": "5432",
+    "username": "",
+    "password": "",
+    "database": "sqlite:///W:/pyProjects/EcoStanceAgentV1/uploads/badcd123-6cc6-4011-b01b-d33d1153f10d/databases/QuickShip.db",
+    "db_path": null
+  },
+  "badcd123-6cc6-4011-b01b-d33d1153f10d_logistics-demo": {
+    "type": "sqlite",
+    "host": "",
+    "port": "5432",
+    "username": "",
+    "password": "",
+    "database": "sqlite:///W:/pyProjects/EcoStanceAgentV1/uploads/badcd123-6cc6-4011-b01b-d33d1153f10d/databases/QuickShip.db",
+    "db_path": null,
+    "tenant_id": "badcd123-6cc6-4011-b01b-d33d1153f10d"
+  },
+  "a5ff464b-b13d-45fd-a418-def60ba7d503_sensor-data2": {
+    "type": "mysql",
+    "host": "mysql-1fd4b455-products-rb.i.aivencloud.com",
+    "port": "12429",
+    "username": "avnadmin",
+    "password": "gAAAAABpla4uQPgrABfW-B0m9pfs9FhDSaja-VLP04Edt12jhUEMqlgQp_d9L4f0RbZam-uiDVdOKcnYZfx32RQC4aisg-aYMZHjR76hHTpbLHqG9VQHgtQ=",
+    "database": "ai_security_sensors",
+    "db_path": null,
+    "tenant_id": "a5ff464b-b13d-45fd-a418-def60ba7d503"
+  }
+}

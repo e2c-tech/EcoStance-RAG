@@ -73,4 +73,11 @@ dmypy.json
 uploads/
 
 # Database connections (contains encrypted credentials)
-.db_connections/
+GSA_contractorlist.csv
+syslog1day.txt
+
+
+# Specific documents
+Yuvrus_Refund_Policy_Updated.docx
+yuvarus refund policy*
+ai_security_sensors_dump.sql

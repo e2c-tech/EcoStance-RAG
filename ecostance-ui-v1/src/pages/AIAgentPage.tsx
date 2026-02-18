@@ -2,9 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Database, FileText, Send, Loader2, AlertCircle, X, RefreshCw, Shield, Truck, ShoppingCart, Leaf, Sparkles } from 'lucide-react';
-import { databaseAPI, knowledgeBaseAPI, agentAPI } from '../services/api';
+import { databaseAPI, agentAPI } from '../services/api';
 import type { AgentChatResponse } from '../services/api.types';
 import { useAuth } from '../context/AuthContext.v2';
+import { useKnowledgeBases } from '../context/KnowledgeBaseContext';
+import { cn } from '../lib/utils';
 
 const PERSONA_CONFIG: Record<string, { label: string; icon: any; description: string }> = {
   security_analyst: {
@@ -59,11 +61,6 @@ interface Message {
   agent_type?: string;
 }
 
-interface KnowledgeBase {
-  name: string;
-  collection_name: string;
-  vectors_count: number;
-}
 
 interface DatabaseConnection {
   name: string;
@@ -79,14 +76,16 @@ export default function AIAgentPage() {
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isDatabaseConnected, setIsDatabaseConnected] = useState(false);
-  const [availableKBs, setAvailableKBs] = useState<KnowledgeBase[]>([]);
+  const { knowledgeBases, fetchKnowledgeBases, isLoading: isKBLoading } = useKnowledgeBases();
   const [selectedKB, setSelectedKB] = useState<string>('');
   const [selectedDBConnection, setSelectedDBConnection] = useState<string>('');
+  const [selectedPersona, setSelectedPersona] = useState<string>('generic');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Connection management state
   const [showDBModal, setShowDBModal] = useState(false);
   const [showKBModal, setShowKBModal] = useState(false);
+  const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [dbConnections, setDbConnections] = useState<DatabaseConnection[]>([]);
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [agentConfig, setAgentConfig] = useState<{ agent_type: string; is_customized: boolean } | null>(null);
@@ -94,7 +93,6 @@ export default function AIAgentPage() {
   useEffect(() => {
     // Clear state when tenant changes
     setDbConnections([]);
-    setAvailableKBs([]);
     setSelectedKB('');
     setSelectedDBConnection('');
     setIsDatabaseConnected(false);
@@ -104,7 +102,7 @@ export default function AIAgentPage() {
 
     // Load fresh data for the current tenant
     if (user?.tenantId) {
-      loadKnowledgeBases();
+      fetchKnowledgeBases();
       checkDatabaseConnection();
       loadDatabaseConnections();
       fetchAgentConfig();
@@ -150,6 +148,9 @@ export default function AIAgentPage() {
     try {
       const config = await agentAPI.getConfig() as any;
       setAgentConfig(config);
+      if (config?.agent_type) {
+        setSelectedPersona(config.agent_type);
+      }
     } catch (err) {
       console.error('Failed to fetch agent config:', err);
     }
@@ -163,31 +164,12 @@ export default function AIAgentPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const loadKnowledgeBases = async () => {
+  const handleRefreshKBs = async () => {
     try {
-      console.log('AI Agent: Loading knowledge bases...');
-      const data = await knowledgeBaseAPI.list() as any;
-      console.log('AI Agent: KB API response:', data);
-
-      let kbList: KnowledgeBase[] = [];
-
-      if (Array.isArray(data)) {
-        kbList = data.map((name: string) => ({
-          name: name,
-          collection_name: name,
-          vectors_count: 0,
-        }));
-      } else if (data && data.knowledge_bases) {
-        kbList = data.knowledge_bases;
-      } else if (data && Array.isArray(data.data)) {
-        kbList = data.data;
-      }
-
-      setAvailableKBs(kbList);
-      console.log('AI Agent: Loaded', kbList.length, 'knowledge bases');
+      console.log('AI Agent: Refreshing knowledge bases...');
+      await fetchKnowledgeBases(true);
     } catch (err) {
-      console.error('AI Agent: Failed to load knowledge bases:', err);
-      setAvailableKBs([]);
+      console.error('AI Agent: Failed to refresh knowledge bases:', err);
     }
   };
 
@@ -291,7 +273,8 @@ export default function AIAgentPage() {
         questionText,
         sessionId || undefined,
         selectedKB || undefined,
-        selectedDBConnection || undefined
+        selectedDBConnection || undefined,
+        selectedPersona
       ) as AgentChatResponse;
 
       // Update session ID if new
@@ -387,6 +370,59 @@ export default function AIAgentPage() {
         </div>
       )}
 
+      {/* Persona Selection Modal */}
+      {showPersonaModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowPersonaModal(false)}>
+          <Card className="p-6 bg-surface border-border max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-text flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary" />
+                Select Persona
+              </h2>
+              <button onClick={() => setShowPersonaModal(false)} className="text-text-secondary hover:text-text">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {Object.entries(PERSONA_CONFIG).map(([key, config]) => {
+                const Icon = config.icon;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setSelectedPersona(key);
+                      setShowPersonaModal(false);
+                      const msg: Message = {
+                        id: Date.now().toString(),
+                        type: 'system',
+                        content: `🎭 Persona switched to: ${config.label}`,
+                        timestamp: new Date(),
+                      };
+                      setMessages(prev => [...prev, msg]);
+                    }}
+                    className={`w-full p-4 border rounded-xl text-left transition-all flex items-start gap-4 ${selectedPersona === key
+                      ? 'bg-primary/10 border-primary/30 shadow-sm'
+                      : 'bg-background border-border hover:bg-surface-hover'
+                      }`}
+                  >
+                    <div className={`p-2 rounded-lg ${selectedPersona === key ? 'bg-primary text-white' : 'bg-surface text-primary'}`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-text">{config.label}</div>
+                      <div className="text-sm text-text-secondary leading-tight mt-1">
+                        {config.description}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* Knowledge Base Selection Modal */}
       {showKBModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowKBModal(false)}>
@@ -401,11 +437,11 @@ export default function AIAgentPage() {
               </button>
             </div>
 
-            {availableKBs.length > 0 ? (
+            {knowledgeBases.length > 0 ? (
               <div className="space-y-2">
-                {availableKBs.map((kb) => (
+                {knowledgeBases.map((kb) => (
                   <button
-                    key={kb.name}
+                    key={kb.id}
                     onClick={() => handleSelectKB(kb.name)}
                     disabled={connectionLoading}
                     className={`w-full p-3 border rounded-lg text-left transition-colors disabled:opacity-50 ${selectedKB === kb.name
@@ -415,7 +451,7 @@ export default function AIAgentPage() {
                   >
                     <div className="font-medium text-text">{kb.name}</div>
                     <div className="text-xs text-text-secondary">
-                      {kb.vectors_count.toLocaleString()} vectors
+                      {(kb.totalVectors || 0).toLocaleString()} vectors
                     </div>
                   </button>
                 ))}
@@ -423,36 +459,51 @@ export default function AIAgentPage() {
             ) : (
               <div className="text-center py-8">
                 <FileText className="w-12 h-12 text-text-secondary mx-auto mb-3" />
-                <p className="text-text-secondary mb-2">No knowledge bases available</p>
-                <p className="text-xs text-text-secondary">
-                  Go to Knowledge Base page to create one
-                </p>
+                {isKBLoading ? (
+                  <p className="text-text-secondary mb-2 flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading...
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-text-secondary mb-2">No knowledge bases available</p>
+                    <p className="text-xs text-text-secondary">
+                      Go to Knowledge Base page to create one
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </Card>
         </div>
       )}
 
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-text flex items-center gap-2">
-          {(() => {
-            const config = agentConfig && PERSONA_CONFIG[agentConfig.agent_type] ? PERSONA_CONFIG[agentConfig.agent_type] : PERSONA_CONFIG.generic;
-            const Icon = config.icon;
-            return (
-              <>
-                <Icon className="w-6 h-6 text-primary" />
-                {config.label}
-              </>
-            );
-          })()}
-          <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-normal">BETA</span>
-        </h1>
-        <p className="text-text-secondary mt-1">
-          {agentConfig && PERSONA_CONFIG[agentConfig.agent_type]
-            ? PERSONA_CONFIG[agentConfig.agent_type].description
-            : PERSONA_CONFIG.generic.description}
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-text flex items-center gap-2">
+            {(() => {
+              const persona = PERSONA_CONFIG[selectedPersona] || PERSONA_CONFIG.generic;
+              const Icon = persona.icon;
+              return (
+                <>
+                  <Icon className="w-6 h-6 text-primary" />
+                  {persona.label}
+                </>
+              );
+            })()}
+            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-normal">BETA</span>
+          </h1>
+          <p className="text-text-secondary mt-1">
+            {PERSONA_CONFIG[selectedPersona]?.description || PERSONA_CONFIG.generic.description}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setShowPersonaModal(true)}
+          className="bg-surface hover:bg-surface-hover shadow-sm border-border"
+        >
+          <Sparkles className="w-4 h-4 mr-2 text-primary" />
+          Switch Persona
+        </Button>
       </div>
 
       {/* Controls */}
@@ -463,21 +514,21 @@ export default function AIAgentPage() {
             <span className="text-sm text-text-secondary">Knowledge Base:</span>
             <button
               onClick={() => setShowKBModal(true)}
-              disabled={availableKBs.length === 0}
+              disabled={knowledgeBases.length === 0}
               className={`px-3 py-1.5 border rounded-lg text-sm text-text transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${selectedKB
                 ? 'bg-primary/10 border-primary/20 hover:bg-primary/20'
                 : 'bg-background border-border hover:bg-surface-hover'
                 }`}
             >
               <FileText className={`w-4 h-4 ${selectedKB ? 'text-primary' : ''}`} />
-              {selectedKB || (availableKBs.length > 0 ? 'Select Knowledge Base' : 'No KBs Available')}
+              {selectedKB || (knowledgeBases.length > 0 ? 'Select Knowledge Base' : 'No KBs Available')}
             </button>
             <button
-              onClick={loadKnowledgeBases}
+              onClick={handleRefreshKBs}
               className="p-1.5 text-text-secondary hover:text-text transition-colors"
               title="Refresh knowledge bases"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className={cn("w-4 h-4", isKBLoading && "animate-spin")} />
             </button>
           </div>
 
@@ -566,7 +617,7 @@ export default function AIAgentPage() {
                   {msg.type === 'assistant' && (
                     <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-primary/80">
                       {(() => {
-                        const personaKey = msg.agent_type || (agentConfig?.agent_type) || 'generic';
+                        const personaKey = msg.agent_type || selectedPersona;
                         const config = PERSONA_CONFIG[personaKey] || PERSONA_CONFIG.generic;
                         const Icon = config.icon;
                         return (

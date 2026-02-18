@@ -12,8 +12,8 @@ from langchain_core.documents import Document
 from langchain_qdrant import Qdrant
 
 from .embedding_factory import get_embedding_service
-from .language_service import get_language_service
-from ..config.multilingual_config import (
+from app.services.language_service import get_language_service
+from app.config.multilingual_app_config import (
     CROSS_LANGUAGE_ENABLED,
     SAME_LANGUAGE_BOOST,
     CROSS_LANGUAGE_MIN_SIMILARITY,

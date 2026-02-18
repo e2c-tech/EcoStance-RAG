@@ -36,15 +36,13 @@ def set_multilingual_config(enabled: bool, model_name: str = None, batch_size: i
 @trace_embedding
 def load_multilingual_embedding_model():
     """
-    Load BGE-M3 multilingual embedding model as singleton.
-    
-    Returns:
-        BGE-M3 model instance or None if not available
+    Load BGE-M3 multilingual embedding model. 
+    Redirects to the main embedding_service singleton to save memory.
     """
     global _multilingual_embedding_model
     
     if not MULTILINGUAL_ENABLED:
-        logger.info("Multilingual embedding disabled, using legacy model")
+        logger.info("Multilingual embedding disabled")
         return None
     
     # Double-checked locking pattern for thread-safe singleton
@@ -52,18 +50,25 @@ def load_multilingual_embedding_model():
         with _multilingual_embedding_model_lock:
             if _multilingual_embedding_model is None:
                 try:
-                    from FlagEmbedding import BGEM3FlagModel
+                    # Check if model names match to reuse the main singleton
+                    from .embedding_service import load_embedding_model
+                    from app.config import EMBEDDING_MODEL_NAME as MAIN_MODEL
                     
-                    # Determine device
-                    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-                    logger.info(f"Loading BGE-M3 multilingual model on device: {device}")
+                    if BGE_M3_MODEL_NAME == MAIN_MODEL or BGE_M3_MODEL_NAME == "BAAI/bge-m3":
+                        logger.info("Reusing main embedding singleton for multilingual tasks to save memory")
+                        _multilingual_embedding_model = load_embedding_model()
+                    else:
+                        from FlagEmbedding import BGEM3FlagModel
+                        # Determine device
+                        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+                        logger.info(f"Loading separate BGE-M3 model on {device}")
+                        _multilingual_embedding_model = BGEM3FlagModel(
+                            BGE_M3_MODEL_NAME,
+                            use_fp16=device == "cuda",
+                            device=device
+                        )
                     
-                    # Initialize BGE-M3 model
-                    _multilingual_embedding_model = BGEM3FlagModel(
-                        BGE_M3_MODEL_NAME,
-                        use_fp16=device == "cuda",  # Use FP16 on GPU for efficiency
-                        device=device
-                    )
+                    logger.info("✓ Multilingual embedding model provider ready")
                     
                     logger.info("✓ BGE-M3 multilingual embedding model loaded successfully")
                     
@@ -72,7 +77,7 @@ def load_multilingual_embedding_model():
                     logger.info("Install with: pip install FlagEmbedding")
                     return None
                 except Exception as e:
-                    logger.error(f"Failed to load BGE-M3 model: {e}")
+                    logger.error(f"Failed to load multilingual model: {e}")
                     return None
     
     return _multilingual_embedding_model
@@ -136,12 +141,22 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None) -> 
         for i in range(0, len(texts_to_embed), BGE_M3_BATCH_SIZE):
             batch_texts = texts_to_embed[i:i + BGE_M3_BATCH_SIZE]
             
-            # Generate embeddings using BGE-M3
-            batch_embeddings = model.encode(
-                batch_texts,
-                batch_size=len(batch_texts),
-                max_length=BGE_M3_MAX_LENGTH
-            )['dense_vecs']
+            # Generate embeddings (handle both FlagEmbedding and SentenceTransformer)
+            # BGEM3FlagModel accepts max_length, SentenceTransformer does not
+            encode_kwargs = {"batch_size": len(batch_texts)}
+            
+            # Use specific library check to determine if we should pass max_length
+            from sentence_transformers import SentenceTransformer
+            if not isinstance(model, SentenceTransformer):
+                encode_kwargs["max_length"] = BGE_M3_MAX_LENGTH
+            
+            raw_output = model.encode(batch_texts, **encode_kwargs)
+            
+            # FlagEmbedding returns a dict with 'dense_vecs', SentenceTransformer returns array directly
+            if isinstance(raw_output, dict):
+                batch_embeddings = raw_output['dense_vecs']
+            else:
+                batch_embeddings = raw_output
             
             # Normalize if requested
             if BGE_M3_NORMALIZE:
@@ -165,8 +180,9 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None) -> 
         
     except Exception as e:
         logger.error(f"Error creating multilingual embeddings: {e}")
-        # Return chunks without embeddings rather than failing
-        return chunks
+        # Raise exception instead of returning chunks without embeddings 
+        # to prevent KeyError: 'embedding' in subsequent steps
+        raise ValueError(f"Failed to generate embeddings for {len(chunks)} chunks: {str(e)}")
 
 def get_embedding_dimension() -> int:
     """Get the embedding dimension for BGE-M3."""

@@ -79,9 +79,15 @@ export default function DatabaseChatPage() {
   const loadConnections = async () => {
     try {
       const data = await databaseAPI.listConnections() as Connection[];
-      setConnections(data);
+      if (Array.isArray(data)) {
+        setConnections(data);
+      } else {
+        console.warn('Received invalid connections data:', data);
+        setConnections([]);
+      }
     } catch (err) {
       console.error('Failed to load connections:', err);
+      // Don't set error state here to avoid blocking UI if just list fails
     }
   };
 
@@ -90,7 +96,7 @@ export default function DatabaseChatPage() {
       setLoading(true);
       setError('');
       const conn = await databaseAPI.loadConnection(connectionName) as any;
-      
+
       // Use db_uri directly from backend if available, otherwise construct it
       let dbUri: string;
       if (conn.db_uri) {
@@ -103,15 +109,15 @@ export default function DatabaseChatPage() {
         // Construct URI for PostgreSQL/MySQL
         dbUri = `${conn.type}://${conn.username}:${conn.password}@${conn.host}:${conn.port}/${conn.database}`;
       }
-      
+
       console.log('Connecting to database with URI:', dbUri.replace(/:[^:@]+@/, ':****@')); // Log without password
       const response = await databaseAPI.connect(dbUri) as any;
       console.log('Connection response:', response);
-      
+
       setIsConnected(true);
       setSelectedConnection(connectionName);
       setChatHistory([]); // Clear chat history on new connection
-      
+
       // Try to load schema
       try {
         const schemaData = await databaseAPI.getSchema() as any;
@@ -133,24 +139,24 @@ export default function DatabaseChatPage() {
     try {
       setUploadingFile(true);
       setError('');
-      
+
       console.log('Uploading SQLite file:', file.name);
       const result = await databaseAPI.uploadSQLite(file) as any;
       console.log('Upload result:', result);
-      
+
       // Use the returned file_path
       if (isQuickConnect) {
-        setQuickConnectForm({ 
-          ...quickConnectForm, 
-          db_path: result.file_path 
+        setQuickConnectForm({
+          ...quickConnectForm,
+          db_path: result.file_path
         });
       } else {
-        setConnectionForm({ 
-          ...connectionForm, 
-          database: result.file_path 
+        setConnectionForm({
+          ...connectionForm,
+          database: result.file_path
         });
       }
-      
+
       console.log('SQLite file uploaded successfully:', result.filename);
     } catch (err: any) {
       setError(err.message || 'Failed to upload SQLite file');
@@ -164,22 +170,22 @@ export default function DatabaseChatPage() {
     try {
       setLoading(true);
       setError('');
-      
+
       const { db_type, host, port, username, password, database, db_path } = quickConnectForm;
-      
-      const dbUri = db_type === 'sqlite' 
+
+      const dbUri = db_type === 'sqlite'
         ? `sqlite:///${db_path}`
         : `${db_type}://${username}:${password}@${host}:${port}/${database}`;
-      
+
       console.log('Quick connecting to database with URI:', dbUri.replace(/:[^:@]+@/, ':****@')); // Log without password
       const response = await databaseAPI.connect(dbUri) as any;
       console.log('Quick connect response:', response);
-      
+
       setIsConnected(true);
       setSelectedConnection('Quick Connect');
       setShowQuickConnect(false);
       setChatHistory([]); // Clear chat history on new connection
-      
+
       // Try to load schema
       try {
         const schemaData = await databaseAPI.getSchema() as any;
@@ -200,12 +206,18 @@ export default function DatabaseChatPage() {
   const handleEditConnection = async (name: string) => {
     try {
       setLoading(true);
+      setError('');
       const conn = await databaseAPI.loadConnection(name) as any;
+
+      if (!conn) {
+        throw new Error('Connection details could not be loaded');
+      }
+
       setConnectionForm({
-        name: conn.name,
-        db_type: conn.type,
+        name: conn.name || '',
+        db_type: conn.type || 'postgresql',
         host: conn.host || '',
-        port: conn.port || '5432',
+        port: String(conn.port || '5432'),
         username: conn.username || '',
         password: conn.password || '',
         database: conn.database || '',
@@ -214,7 +226,8 @@ export default function DatabaseChatPage() {
       setShowConnectionForm(true);
       setShowQuickConnect(false);
     } catch (err: any) {
-      setError(err.message || 'Failed to load connection');
+      console.error('Edit connection error:', err);
+      setError(err.message || 'Failed to load connection details');
     } finally {
       setLoading(false);
     }
@@ -226,16 +239,16 @@ export default function DatabaseChatPage() {
       setError('Connection name is required');
       return;
     }
-    
+
     try {
       setLoading(true);
       setError('');
-      
+
       // If editing, delete the old connection first (if name changed)
       if (editingConnection && editingConnection !== connectionForm.name) {
         await databaseAPI.deleteConnection(editingConnection);
       }
-      
+
       await databaseAPI.saveConnection(connectionForm);
       await loadConnections();
       setShowConnectionForm(false);
@@ -286,10 +299,10 @@ export default function DatabaseChatPage() {
 
   const handleGenerateQuery = async () => {
     if (!question.trim()) return;
-    
+
     const questionText = question;
     setQuestion(''); // Clear input immediately
-    
+
     // Add question to chat
     const questionMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -298,12 +311,12 @@ export default function DatabaseChatPage() {
       timestamp: new Date(),
     };
     setChatHistory(prev => [...prev, questionMsg]);
-    
+
     try {
       setLoading(true);
       setError('');
       const result = await databaseAPI.generateQuery(questionText) as { sql_query: string };
-      
+
       // Add SQL to chat
       const sqlMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -312,7 +325,7 @@ export default function DatabaseChatPage() {
         timestamp: new Date(),
       };
       setChatHistory(prev => [...prev, sqlMsg]);
-      
+
       // Auto-execute the query
       await executeQuery(result.sql_query);
     } catch (err: any) {
@@ -332,10 +345,10 @@ export default function DatabaseChatPage() {
     try {
       const result = await databaseAPI.executeQuery(sql) as any;
       console.log('Query result:', result);
-      
+
       // Handle different response formats
       let formattedResult: QueryResult;
-      
+
       if (Array.isArray(result)) {
         formattedResult = {
           rows: result,
@@ -346,7 +359,7 @@ export default function DatabaseChatPage() {
       } else {
         formattedResult = result;
       }
-      
+
       // Add result to chat
       const resultMsg: ChatMessage = {
         id: (Date.now() + 2).toString(),
@@ -585,7 +598,7 @@ export default function DatabaseChatPage() {
                       <p className="text-xs text-primary">Uploading file...</p>
                     )}
                     <p className="text-xs text-text-secondary">
-                      Or enter path: 
+                      Or enter path:
                     </p>
                     <input
                       type="text"
@@ -612,11 +625,10 @@ export default function DatabaseChatPage() {
               {connections.map((conn) => (
                 <div
                   key={conn.name}
-                  className={`p-3 rounded-lg border transition-colors ${
-                    selectedConnection === conn.name
-                      ? 'bg-primary/10 border-primary'
-                      : 'bg-surface border-border hover:bg-surface-hover'
-                  }`}
+                  className={`p-3 rounded-lg border transition-colors ${selectedConnection === conn.name
+                    ? 'bg-primary/10 border-primary'
+                    : 'bg-surface border-border hover:bg-surface-hover'
+                    }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleConnect(conn.name)}>
@@ -719,7 +731,7 @@ export default function DatabaseChatPage() {
                         </div>
                       </div>
                     )}
-                    
+
                     {msg.type === 'sql' && (
                       <Card className="p-3 bg-surface border-border">
                         <div className="text-xs text-text-secondary mb-2">Generated SQL</div>
@@ -728,7 +740,7 @@ export default function DatabaseChatPage() {
                         </pre>
                       </Card>
                     )}
-                    
+
                     {msg.type === 'result' && msg.data && (
                       <Card className="p-3 bg-surface border-border">
                         <div className="text-xs text-text-secondary mb-2">Results</div>
@@ -767,7 +779,7 @@ export default function DatabaseChatPage() {
                         )}
                       </Card>
                     )}
-                    
+
                     {msg.type === 'error' && (
                       <Card className="p-3 bg-error/10 border-error/20">
                         <div className="flex items-start gap-2">
@@ -778,7 +790,7 @@ export default function DatabaseChatPage() {
                     )}
                   </div>
                 ))}
-                
+
                 {loading && (
                   <div className="flex justify-center">
                     <div className="animate-pulse text-text-secondary text-sm">Processing...</div>

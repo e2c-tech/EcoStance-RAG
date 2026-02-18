@@ -30,6 +30,8 @@ class PublicAgentChatRequest(BaseModel):
     conversation_history: Optional[List[ConversationMessage]] = Field(default=[], description="Previous conversation")
     agent_type: Optional[str] = Field(None, description="Optional agent type override (quickship, ecommerce, etc.)")
     user_language: Optional[str] = Field(None, description="Optional user language preference (en, es, fr, etc.)")
+    knowledge_base: Optional[str] = Field(None, description="Optional selected knowledge base name")
+    database_connection: Optional[str] = Field(None, description="Optional selected database connection ID")
 
 
 class SourceInfo(BaseModel):

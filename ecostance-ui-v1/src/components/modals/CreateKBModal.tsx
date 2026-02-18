@@ -4,8 +4,8 @@ import { Input } from '../ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../ui/Card';
 import { Icons } from '../icons';
 import { cn } from '../../lib/utils';
-import { useKnowledgeBase } from '../../hooks/useKnowledgeBase';
 import { knowledgeBaseAPI } from '../../services/api';
+import { useKnowledgeBases } from '../../context/KnowledgeBaseContext';
 
 const validateKBName = (name: string, existingNames: string[]): string | undefined => {
   if (!name) return 'Knowledge Base Name is required.';
@@ -23,41 +23,35 @@ interface CreateKBModalProps {
 
 const CreateKBModal: React.FC<CreateKBModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [kbName, setKbName] = useState('');
-  const [kbNameError, setKbNameError] = useState<string | undefined>(undefined);
-  const [isKbNameTouched, setIsKbNameTouched] = useState(false);
-  const [existingKBNames, setExistingKBNames] = useState<string[]>([]);
+  const { knowledgeBases, fetchKnowledgeBases } = useKnowledgeBases();
 
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
-  const { listKnowledgeBases } = useKnowledgeBase();
+  const existingKBNames = React.useMemo(() =>
+    knowledgeBases.map(kb => kb.name.toLowerCase()),
+    [knowledgeBases]
+  );
+
+  const kbNameError = React.useMemo(() =>
+    validateKBName(kbName, existingKBNames),
+    [kbName, existingKBNames]
+  );
+
   const isFormValid = !kbNameError && kbName.length > 0;
 
-  // Fetch existing KB names when modal opens
+  // Fetch existing KBs when modal opens to ensure validation is up to date
   useEffect(() => {
     if (isOpen) {
-      const fetchKBNames = async () => {
-        try {
-          const response = await listKnowledgeBases();
-          if (response && Array.isArray(response)) {
-            const names = response.map((kb: any) => kb.name);
-            setExistingKBNames(names);
-          }
-        } catch (error) {
-          console.error('Failed to fetch KB names:', error);
-        }
-      };
-      fetchKBNames();
+      fetchKnowledgeBases();
     }
-  }, [isOpen, listKnowledgeBases]);
+  }, [isOpen, fetchKnowledgeBases]);
 
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
       setKbName('');
-      setKbNameError(undefined);
-      setIsKbNameTouched(false);
       setDescription('');
       setIsSubmitting(false);
       setSubmitError(undefined);
@@ -65,18 +59,11 @@ const CreateKBModal: React.FC<CreateKBModalProps> = ({ isOpen, onClose, onSucces
   }, [isOpen]);
 
   const handleNameBlur = useCallback(() => {
-    setIsKbNameTouched(true);
-    const error = validateKBName(kbName, existingKBNames);
-    setKbNameError(error);
-  }, [kbName, existingKBNames]);
+    // No-op for now
+  }, []);
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setKbName(e.target.value);
-    // Clear error on typing if touched
-    if (isKbNameTouched) {
-      const error = validateKBName(e.target.value, existingKBNames);
-      setKbNameError(error);
-    }
   };
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -93,7 +80,7 @@ const CreateKBModal: React.FC<CreateKBModalProps> = ({ isOpen, onClose, onSucces
     try {
       // Create the knowledge base using the backend API
       await knowledgeBaseAPI.create(kbName);
-      
+
       onSuccess(kbName);
       onClose(); // Close modal on success
     } catch (error) {
@@ -124,20 +111,28 @@ const CreateKBModal: React.FC<CreateKBModalProps> = ({ isOpen, onClose, onSucces
         <CardContent className="p-5 pt-4">
           <form onSubmit={handleSubmit}>
             <div className="space-y-5">
-              <div>
+              <div className="flex flex-col space-y-1.5">
+                <label className="text-sm font-medium text-primary">
+                  Knowledge Base Name*
+                </label>
                 <Input
-                  label="Knowledge Base Name*"
                   type="text"
                   placeholder="e.g., product-documentation"
                   value={kbName}
                   onChange={handleNameChange}
                   onBlur={handleNameBlur}
-                  error={isKbNameTouched ? kbNameError : undefined}
+                  className={cn(kbName.length > 0 && kbNameError && "border-red-500")}
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Use lowercase letters, numbers, hyphens, and underscores
-                </p>
+                {kbName.length > 0 && kbNameError ? (
+                  <p className="text-xs text-red-500 font-medium">
+                    {kbNameError}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-400">
+                    Use lowercase letters, numbers, hyphens, and underscores only. Spaces and special characters are not allowed.
+                  </p>
+                )}
               </div>
               <div className="flex flex-col space-y-1.5">
                 <label htmlFor="description" className="text-sm font-medium text-primary">

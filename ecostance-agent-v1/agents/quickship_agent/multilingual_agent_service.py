@@ -11,14 +11,14 @@ from typing import List, Dict, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from .config.multilingual_config import (
+from app.config.multilingual_app_config import (
     should_use_multilingual_service,
     is_tenant_multilingual_enabled
 )
-from .services.language_service import get_language_service
+from app.services.language_service import get_language_service
 from .services.multilingual_rag_service import get_multilingual_rag_service
 from .config import LLM_PROVIDER, AGENT_MODEL, AGENT_TEMPERATURE, GROQ_MODELS, GEMINI_MODELS
-from .llm_factory import LLMFactory
+from app.services.query_service import get_llm
 
 # Import LangSmith tracing
 import sys
@@ -147,9 +147,9 @@ class MultilingualAgentService:
         self.language_service = get_language_service()
         self.rag_service = get_multilingual_rag_service()
         
-        # Create LLM using factory
+        # Create LLM using shared utility
         try:
-            self.llm = LLMFactory.create_llm(
+            self.llm = get_llm(
                 provider=llm_provider,
                 model=model,
                 temperature=AGENT_TEMPERATURE
@@ -161,7 +161,7 @@ class MultilingualAgentService:
             logger.error(f"Failed to initialize LLM: {e}")
             # Fallback to Gemini if available
             try:
-                self.llm = LLMFactory.create_llm(provider="gemini")
+                self.llm = get_llm(provider="gemini")
                 self.current_provider = "gemini"
                 self.current_model = AGENT_MODEL
                 logger.warning("Fell back to Gemini provider")

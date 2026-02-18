@@ -8,7 +8,7 @@ from typing import Optional, Union, List
 from abc import ABC, abstractmethod
 from langchain_core.embeddings import Embeddings
 
-from ..config.multilingual_config import (
+from app.config.multilingual_app_config import (
     EMBEDDING_MODEL_TYPE,
     BGE_M3_MODEL_NAME,
     BGE_M3_EMBEDDING_DIMENSION,

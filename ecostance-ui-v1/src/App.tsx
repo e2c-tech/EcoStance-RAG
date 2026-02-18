@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import SidebarLayout from './components/SidebarLayout';
 import SuperAdminLayout from './components/SuperAdminLayout';
 import DashboardPage from './pages/DashboardPage';
@@ -33,6 +33,7 @@ import SetPasswordPage from './pages/SetPasswordPage';
 import PaymentSuccessPage from './pages/billing/PaymentSuccessPage';
 import PaymentCancelPage from './pages/billing/PaymentCancelPage';
 import { AuthProvider, useAuth } from './context/AuthContext.v2';
+import { KnowledgeBaseProvider } from './context/KnowledgeBaseContext';
 import { Icons } from './components/icons';
 
 // ProtectedRoute component to ensure only authenticated users can access certain routes
@@ -76,73 +77,76 @@ const SuperAdminRoute = ({ children }: { children: React.ReactNode }) => {
 function App() {
   return (
     <AuthProvider>
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<SignupPage />} />
-        <Route path="/public-chat" element={<PublicChatPage />} />
-        <Route path="/public-agent" element={<PublicAgentPage />} />
-        <Route path="/auth/set-password" element={<SetPasswordPage />} />
+      <KnowledgeBaseProvider>
+        <Router>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<SignupPage />} />
+            <Route path="/public-chat" element={<PublicChatPage />} />
+            <Route path="/public-agent" element={<PublicAgentPage />} />
+            <Route path="/auth/set-password" element={<SetPasswordPage />} />
 
-        {/* Super Admin Routes */}
-        <Route path="/admin/login" element={<SuperAdminLoginPage />} />
-        <Route
-          path="/admin"
-          element={
-            <SuperAdminRoute>
-              <SuperAdminLayout />
-            </SuperAdminRoute>
-          }
-        >
-          <Route path="dashboard" element={<SuperAdminDashboard />} />
-          <Route path="tenants" element={<TenantManagementPage />} />
-          <Route path="tenants/:tenantId" element={<TenantDetailsPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
-          <Route path="quotas" element={<QuotaManagementPage />} />
-          <Route path="system" element={<SystemHealthPage />} />
-          <Route path="maintenance" element={<MaintenancePage />} />
-          <Route path="audit-logs" element={<AuditLogsPage />} />
-          <Route path="settings" element={<PlatformSettingsPage />} />
-        </Route>
+            {/* Super Admin Routes */}
+            <Route path="/admin/login" element={<SuperAdminLoginPage />} />
+            <Route
+              path="/admin"
+              element={
+                <SuperAdminRoute>
+                  <SuperAdminLayout />
+                </SuperAdminRoute>
+              }
+            >
+              <Route path="dashboard" element={<SuperAdminDashboard />} />
+              <Route path="tenants" element={<TenantManagementPage />} />
+              <Route path="tenants/:tenantId" element={<TenantDetailsPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="quotas" element={<QuotaManagementPage />} />
+              <Route path="system" element={<SystemHealthPage />} />
+              <Route path="maintenance" element={<MaintenancePage />} />
+              <Route path="audit-logs" element={<AuditLogsPage />} />
+              <Route path="settings" element={<PlatformSettingsPage />} />
+            </Route>
 
-        {/* Protected Routes with Sidebar */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <SidebarLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<DashboardPage />} />
-          <Route path="knowledge-base" element={<KnowledgeBaseListPage />} />
-          <Route path="knowledge-base/:kbId" element={<KnowledgeBaseDetailsPage />} />
-          <Route path="kb-diagnostic" element={<KBDiagnosticPage />} />
-          <Route path="chat" element={<InternalChatPage />} />
-          <Route path="database-chat" element={<DatabaseChatPage />} />
-          <Route path="ai-agent" element={<AIAgentPage />} />
-          <Route path="users" element={<UserManagementPage />} />
-          <Route path="settings" element={<TenantSettingsPage />} />
-          <Route path="admin/public-chat" element={<AdminPublicChatPage />} />
-          <Route path="admin/public-agent" element={<AdminPublicAgentPage />} />
-          <Route path="gmail/callback" element={<GmailCallbackPage />} />
-          <Route path="billing/success" element={<PaymentSuccessPage />} />
-          <Route path="billing/cancel" element={<PaymentCancelPage />} />
-          <Route
-            path="admin/dashboard"
-            element={
-              <SuperAdminRoute>
-                <AdminDashboardPage />
-              </SuperAdminRoute>
-            }
-          />
-        </Route>
+            {/* Protected Routes with Sidebar */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<DashboardPage />} />
+              <Route path="knowledge-base" element={<KnowledgeBaseListPage />} />
+              <Route path="knowledge-base/:kbId" element={<KnowledgeBaseDetailsPage />} />
+              <Route path="kb-diagnostic" element={<KBDiagnosticPage />} />
+              <Route path="chat" element={<InternalChatPage />} />
+              <Route path="database-chat" element={<DatabaseChatPage />} />
+              <Route path="ai-agent" element={<AIAgentPage />} />
+              <Route path="users" element={<UserManagementPage />} />
+              <Route path="settings" element={<TenantSettingsPage />} />
+              <Route path="admin/public-chat" element={<AdminPublicChatPage />} />
+              <Route path="admin/public-agent" element={<AdminPublicAgentPage />} />
+              <Route path="gmail/callback" element={<GmailCallbackPage />} />
+              <Route path="billing/success" element={<PaymentSuccessPage />} />
+              <Route path="billing/cancel" element={<PaymentCancelPage />} />
+              <Route
+                path="admin/dashboard"
+                element={
+                  <SuperAdminRoute>
+                    <AdminDashboardPage />
+                  </SuperAdminRoute>
+                }
+              />
+            </Route>
 
-        {/* Fallback Route */}
-        <Route path="*" element={<AuthRedirector />} />
-      </Routes>
+            {/* Fallback Route */}
+            <Route path="*" element={<AuthRedirector />} />
+          </Routes>
+        </Router>
+      </KnowledgeBaseProvider>
     </AuthProvider>
-
   );
 }
 

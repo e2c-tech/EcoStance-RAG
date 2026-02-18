@@ -77,10 +77,17 @@ export default function UserManagement() {
             if (Array.isArray(data)) {
                 rolesArray = data;
             } else if (data && typeof data === 'object') {
+                // Check common property names for lists
                 if ('roles' in data && Array.isArray((data as any).roles)) {
                     rolesArray = (data as any).roles;
                 } else if ('data' in data && Array.isArray((data as any).data)) {
                     rolesArray = (data as any).data;
+                } else if ('items' in data && Array.isArray((data as any).items)) {
+                    rolesArray = (data as any).items;
+                } else if ('results' in data && Array.isArray((data as any).results)) {
+                    rolesArray = (data as any).results;
+                } else {
+                    console.warn('⚠️ Unexpected roles response format:', data);
                 }
             }
             setRoles(rolesArray);
@@ -117,6 +124,10 @@ export default function UserManagement() {
             // Construct success message
             const successCount = result.successful ? result.successful.length : 0;
             const failedCount = result.failed ? result.failed.length : 0;
+
+            if (successCount > 0) {
+                console.log('✅ Successful invitations:', result.successful);
+            }
 
             let msg = `Invited ${successCount} user(s) successfully.`;
             if (failedCount > 0) {
@@ -381,11 +392,15 @@ export default function UserManagement() {
                                     className="w-full px-3 py-2 border border-border rounded-lg bg-background text-text focus:border-primary focus:outline-none"
                                 >
                                     <option value="">Select a role...</option>
-                                    {roles.map(role => (
-                                        <option key={role.id} value={role.id}>
-                                            {role.name}
-                                        </option>
-                                    ))}
+                                    {roles.length === 0 ? (
+                                        <option disabled>No roles found</option>
+                                    ) : (
+                                        roles.map(role => (
+                                            <option key={role.id} value={role.id}>
+                                                {role.name}
+                                            </option>
+                                        ))
+                                    )}
                                 </select>
                                 <p className="text-xs text-text-secondary mt-1">
                                     Assigning a role grants specific permissions to {editingUser ? 'this user' : 'these users'}.
