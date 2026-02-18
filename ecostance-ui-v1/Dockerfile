@@ -8,7 +8,7 @@ RUN npm ci
 COPY . .
 
 # Build arguments for environment variables
-ARG VITE_API_BASE_URL=http://localhost:9000/api/v1
+ARG VITE_API_BASE_URL=http://ecostance-agent:9000/api/v1
 ARG VITE_ENVIRONMENT=production
 ARG VITE_BYPASS_AUTH=false
 
