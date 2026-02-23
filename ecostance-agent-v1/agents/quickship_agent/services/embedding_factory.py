@@ -8,6 +8,14 @@ from typing import Optional, Union, List
 from abc import ABC, abstractmethod
 from langchain_core.embeddings import Embeddings
 
+try:
+    import torch
+    # Limit GPU memory usage to 1/3
+    if torch.cuda.is_available():
+        torch.cuda.set_per_process_memory_fraction(0.33)
+except ImportError:
+    torch = None
+
 from app.config.multilingual_app_config import (
     EMBEDDING_MODEL_TYPE,
     BGE_M3_MODEL_NAME,

@@ -7,6 +7,10 @@ import logging
 
 from .langsmith_service import trace_embedding
 
+# Limit GPU memory usage to 1/3
+if torch.cuda.is_available():
+    torch.cuda.set_per_process_memory_fraction(0.33)
+
 logger = logging.getLogger(__name__)
 
 # Global embedding model instance (singleton pattern)
