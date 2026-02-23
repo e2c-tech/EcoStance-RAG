@@ -6,6 +6,8 @@ Parallel implementation of the data processing pipeline with multilingual capabi
 import os
 import logging
 from typing import List, Dict, Any, Optional
+from functools import partial
+import anyio
 
 from .extraction_service import extract_data_from_file
 from .multilingual_cleaning_service import clean_and_enrich_blocks_with_fallback, get_language_statistics
@@ -88,10 +90,10 @@ async def process_and_upload_file_multilingual(
 
         # 2. Enhanced Cleaning Stage
         update_progress("Step 2/6: Starting multilingual cleaning and enrichment...")
-        enriched_blocks = clean_and_enrich_blocks_with_fallback(raw_blocks, tenant_id)
+        enriched_blocks = await anyio.to_thread.run_sync(clean_and_enrich_blocks_with_fallback, raw_blocks, tenant_id)
         
         # Get language statistics
-        lang_stats = get_language_statistics(enriched_blocks)
+        lang_stats = await anyio.to_thread.run_sync(get_language_statistics, enriched_blocks)
         update_progress(f"Step 2/6: Cleaning complete. {len(enriched_blocks)} blocks remain.")
         update_progress(f"Language distribution: {lang_stats['languages']}")
 
@@ -103,7 +105,7 @@ async def process_and_upload_file_multilingual(
         
         # 3. Chunking Stage (same as before)
         update_progress("Step 3/6: Starting text chunking...")
-        final_chunks = chunk_blocks(enriched_blocks)
+        final_chunks = await anyio.to_thread.run_sync(chunk_blocks, enriched_blocks)
         update_progress(f"Step 3/6: Chunking complete. Generated {len(final_chunks)} chunks.")
         
         if not final_chunks:
@@ -114,7 +116,7 @@ async def process_and_upload_file_multilingual(
         model_info = get_multilingual_model_info()
         update_progress(f"Using model: {model_info['model_name']} (dimension: {model_info['dimension']})")
         
-        chunks_with_embeddings = create_embeddings_with_fallback(final_chunks, tenant_id)
+        chunks_with_embeddings = await anyio.to_thread.run_sync(create_embeddings_with_fallback, final_chunks, tenant_id)
         update_progress(f"Step 4/6: Embedding complete. All {len(chunks_with_embeddings)} chunks embedded.")
         
         # 5. Collection Setup
@@ -138,9 +140,12 @@ async def process_and_upload_file_multilingual(
                     update_progress(f"Collection '{final_collection_name}' already exists")
                 else:
                     update_progress(f"Creating new collection '{final_collection_name}' with {vector_size} dimensions")
-                    qdrant_client.create_collection(
-                        collection_name=final_collection_name,
-                        vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE)
+                    await anyio.to_thread.run_sync(
+                        partial(
+                            qdrant_client.create_collection,
+                            collection_name=final_collection_name,
+                            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE)
+                        )
                     )
             except Exception as e:
                 update_progress(f"Error with collection setup: {str(e)}")
@@ -178,7 +183,13 @@ async def process_and_upload_file_multilingual(
             chunk['metadata'] = chunk.get('metadata', {})
             chunk['metadata'].update(processing_metadata)
         
-        upload_to_qdrant(qdrant_client, final_collection_name, chunks_with_embeddings, tenant_id=tenant_id)
+        await anyio.to_thread.run_sync(
+            upload_to_qdrant,
+            qdrant_client,
+            final_collection_name,
+            chunks_with_embeddings,
+            tenant_id
+        )
         update_progress(f"Step 6/6: Upload complete to collection: {final_collection_name}")
         
         # Final summary

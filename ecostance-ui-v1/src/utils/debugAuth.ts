@@ -9,9 +9,9 @@ export const debugAuth = {
           'Content-Type': 'application/json',
         },
       });
-      
+
       console.log('🏥 Backend health check:', response.status, response.statusText);
-      
+
       if (response.ok) {
         const data = await response.text();
         console.log('✅ Backend is reachable:', data);
@@ -30,7 +30,7 @@ export const debugAuth = {
   testLoginEndpoint: async (email: string, password: string) => {
     try {
       console.log('🔐 Testing login with:', { email, password: '***' });
-      
+
       const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: {

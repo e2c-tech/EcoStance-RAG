@@ -35,7 +35,7 @@ const KBDiagnosticPage: React.FC = () => {
       console.log('Attempting to fetch knowledge bases...');
       const response = await knowledgeBaseAPI.list();
       console.log('Raw response:', response);
-      
+
       results.checks.push({
         name: 'Knowledge Base API Call',
         status: 'PASS',
@@ -61,9 +61,9 @@ const KBDiagnosticPage: React.FC = () => {
         },
         credentials: 'include',
       });
-      
+
       const directData = await directResponse.json();
-      
+
       results.checks.push({
         name: 'Direct Fetch Test',
         status: directResponse.ok ? 'PASS' : 'FAIL',
@@ -103,15 +103,15 @@ const KBDiagnosticPage: React.FC = () => {
                 {diagnosticResults.checks.map((check: any, index: number) => (
                   <Card key={index} className={
                     check.status === 'PASS' ? 'border-green-500' :
-                    check.status === 'FAIL' ? 'border-red-500' :
-                    'border-blue-500'
+                      check.status === 'FAIL' ? 'border-red-500' :
+                        'border-blue-500'
                   }>
                     <CardHeader>
                       <CardTitle className="text-base flex items-center gap-2">
                         <span className={
                           check.status === 'PASS' ? 'text-green-600' :
-                          check.status === 'FAIL' ? 'text-red-600' :
-                          'text-blue-600'
+                            check.status === 'FAIL' ? 'text-red-600' :
+                              'text-blue-600'
                         }>
                           {check.status === 'PASS' ? '✓' : check.status === 'FAIL' ? '✗' : 'ℹ'}
                         </span>

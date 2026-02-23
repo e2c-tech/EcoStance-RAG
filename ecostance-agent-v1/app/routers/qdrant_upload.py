@@ -73,7 +73,7 @@ async def upload_to_qdrant(
         )
 
     # Create a job for tracking
-    job_id = job_tracker.create_job(file_path, collection_name)
+    job_id = job_tracker.create_job(file_path, collection_name, tenant_id=tenant_id)
     
     # Add the processing task to background tasks with tenant context
     background_tasks.add_task(
@@ -132,11 +132,7 @@ async def list_all_jobs():
     """
     List all current jobs (for debugging/monitoring).
     """
-    jobs = []
-    for job_id in job_tracker._jobs.keys():
-        job_info = job_tracker.get_job_dict(job_id)
-        if job_info:
-            jobs.append(job_info)
+    jobs = job_tracker.get_recent_jobs(limit=50)
     
     return {
         "total_jobs": len(jobs),

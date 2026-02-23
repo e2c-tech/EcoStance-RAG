@@ -10,6 +10,7 @@ from .tenant_quota import TenantQuota
 from .audit_log import AuditLog
 from .custom_crm import CustomCRMEmail
 from .billing import BillingSubscription, BillingTransaction
+from .background_job import BackgroundJob
 
 __all__ = [
     "Tenant",
@@ -21,5 +22,6 @@ __all__ = [
     "AuditLog",
     "CustomCRMEmail",
     "BillingSubscription",
-    "BillingTransaction"
+    "BillingTransaction",
+    "BackgroundJob"
 ]

@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 import os
+import anyio
 
 from .extraction_service import extract_data_from_file
 from .cleaning_service import clean_and_enrich_blocks
@@ -47,26 +48,26 @@ async def process_and_upload_file(
 
         # 2. Cleaning Stage
         update_progress("Step 2/5: Starting data cleaning and enrichment...")
-        enriched_blocks = clean_and_enrich_blocks(raw_blocks)
+        enriched_blocks = await anyio.to_thread.run_sync(clean_and_enrich_blocks, raw_blocks)
         update_progress(f"Step 2/5: Cleaning complete. {len(enriched_blocks)} blocks remain after cleaning.")
 
         # 3. Chunking Stage
         update_progress("Step 3/5: Starting text chunking...")
-        final_chunks = chunk_blocks(enriched_blocks)
+        final_chunks = await anyio.to_thread.run_sync(chunk_blocks, enriched_blocks)
         update_progress(f"Step 3/5: Chunking complete. Generated {len(final_chunks)} chunks.")
 
         # 4. Embedding Stage
         update_progress("Step 4/5: Starting embedding generation...")
-        chunks_with_embeddings = create_embeddings(final_chunks, embedding_model)
+        chunks_with_embeddings = await anyio.to_thread.run_sync(create_embeddings, final_chunks, embedding_model)
         update_progress(f"Step 4/5: Embedding complete. All {len(chunks_with_embeddings)} chunks have been embedded.")
 
         # 5. Qdrant Upload Stage
         update_progress("Step 5/5: Starting upload to vector database...")
         # Ensure the target collection exists before uploading.
-        create_collection_if_not_exists(qdrant_client, collection_name)
+        await anyio.to_thread.run_sync(create_collection_if_not_exists, qdrant_client, collection_name)
         add_kb(collection_name)
         # Upload the final, processed data to Qdrant with tenant context.
-        upload_to_qdrant(qdrant_client, collection_name, chunks_with_embeddings, tenant_id=tenant_id)
+        await anyio.to_thread.run_sync(upload_to_qdrant, qdrant_client, collection_name, chunks_with_embeddings, tenant_id)
         update_progress(f"Step 5/5: Upload to Qdrant complete.")
         update_progress(f"--- Pipeline finished successfully for file: {os.path.basename(file_path)} ---")
 

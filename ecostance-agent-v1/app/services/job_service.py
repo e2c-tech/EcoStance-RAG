@@ -1,126 +1,151 @@
 import uuid
-import time
-from typing import Dict, Optional
-from enum import Enum
-from dataclasses import dataclass, asdict
+from typing import Dict, Optional, List, Any
 from datetime import datetime
-import threading
+import logging
+from ..db.database import SessionLocal
+from ..models.background_job import BackgroundJob, JobStatus
 
-class JobStatus(Enum):
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-@dataclass
-class JobInfo:
-    job_id: str
-    status: JobStatus
-    file_path: str
-    collection_name: str
-    created_at: datetime
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    error_message: Optional[str] = None
-    progress_message: Optional[str] = None
+logger = logging.getLogger(__name__)
 
 class JobTracker:
-    """Thread-safe job tracking service for background processing tasks."""
+    """Persistent job tracking service using the database."""
     
-    def __init__(self):
-        self._jobs: Dict[str, JobInfo] = {}
-        self._lock = threading.Lock()
-    
-    def create_job(self, file_path: str, collection_name: str) -> str:
-        """Create a new job and return its ID."""
+    def create_job(self, file_path: str, collection_name: str, tenant_id: str = None) -> str:
+        """Create a new job in the database and return its ID."""
         job_id = str(uuid.uuid4())
         
-        with self._lock:
-            self._jobs[job_id] = JobInfo(
+        db = SessionLocal()
+        try:
+            job = BackgroundJob(
                 job_id=job_id,
+                tenant_id=tenant_id,
                 status=JobStatus.PENDING,
                 file_path=file_path,
-                collection_name=collection_name,
-                created_at=datetime.now()
+                collection_name=collection_name
             )
-        
-        return job_id
+            db.add(job)
+            db.commit()
+            return job_id
+        except Exception as e:
+            logger.error(f"Failed to create job in DB: {e}")
+            db.rollback()
+            return job_id # Return the ID anyway to avoid breaking frontend completely
+        finally:
+            db.close()
     
     def start_job(self, job_id: str) -> bool:
-        """Mark a job as started."""
-        with self._lock:
-            if job_id in self._jobs:
-                self._jobs[job_id].status = JobStatus.PROCESSING
-                self._jobs[job_id].started_at = datetime.now()
+        """Mark a job as started in the database."""
+        db = SessionLocal()
+        try:
+            job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
+            if job:
+                job.status = JobStatus.PROCESSING
+                job.started_at = datetime.now()
+                db.commit()
                 return True
             return False
+        except Exception as e:
+            logger.error(f"Failed to start job {job_id} in DB: {e}")
+            db.rollback()
+            return False
+        finally:
+            db.close()
     
     def complete_job(self, job_id: str, result: Optional[Dict] = None) -> bool:
-        """Mark a job as completed."""
-        with self._lock:
-            if job_id in self._jobs:
-                job = self._jobs[job_id]
+        """Mark a job as completed in the database."""
+        db = SessionLocal()
+        try:
+            job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
+            if job:
                 job.status = JobStatus.COMPLETED
                 job.completed_at = datetime.now()
                 if result:
-                    # Store result in job object directly or in a new field if needed
-                    # For now just log it or attach to progress message for visibility
+                    job.result_data = result
                     if "collection_name" in result:
                         job.collection_name = result["collection_name"]
                     if "message" in result:
                         job.progress_message = result.get("message")
+                db.commit()
                 return True
             return False
+        except Exception as e:
+            logger.error(f"Failed to complete job {job_id} in DB: {e}")
+            db.rollback()
+            return False
+        finally:
+            db.close()
     
     def fail_job(self, job_id: str, error_message: str) -> bool:
-        """Mark a job as failed with an error message."""
-        with self._lock:
-            if job_id in self._jobs:
-                self._jobs[job_id].status = JobStatus.FAILED
-                self._jobs[job_id].completed_at = datetime.now()
-                self._jobs[job_id].error_message = error_message
+        """Mark a job as failed in the database."""
+        db = SessionLocal()
+        try:
+            job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
+            if job:
+                job.status = JobStatus.FAILED
+                job.completed_at = datetime.now()
+                job.error_message = error_message
+                db.commit()
                 return True
             return False
+        except Exception as e:
+            logger.error(f"Failed to fail job {job_id} in DB: {e}")
+            db.rollback()
+            return False
+        finally:
+            db.close()
     
     def update_progress(self, job_id: str, message: str) -> bool:
-        """Update the progress message for a job."""
-        with self._lock:
-            if job_id in self._jobs:
-                self._jobs[job_id].progress_message = message
+        """Update the progress message for a job in the database."""
+        db = SessionLocal()
+        try:
+            job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
+            if job:
+                job.progress_message = message
+                db.commit()
                 return True
             return False
+        except Exception as e:
+            logger.error(f"Failed to update progress for job {job_id} in DB: {e}")
+            db.rollback()
+            return False
+        finally:
+            db.close()
     
-    def get_job(self, job_id: str) -> Optional[JobInfo]:
-        """Get job information by ID."""
-        with self._lock:
-            return self._jobs.get(job_id)
+    def get_job(self, job_id: str) -> Optional[BackgroundJob]:
+        """Get job information from the database."""
+        db = SessionLocal()
+        try:
+            return db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
+        finally:
+            db.close() # Note: The object will be detached after close
     
     def get_job_dict(self, job_id: str) -> Optional[Dict]:
         """Get job information as dictionary for JSON serialization."""
-        job = self.get_job(job_id)
-        if job:
-            job_dict = asdict(job)
-            # Convert enum to string
-            job_dict['status'] = job.status.value
-            # Convert datetime objects to ISO strings
-            for field in ['created_at', 'started_at', 'completed_at']:
-                if job_dict[field]:
-                    job_dict[field] = job_dict[field].isoformat()
-            return job_dict
-        return None
-    
-    def cleanup_old_jobs(self, max_age_hours: int = 24):
-        """Remove jobs older than specified hours."""
-        cutoff_time = datetime.now().timestamp() - (max_age_hours * 3600)
-        
-        with self._lock:
-            jobs_to_remove = []
-            for job_id, job in self._jobs.items():
-                if job.created_at.timestamp() < cutoff_time:
-                    jobs_to_remove.append(job_id)
+        db = SessionLocal()
+        try:
+            job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
+            if job:
+                return job.to_dict()
+            return None
+        finally:
+            db.close()
+
+    def list_jobs(self, tenant_id: str = None, limit: int = 100) -> List[Dict]:
+        """List all jobs from the database, optionally filtered by tenant."""
+        db = SessionLocal()
+        try:
+            query = db.query(BackgroundJob)
+            if tenant_id:
+                query = query.filter(BackgroundJob.tenant_id == tenant_id)
             
-            for job_id in jobs_to_remove:
-                del self._jobs[job_id]
+            jobs = query.order_by(BackgroundJob.created_at.desc()).limit(limit).all()
+            return [job.to_dict() for job in jobs]
+        finally:
+            db.close()
+
+    def get_recent_jobs(self, limit: int = 10) -> List[Dict]:
+        """Get the most recent jobs from all tenants."""
+        return self.list_jobs(limit=limit)
 
 # Global job tracker instance
 job_tracker = JobTracker()

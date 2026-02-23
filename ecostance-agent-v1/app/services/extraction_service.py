@@ -1,5 +1,5 @@
-
 import os
+import anyio
 import fitz  # PyMuPDF, installed as PyMuPDF
 import docx
 import pandas as pd
@@ -597,7 +597,7 @@ async def extract_data_from_file(file_path: str) -> Tuple[List[Dict[str, Any]], 
         if file_type in audio_types:
             blocks, doc_type = await extractor(file_path)
         else:
-            blocks, doc_type = extractor(file_path)
+            blocks, doc_type = await anyio.to_thread.run_sync(extractor, file_path)
         
         for block in blocks:
             block["metadata"]["doc_type"] = doc_type
@@ -605,7 +605,7 @@ async def extract_data_from_file(file_path: str) -> Tuple[List[Dict[str, Any]], 
     else:
         # If the file type is unknown, use the plain text extractor as a fallback.
         print(f"No specific extractor for file type '{file_type}', using plain text fallback.")
-        blocks, doc_type = _extract_text(file_path, 'unknown')
+        blocks, doc_type = await anyio.to_thread.run_sync(_extract_text, file_path, 'unknown')
         for block in blocks:
             block["metadata"]["doc_type"] = doc_type
         return blocks, doc_type

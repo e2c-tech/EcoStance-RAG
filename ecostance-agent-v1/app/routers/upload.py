@@ -96,7 +96,7 @@ async def upload_file(
             tenant_service.create_tenant_collection(tenant_id, kb_name)
             
             # Create a job for tracking
-            job_id = job_tracker.create_job(file_location, collection_name)
+            job_id = job_tracker.create_job(file_location, collection_name, tenant_id=tenant_id)
             job_tracker.update_progress(job_id, "Upload complete. Starting processing...")
             
             # Add processing task
