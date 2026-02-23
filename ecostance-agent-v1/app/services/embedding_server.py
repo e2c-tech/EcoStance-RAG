@@ -42,12 +42,15 @@ async def embed(request: EmbedRequest):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     
+    # Get batch size from env, default to 128 to match hardware capabilities
+    batch_size = int(os.getenv("BGE_M3_BATCH_SIZE", "128"))
+    
     try:
         if isinstance(request.text, str):
-            embedding = model.encode(request.text).tolist()
+            embedding = model.encode(request.text, batch_size=batch_size).tolist()
             return {"embedding": embedding}
         else:
-            embeddings = model.encode(request.text).tolist()
+            embeddings = model.encode(request.text, batch_size=batch_size).tolist()
             return {"embeddings": embeddings}
     except Exception as e:
         logger.error(f"Embedding error: {e}")
