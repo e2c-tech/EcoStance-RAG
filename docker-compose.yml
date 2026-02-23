@@ -40,7 +40,7 @@ services:
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9002}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9002/ecostance-ui}
     volumes:
       - ./ecostance-agent-v1/uploads:/app/uploads
       - ./ecostance-agent-v1/data:/app/data
