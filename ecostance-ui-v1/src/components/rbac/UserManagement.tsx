@@ -1,30 +1,19 @@
 import { useState, useEffect } from 'react';
-import { tenantUsersAPI, tenantRolesAPI } from '../../services/api';
+import { tenantUsersAPI } from '../../services/api';
+import { useRBAC, User } from '../../context/RBACContext';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Users, UserPlus, Edit, Trash2, Search, AlertCircle, Check, Shield } from 'lucide-react';
 
-interface Role {
-    id: string;
-    name: string;
-    description?: string;
-}
-
-interface User {
-    id: string;
-    email: string;
-    full_name: string;
-    role?: { // API returns single role object or null
-        id: string;
-        name: string;
-    };
-    is_active: boolean;
-    created_at: string;
-}
 
 export default function UserManagement() {
-    const [users, setUsers] = useState<User[]>([]);
-    const [roles, setRoles] = useState<Role[]>([]);
+    const {
+        users,
+        roles,
+        fetchUsers,
+        fetchRoles
+    } = useRBAC();
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -41,60 +30,10 @@ export default function UserManagement() {
     });
 
     useEffect(() => {
-        loadUsers();
-        loadRoles();
-    }, []);
+        fetchUsers();
+        fetchRoles();
+    }, [fetchUsers, fetchRoles]);
 
-    const loadUsers = async () => {
-        try {
-            const data = await tenantUsersAPI.list();
-            console.log('🔍 Raw users data:', data);
-
-            let usersArray: User[] = [];
-            if (Array.isArray(data)) {
-                usersArray = data;
-            } else if (data && typeof data === 'object') {
-                if ('users' in data && Array.isArray((data as any).users)) {
-                    usersArray = (data as any).users;
-                } else if ('data' in data && Array.isArray((data as any).data)) {
-                    usersArray = (data as any).data;
-                }
-            }
-            setUsers(usersArray);
-        } catch (err: any) {
-            console.error('❌ Failed to load users:', err);
-            setError(err.message || 'Failed to load users');
-            setUsers([]);
-        }
-    };
-
-    const loadRoles = async () => {
-        try {
-            const data = await tenantRolesAPI.list();
-            console.log('🔍 Raw roles data:', data);
-
-            let rolesArray: Role[] = [];
-            if (Array.isArray(data)) {
-                rolesArray = data;
-            } else if (data && typeof data === 'object') {
-                // Check common property names for lists
-                if ('roles' in data && Array.isArray((data as any).roles)) {
-                    rolesArray = (data as any).roles;
-                } else if ('data' in data && Array.isArray((data as any).data)) {
-                    rolesArray = (data as any).data;
-                } else if ('items' in data && Array.isArray((data as any).items)) {
-                    rolesArray = (data as any).items;
-                } else if ('results' in data && Array.isArray((data as any).results)) {
-                    rolesArray = (data as any).results;
-                } else {
-                    console.warn('⚠️ Unexpected roles response format:', data);
-                }
-            }
-            setRoles(rolesArray);
-        } catch (err: any) {
-            console.error('❌ Failed to load roles:', err);
-        }
-    };
 
     const handleInviteUsers = async () => {
         if (!formData.emails.trim() || !formData.role_id) return;
@@ -119,7 +58,7 @@ export default function UserManagement() {
                 role_id: formData.role_id
             });
 
-            await loadUsers();
+            await fetchUsers(true);
 
             // Construct success message
             const successCount = result.successful ? result.successful.length : 0;
@@ -155,7 +94,7 @@ export default function UserManagement() {
                 is_active: formData.is_active,
                 role_id: formData.role_id
             });
-            await loadUsers();
+            await fetchUsers(true);
             setSuccess('User updated successfully');
             resetForm();
         } catch (err: any) {
@@ -172,13 +111,13 @@ export default function UserManagement() {
             setLoading(true);
             setError('');
             await tenantUsersAPI.remove(userId);
-            await loadUsers();
+            await fetchUsers(true);
             setSuccess('User removed successfully');
         } catch (err: any) {
             // If user is already gone (404), treat as success and refresh
             const errorMsg = (err.message || '').toLowerCase();
             if (errorMsg.includes('user not found') || errorMsg.includes('not found')) {
-                await loadUsers();
+                await fetchUsers(true);
                 setSuccess('User entry cleared (already deleted)');
             } else {
                 setError(err.message || 'Failed to remove user');

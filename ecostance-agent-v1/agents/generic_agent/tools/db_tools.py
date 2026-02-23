@@ -17,8 +17,9 @@ def create_db_query_tool(db_connection: str = None, tenant_id: str = None):
     @tool
     def query_database(query: str) -> str:
         """
-        Query the connected database using SQL. 
-        Input should be a valid SQL query string (e.g. "SELECT * FROM users LIMIT 5").
+        Query the connected database using SQL (SQLite, PostgreSQL, MySQL). 
+        IMPORTANT: NEVER guess column names. You MUST call 'list_database_tables' first 
+        to see the schema (tables and columns) before writing your SQL query.
         """
         connector = None
         current_db_conn = db_connection
@@ -100,8 +101,8 @@ def create_list_db_tables_tool(db_connection: str = None, tenant_id: str = None)
     @tool
     def list_database_tables() -> str:
         """
-        List all tables available in the connected database.
-        Use this to discover which tables you can query.
+        List all tables AND their column names/types available in the connected database.
+        Use this to discover schema details. CALL THIS FIRST before using 'query_database'.
         """
         connector = None
         current_db_conn = db_connection
@@ -115,9 +116,17 @@ def create_list_db_tables_tool(db_connection: str = None, tenant_id: str = None)
                 logger.info("Using active global database connector for schema")
                 schema = db_router.db_connector.get_schema_info()
                 if 'tables' in schema:
-                    return f"Available tables: {', '.join(schema['tables'].keys())}"
+                    table_details = []
+                    for table_name, table_info in schema['tables'].items():
+                        cols = [f"{c['name']} ({c['type']})" for c in table_info.get('columns', [])]
+                        table_details.append(f"Table '{table_name}': {', '.join(cols)}")
+                    return "Available tables and their columns:\n" + "\n".join(table_details)
                 elif 'collections' in schema:
-                    return f"Available collections: {', '.join(schema['collections'].keys())}"
+                    coll_details = []
+                    for coll_name, coll_info in schema['collections'].items():
+                        fields = [f"{f} ({t})" for f, t in coll_info.get('fields', {}).items()]
+                        coll_details.append(f"Collection '{coll_name}': {', '.join(fields)}")
+                    return "Available collections and their fields:\n" + "\n".join(coll_details)
                 return "The database is connected but no tables or collections were found."
             else:
                 return "Error: No active database connection found. If the server recently reloaded, please re-connect your database in the 'Database Interaction' tab."
@@ -146,9 +155,17 @@ def create_list_db_tables_tool(db_connection: str = None, tenant_id: str = None)
             connector.connect(conn_data)
             schema = connector.get_schema_info()
             if 'tables' in schema:
-                return f"Available tables: {', '.join(schema['tables'].keys())}"
+                table_details = []
+                for table_name, table_info in schema['tables'].items():
+                    cols = [f"{c['name']} ({c['type']})" for c in table_info.get('columns', [])]
+                    table_details.append(f"Table '{table_name}': {', '.join(cols)}")
+                return "Available tables and their columns:\n" + "\n".join(table_details)
             elif 'collections' in schema:
-                return f"Available collections: {', '.join(schema['collections'].keys())}"
+                coll_details = []
+                for coll_name, coll_info in schema['collections'].items():
+                    fields = [f"{f} ({t})" for f, t in coll_info.get('fields', {}).items()]
+                    coll_details.append(f"Collection '{coll_name}': {', '.join(fields)}")
+                return "Available collections and their fields:\n" + "\n".join(coll_details)
             return "No tables found in the specified database."
         except Exception as e:
             logger.error(f"Exception during list_database_tables: {str(e)}", exc_info=True)

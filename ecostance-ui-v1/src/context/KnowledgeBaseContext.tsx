@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { knowledgeBaseAPI } from '../services/api';
 import { KnowledgeBaseDetails } from '../services/api.types';
+import { useAuth } from './AuthContext.v2';
 
 interface KnowledgeBase {
     id: string;
@@ -28,6 +29,14 @@ export const KnowledgeBaseProvider: React.FC<{ children: React.ReactNode }> = ({
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
     const [hasLoaded, setHasLoaded] = useState(false);
+    const { user } = useAuth();
+
+    // Clear data when tenant changes
+    useEffect(() => {
+        setKnowledgeBases([]);
+        setHasLoaded(false);
+        setError(null);
+    }, [user?.tenantId]);
 
     const fetchKnowledgeBases = useCallback(async (force = false) => {
         // If already loaded and not forcing, don't fetch again

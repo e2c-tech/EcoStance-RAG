@@ -490,6 +490,13 @@ export interface AgentHistoryResponse {
   message_count: number;
 }
 
+export interface AgentSession {
+  session_id: string;
+  last_message?: string;
+  updated_at: string;
+  created_at: string;
+}
+
 export interface AgentResetResponse {
   message: string;
   session_id: string;

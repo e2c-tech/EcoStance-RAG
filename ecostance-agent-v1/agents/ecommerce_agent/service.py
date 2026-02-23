@@ -126,108 +126,160 @@ class EcommerceAgentService(MultilingualAgentMixin):
         """Simple keyword check for clearly out-of-scope queries."""
         return False
 
-    def chat(self, session_id: str, message: str, user_id: str = None, user_language: str = None) -> Dict:
+    def chat(self, session_id: str, message: str, knowledge_base: str = None, database_connection: str = None, user_id: str = None, user_language: str = None, chat_history: List[Dict] = None, **kwargs) -> Dict:
         """
-        Process a chat message with multilingual support.
+        Process a chat message using ReAct pattern with multilingual support
         """
         try:
             # Language Detection
             detected_lang, preferred_lang, confidence = self.get_language_context(
                 message, session_id, user_language
             )
-            
-            # Init history
+
+            # Initialize conversation history if new session
             if session_id not in self.conversations:
                 self.conversations[session_id] = []
-                
-            # Add user message
-            self.conversations[session_id].append({"role": "user", "content": message})
+                if chat_history:
+                    for msg in chat_history:
+                        if msg.get("role") in ["user", "assistant"]:
+                            self.conversations[session_id].append(msg)
+            
+            # Store selected knowledge base for this session
+            if not hasattr(self, 'session_kb'):
+                self.session_kb = {}
+            if knowledge_base:
+                self.session_kb[session_id] = knowledge_base
+            
+            # Store selected database connection for this session
+            if not hasattr(self, 'session_db'):
+                self.session_db = {}
+            if database_connection:
+                self.session_db[session_id] = database_connection
             
             # Get language-specific system prompt
             system_prompt = self.get_system_prompt(preferred_lang)
             
             # Construct Prompt
             tool_descriptions = "\n".join([f"- {tool.name}: {tool.description}" for tool in self.tools])
-            context_info = f"\nUser ID: {user_id if user_id else 'Not Logged In'}\nDetected Language: {detected_lang}\nPreferred Response Language: {preferred_lang}"
-            
-            full_prompt = f"""{system_prompt}
 
-Tools Available:
+            context_info = f"\nUser ID: {user_id if user_id else 'Not Logged In'}\nDetected Language: {detected_lang}\nPreferred Response Language: {preferred_lang}"
+            if session_id in self.session_kb:
+                 context_info += f"\nActive Knowledge Base: {self.session_kb[session_id]}"
+            if session_id in self.session_db:
+                 context_info += f"\nActive Database: {self.session_db[session_id]}"
+
+            max_iterations = 4
+            iteration = 0
+            
+            while iteration < max_iterations:
+                iteration += 1
+                is_last_turn = (iteration == max_iterations)
+                
+                # Build message history for reasoning
+                from langchain_core.messages import SystemMessage, AIMessage
+                lc_messages = [SystemMessage(content=f"""{system_prompt}
+
+### SELECTION STRICTNESS RULES:
+1. **DATABASE ONLY**: If the user has a Database selected, PRIORITIZE using database tools for quantitative queries.
+2. **KB ONLY**: If the user has a Knowledge Base selected but NO Database, use KB.
+3. **NOT SELECTED**: If a tool requires a Knowledge Base or Database that is NOT currently selected in the context, DO NOT use that tool. Instead, explain that the source is not selected.
+
+### AVAILABLE TOOLS:
 {tool_descriptions}
 
-Context:
+### ACTIVE CONTEXT:
 {context_info}
 
-Current Query: "{message}"
+### INSTRUCTIONS:
+- You MUST respond with exactly one JSON object.
+- If you have tool results, ANALYZE THEM and provide a human-friendly response. DO NOT just repeat raw data.
+- If finding products, highlight the top 2-3 matches.
 
-Respond with ONLY the JSON object for tool selection:
+FORMAT:
 {{
     "tool": "tool_name",
     "args": {{...}},
-    "reasoning": "..."
+    "reasoning": "why this tool"
 }}
-OR if no tool is needed:
+OR (if finished):
 {{
     "tool": "none",
     "response": {{
         "type": "text",
-        "message": "...",
+        "message": "Your helpful analysis or answer here",
         "data": null
     }}
 }}
+""")]
+                
+                # Add history
+                for msg in self.conversations[session_id][-6:]:
+                    if msg["role"] == "user":
+                        lc_messages.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        lc_messages.append(AIMessage(content=msg["content"]))
+                    elif msg["role"] == "system":
+                        lc_messages.append(SystemMessage(content=msg["content"]))
 
-IMPORTANT: ALWAYS respond in {preferred_lang}.
-"""
-            # Ask LLM to Decide
-            result = self.llm.invoke([HumanMessage(content=full_prompt)])
-            decision_text = result.content
-            
-            # Clean up cleanup code blocks
-            match = re.search(r'```json\s*(\{.*?\})\s*```', decision_text, re.DOTALL)
-            if match:
-                decision_text = match.group(1)
-            else:
-                match = re.search(r'\{.*\}', decision_text, re.DOTALL)
+                # Ask LLM
+                result = self.llm.invoke(lc_messages)
+                text = result.content
+                
+                # Robust JSON extraction
+                match = re.search(r'\{.*\}', text, re.DOTALL)
+                decision = None
                 if match:
-                    decision_text = match.group(0)
+                    try:
+                        decision = json.loads(match.group(0))
+                    except:
+                        # Try first block if greedy fails
+                        match_first = re.search(r'\{.*?\}', text, re.DOTALL)
+                        if match_first:
+                            try: decision = json.loads(match_first.group(0))
+                            except: pass
 
-            decision = json.loads(decision_text)
-            
-            # Execute logic
-            final_response = {}
-            
-            if decision['tool'] == 'none':
-                final_response = decision['response']
-            else:
-                tool_name = decision['tool']
+                if not decision:
+                    final_msg = {"type": "text", "message": text, "data": None}
+                    self.conversations[session_id].append({"role": "assistant", "content": text})
+                    return {"response": final_msg, "session_id": session_id, "success": True}
+
+                tool_name = decision.get('tool')
+                
+                if tool_name == 'none' or not tool_name or is_last_turn:
+                    final_response = decision.get('response', {"type": "text", "message": text, "data": None})
+                    self.conversations[session_id].append({"role": "assistant", "content": json.dumps(final_response)})
+                    return {
+                        "response": final_response,
+                        "session_id": session_id,
+                        "language": preferred_lang,
+                        "success": True
+                    }
+
+                # Execute Tool
                 if tool_name in self.tool_map:
                     tool_args = decision.get('args', {})
                     if tool_name == 'get_my_orders' and user_id:
                          tool_args['user_id'] = user_id
-                         
-                    # Run Tool
-                    tool_result = self.tool_map[tool_name].invoke(tool_args)
                     
-                    if isinstance(tool_result, (list, dict)):
-                        final_response = {
-                            "type": "product_list" if tool_name == "find_products" else "data_view",
-                            "message": f"Here is what I found for you." if preferred_lang == 'en' else "Esto es lo que encontré por usted." if preferred_lang == 'es' else "Voici ce que j'ai trouvé pour vous.",
-                            "data": tool_result
-                        }
-                        if tool_name == "find_products":
-                             final_response["data"] = {"items": tool_result}
-                    else:
-                        final_response = {
-                            "type": "text",
-                            "message": str(tool_result),
-                            "data": None
-                        }
+                    # Log thinking
+                    self.conversations[session_id].append({"role": "assistant", "content": json.dumps(decision)})
+                    
+                    try:
+                        tool_result = self.tool_map[tool_name].invoke(tool_args)
+                        self.conversations[session_id].append({
+                            "role": "system",
+                            "content": f"TOOL_RESULT ({tool_name}): {str(tool_result)}"
+                        })
+                    except Exception as e:
+                        self.conversations[session_id].append({
+                            "role": "system",
+                            "content": f"Error executing {tool_name}: {str(e)}"
+                        })
                 else:
-                    final_response = {
-                        "type": "text",
-                        "message": "Sorry, I tried to use a tool I don't have." if preferred_lang == 'en' else "Lo siento, intenté usar una herramienta que no tengo.",
-                        "data": None
-                    }
+                    self.conversations[session_id].append({
+                        "role": "system",
+                        "content": f"Tool '{tool_name}' not found."
+                    })
 
             # Save assistant response
             self.conversations[session_id].append({"role": "assistant", "content": json.dumps(final_response)})

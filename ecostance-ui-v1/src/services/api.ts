@@ -476,17 +476,43 @@ export const apiKeysAPI = {
   },
 };
 
+// Memory cache for knowledge base data
+const kbCache = {
+  list: null as any,
+  details: {} as Record<string, any>,
+  lastFetchedList: 0,
+};
+
+const KB_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const clearKBCache = (kbName?: string) => {
+  kbCache.list = null;
+  if (kbName) {
+    delete kbCache.details[kbName];
+  } else {
+    kbCache.details = {};
+  }
+};
+
 // File Upload & Management API
 export const filesAPI = {
-  upload: async (file: File) => {
+  upload: async (file: File, processNow = false, kbName = 'default') => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('process_now', String(processNow));
+    formData.append('kb_name', kbName);
 
     const response = await fetchWithAuth('/upload/', {
       method: 'POST',
       body: formData,
     });
-    return handleResponse(response);
+
+    const result = await handleResponse(response);
+    // Invalidate cache if uploaded to a KB
+    if (kbName) {
+      clearKBCache(kbName);
+    }
+    return result;
   },
 
   list: async () => {
@@ -555,14 +581,6 @@ export const documentProcessingAPI = {
   },
 };
 
-// Memory cache for knowledge base data
-const kbCache = {
-  list: null as any,
-  details: {} as Record<string, any>,
-  lastFetchedList: 0,
-};
-
-const KB_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Knowledge Base Management API
 export const knowledgeBaseAPI = {
@@ -611,7 +629,7 @@ export const knowledgeBaseAPI = {
       method: 'DELETE',
     });
     // Invalidate details cache when a file is deleted as document count changes
-    delete kbCache.details[kbName];
+    clearKBCache(kbName);
     return handleResponse(response);
   },
 
@@ -620,8 +638,7 @@ export const knowledgeBaseAPI = {
       method: 'DELETE',
     });
     // Invalidate list cache
-    kbCache.list = null;
-    delete kbCache.details[kbName];
+    clearKBCache(kbName);
     return handleResponse(response);
   },
 
@@ -899,6 +916,18 @@ export const agentAPI = {
   reset: async (sessionId: string) => {
     const response = await fetchWithAuth(`/beta/agent/reset/${sessionId}`, {
       method: 'POST',
+    });
+    return handleResponse(response);
+  },
+
+  listSessions: async () => {
+    const response = await fetchWithAuth('/beta/agent/sessions');
+    return handleResponse(response);
+  },
+
+  deleteSession: async (sessionId: string) => {
+    const response = await fetchWithAuth(`/beta/agent/sessions/${sessionId}`, {
+      method: 'DELETE',
     });
     return handleResponse(response);
   },

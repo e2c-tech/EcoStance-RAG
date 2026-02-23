@@ -3,14 +3,8 @@ import { databaseAPI } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Database, Plus, Trash2, Play, Save, AlertCircle, Edit2, Table, ChevronDown, ChevronRight } from 'lucide-react';
+import { useDatabase } from '../context/DatabaseContext';
 
-interface Connection {
-  name: string;
-  type: string;
-  host: string;
-  database: string;
-  username: string;
-}
 
 interface QueryResult {
   columns?: string[];
@@ -27,20 +21,22 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-interface DatabaseSchema {
-  tables: Array<{
-    name: string;
-    columns: Array<{
-      name: string;
-      type: string;
-    }>;
-  }>;
-}
 
 export default function DatabaseChatPage() {
-  const [connections, setConnections] = useState<Connection[]>([]);
-  const [selectedConnection, setSelectedConnection] = useState<string>('');
-  const [isConnected, setIsConnected] = useState(false);
+  const {
+    connections,
+    selectedConnection,
+    isConnected,
+    schema,
+    fetchConnections,
+    connect,
+    disconnect,
+    setIsConnected,
+    setSelectedConnection,
+    setSchema,
+    loadSchema // Keep loadSchema if used elsewhere, but removing it from destructuring if it's causing warnings
+  } = useDatabase();
+
   const [showConnectionForm, setShowConnectionForm] = useState(false);
   const [showQuickConnect, setShowQuickConnect] = useState(false);
   const [editingConnection, setEditingConnection] = useState<string | null>(null);
@@ -49,7 +45,6 @@ export default function DatabaseChatPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
-  const [schema, setSchema] = useState<DatabaseSchema | null>(null);
   const [showSchema, setShowSchema] = useState(false);
 
   const [connectionForm, setConnectionForm] = useState({
@@ -73,63 +68,18 @@ export default function DatabaseChatPage() {
   });
 
   useEffect(() => {
-    loadConnections();
-  }, []);
+    fetchConnections();
+  }, [fetchConnections]);
 
-  const loadConnections = async () => {
-    try {
-      const data = await databaseAPI.listConnections() as Connection[];
-      if (Array.isArray(data)) {
-        setConnections(data);
-      } else {
-        console.warn('Received invalid connections data:', data);
-        setConnections([]);
-      }
-    } catch (err) {
-      console.error('Failed to load connections:', err);
-      // Don't set error state here to avoid blocking UI if just list fails
-    }
-  };
 
   const handleConnect = async (connectionName: string) => {
     try {
       setLoading(true);
       setError('');
-      const conn = await databaseAPI.loadConnection(connectionName) as any;
-
-      // Use db_uri directly from backend if available, otherwise construct it
-      let dbUri: string;
-      if (conn.db_uri) {
-        // Backend provides the complete URI (especially for SQLite)
-        dbUri = conn.db_uri;
-      } else if (conn.type === 'sqlite') {
-        // Fallback for SQLite if db_uri not provided
-        dbUri = conn.db_path || conn.database;
-      } else {
-        // Construct URI for PostgreSQL/MySQL
-        dbUri = `${conn.type}://${conn.username}:${conn.password}@${conn.host}:${conn.port}/${conn.database}`;
-      }
-
-      console.log('Connecting to database with URI:', dbUri.replace(/:[^:@]+@/, ':****@')); // Log without password
-      const response = await databaseAPI.connect(dbUri) as any;
-      console.log('Connection response:', response);
-
-      setIsConnected(true);
-      setSelectedConnection(connectionName);
+      await connect(connectionName);
       setChatHistory([]); // Clear chat history on new connection
-
-      // Try to load schema
-      try {
-        const schemaData = await databaseAPI.getSchema() as any;
-        console.log('Schema data:', schemaData);
-        setSchema(schemaData);
-      } catch (schemaErr) {
-        console.warn('Failed to load schema:', schemaErr);
-        // Schema is optional, don't fail the connection
-      }
     } catch (err: any) {
       setError(err.message || 'Failed to connect to database');
-      console.error('Connection error:', err);
     } finally {
       setLoading(false);
     }
@@ -250,7 +200,7 @@ export default function DatabaseChatPage() {
       }
 
       await databaseAPI.saveConnection(connectionForm);
-      await loadConnections();
+      await fetchConnections(true);
       setShowConnectionForm(false);
       setEditingConnection(null);
       setConnectionForm({
@@ -287,10 +237,9 @@ export default function DatabaseChatPage() {
     if (!confirm(`Delete connection "${name}"?`)) return;
     try {
       await databaseAPI.deleteConnection(name);
-      await loadConnections();
+      await fetchConnections(true);
       if (selectedConnection === name) {
-        setIsConnected(false);
-        setSelectedConnection('');
+        disconnect();
       }
     } catch (err: any) {
       setError(err.message || 'Failed to delete connection');

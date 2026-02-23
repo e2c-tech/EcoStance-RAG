@@ -1,34 +1,19 @@
 import { useState, useEffect } from 'react';
 import { rbacAPI } from '../../services/api';
+import { useRBAC, Role } from '../../context/RBACContext';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Users, Shield, Plus, Edit, Trash2, AlertCircle, Check } from 'lucide-react';
 
-interface Role {
-  id: string;
-  name: string;
-  description?: string;
-  permissions: string[];
-  user_count: number;
-  is_active: boolean;
-  created_at: string;
-}
-
-interface Permission {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-}
-
-interface PermissionCategory {
-  category: string;
-  permissions: Permission[];
-}
 
 export default function RoleManagement() {
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [permissions, setPermissions] = useState<PermissionCategory[]>([]);
+  const {
+    roles,
+    permissions,
+    fetchRoles,
+    fetchPermissions
+  } = useRBAC();
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -41,63 +26,10 @@ export default function RoleManagement() {
   });
 
   useEffect(() => {
-    loadRoles();
-    loadPermissions();
-  }, []);
+    fetchRoles();
+    fetchPermissions();
+  }, [fetchRoles, fetchPermissions]);
 
-  const loadRoles = async () => {
-    try {
-      const data = await rbacAPI.roles.list();
-      console.log('🔍 Raw roles data from API:', data);
-
-      // Handle different response formats
-      let rolesArray: Role[] = [];
-      if (Array.isArray(data)) {
-        rolesArray = data;
-      } else if (data && typeof data === 'object' && 'roles' in data && Array.isArray(data.roles)) {
-        rolesArray = data.roles;
-      } else if (data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) {
-        rolesArray = data.data;
-      } else {
-        console.warn('⚠️ Unexpected roles data format:', data);
-        rolesArray = [];
-      }
-
-      console.log('🔍 Processed roles array:', rolesArray);
-      setRoles(rolesArray);
-    } catch (err: any) {
-      console.error('❌ Failed to load roles:', err);
-      setError(err.message || 'Failed to load roles');
-      setRoles([]); // Ensure roles is always an array
-    }
-  };
-
-  const loadPermissions = async () => {
-    try {
-      const data = await rbacAPI.permissions.getCategories();
-      console.log('🔍 Raw permissions data from API:', data);
-
-      // Handle different response formats
-      let permissionsArray: PermissionCategory[] = [];
-      if (Array.isArray(data)) {
-        permissionsArray = data;
-      } else if (data && typeof data === 'object' && 'categories' in data && Array.isArray(data.categories)) {
-        permissionsArray = data.categories;
-      } else if (data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) {
-        permissionsArray = data.data;
-      } else {
-        console.warn('⚠️ Unexpected permissions data format:', data);
-        permissionsArray = [];
-      }
-
-      console.log('🔍 Processed permissions array:', permissionsArray);
-      setPermissions(permissionsArray);
-    } catch (err: any) {
-      console.error('❌ Failed to load permissions:', err);
-      setError(err.message || 'Failed to load permissions');
-      setPermissions([]); // Ensure permissions is always an array
-    }
-  };
 
   const handleCreateRole = async () => {
     if (!formData.name.trim()) return;
@@ -112,7 +44,7 @@ export default function RoleManagement() {
         ...formData,
         permissions: cleanPermissions
       });
-      await loadRoles();
+      await fetchRoles(true);
       setSuccess('Role created successfully');
       resetForm();
     } catch (err: any) {
@@ -135,7 +67,7 @@ export default function RoleManagement() {
         ...formData,
         permissions: cleanPermissions
       });
-      await loadRoles();
+      await fetchRoles(true);
       setSuccess('Role updated successfully');
       resetForm();
     } catch (err: any) {
@@ -149,7 +81,7 @@ export default function RoleManagement() {
     if (!confirm(`Delete role "${roleName}"? This action cannot be undone and will remove this role from all users.`)) return;
     try {
       await rbacAPI.roles.delete(roleId);
-      await loadRoles();
+      await fetchRoles(true);
       setSuccess('Role deleted successfully');
     } catch (err: any) {
       setError(err.message || 'Failed to delete role');
@@ -167,7 +99,7 @@ export default function RoleManagement() {
     setFormData({
       name: role.name,
       description: role.description || '',
-      permissions: role.permissions,
+      permissions: role.permissions || [],
     });
     setShowCreateForm(true);
   };
@@ -181,7 +113,8 @@ export default function RoleManagement() {
     }));
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -321,11 +254,11 @@ export default function RoleManagement() {
                 <div className="flex items-center gap-4 text-xs text-text-secondary">
                   <span className="flex items-center gap-1">
                     <Users className="w-3 h-3" />
-                    {role.user_count} users
+                    {role.user_count || 0} users
                   </span>
                   <span className="flex items-center gap-1">
                     <Shield className="w-3 h-3" />
-                    {role.permissions.length} permissions
+                    {role.permissions?.length || 0} permissions
                   </span>
                   <span>Created {formatDate(role.created_at)}</span>
                 </div>

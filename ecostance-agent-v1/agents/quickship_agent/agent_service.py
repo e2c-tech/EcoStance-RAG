@@ -394,8 +394,11 @@ Examples:
                     
                     # If it's a KB search and we have a selected KB, use it
                     if tool_name == 'search_knowledge_base':
-                        if session_id in self.session_kb:
-                            tool_args['collection_name'] = self.session_kb[session_id]
+                        # Use UI-selected KB if available
+                        ui_selected_kb = self.session_kb.get(session_id)
+                        
+                        if ui_selected_kb:
+                            tool_args['collection_name'] = ui_selected_kb
                         elif 'collection_name' not in tool_args:
                             # No KB selected, ask user to select one
                             kb_msg = "To search our knowledge base, please select a knowledge base from the sidebar first."
@@ -408,6 +411,11 @@ Examples:
                                 "session_id": session_id,
                                 "success": True
                             }
+                        # LLM hallucinated a collection name but none is selected in UI
+                        elif not ui_selected_kb:
+                            kb_msg = "To search our knowledge base, please select a knowledge base from the sidebar first."
+                            self.conversations[session_id].append({"role": "assistant", "content": kb_msg})
+                            return {"response": kb_msg, "session_id": session_id, "success": True}
                     
                     # If it's a database tool, check if DB is connected
                     db_tools = ['get_shipment_status', 'search_shipments_by_customer', 

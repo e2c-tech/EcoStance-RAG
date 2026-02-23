@@ -1,57 +1,26 @@
 import { useState, useEffect } from 'react';
 import { customCrmAPI } from '../../services/api';
+import { useIntegrations } from '../../context/IntegrationContext';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { RefreshCw, Mail, CheckCircle, AlertCircle, Loader2, Database } from 'lucide-react';
 
-interface SyncedEmail {
-    internal_id: string;
-    original_crm_id: string;
-    subject: string;
-    sender: string;
-    received_at: string;
-}
 
 export default function CustomCrmSettings() {
-    const [emails, setEmails] = useState<SyncedEmail[]>([]);
-    const [loading, setLoading] = useState(false);
+    const {
+        customCrmEmails: emails,
+        fetchCustomCrmEmails: loadEmails,
+        isLoading: loading
+    } = useIntegrations();
+
     const [syncing, setSyncing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
     useEffect(() => {
         loadEmails();
-    }, []);
+    }, [loadEmails]);
 
-    const loadEmails = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await customCrmAPI.getEmails();
-            // data is expected to be a list of emails directly or { data: [] } depending on API consistency.
-            // Based on API doc: "Returns a list of objects"
-            // Assuming it might be wrapped or just an array.
-            // Let's assume array for now based on tenantsAPI.listTenants style often returning objects.
-            // Wait, tenantsAPI examples usually handleResponse which returns json.
-            // If the backend returns a list, `data` is the list.
-            // If backend returns { emails: [...] }, then `data.emails`.
-            // I'll assume array if `data` is array, else look for a property.
-            if (Array.isArray(data)) {
-                setEmails(data);
-            } else if (data && Array.isArray((data as any).emails)) {
-                setEmails((data as any).emails);
-            } else {
-                // Fallback or empty
-                setEmails([]);
-                console.warn('Unexpected API response format', data);
-            }
-        } catch (err: any) {
-            console.error('Failed to load emails:', err);
-            // Don't show critical error for just loading list failure, maybe empty state.
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleSync = async () => {
         setSyncing(true);
@@ -63,7 +32,7 @@ export default function CustomCrmSettings() {
 
             // Poll or reload after a delay
             setTimeout(() => {
-                loadEmails();
+                loadEmails(true);
             }, 3000);
 
         } catch (err: any) {

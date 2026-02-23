@@ -26,6 +26,8 @@ export interface Message {
   agent_type?: string;
 }
 
+import { parseAgentResponse } from '../../lib/agent-utils';
+
 interface MessageBubbleProps {
   message: Message;
   onCopy?: () => void;
@@ -53,16 +55,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const isUser = message.role === 'user';
 
   const renderContent = () => {
-    let content = message.content;
-
-    // Attempt to parse string content if it looks like JSON
-    if (typeof content === 'string' && content.trim().startsWith('{')) {
-      try {
-        content = JSON.parse(content);
-      } catch (e) {
-        // Not valid JSON, keep as string
-      }
-    }
+    const content = parseAgentResponse(message.content);
 
     if (typeof content === 'object' && content !== null) {
       const type = content.type || content.component;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { gmailAPI } from '../../services/api';
+import { useIntegrations } from '../../context/IntegrationContext';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Mail, CheckCircle, AlertTriangle } from 'lucide-react';
@@ -14,37 +15,23 @@ interface GmailSettingsProps {
 }
 
 export default function GmailSettings({ tenant }: GmailSettingsProps) {
-    const [status, setStatus] = useState<{ connected: boolean; email: string | null }>({
-        connected: false,
-        email: null
-    });
-    const [isLoadingStatus, setIsLoadingStatus] = useState(true);
+    const {
+        gmailStatus: status,
+        fetchGmailStatus: fetchStatus,
+        isLoading: isLoadingStatus
+    } = useIntegrations();
+
     const [isVerifying, setIsVerifying] = useState(false);
 
     useEffect(() => {
-        // Explicitly clear status when switching tenants to avoid "trailing" stale state
-        setStatus({ connected: false, email: null });
         fetchStatus();
-    }, [tenant?.id]); // Re-fetch when tenant switches
+    }, [tenant?.id, fetchStatus]);
 
-    const fetchStatus = async () => {
-        setIsLoadingStatus(true);
-        try {
-            const data = await gmailAPI.auth.getStatus();
-            console.log('[GmailSettings] Connection status:', data);
-            setStatus(data);
-        } catch (err) {
-            console.error('[GmailSettings] Failed to fetch status:', err);
-            setStatus({ connected: false, email: null });
-        } finally {
-            setIsLoadingStatus(false);
-            setIsVerifying(false);
-        }
-    };
 
     const verifyConnection = async () => {
         setIsVerifying(true);
-        await fetchStatus();
+        await fetchStatus(true);
+        setIsVerifying(false);
     };
 
     const handleConnect = async () => {

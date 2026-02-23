@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { Card } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { Database, FileText, Send, Loader2, AlertCircle, X, RefreshCw, Shield, Truck, ShoppingCart, Leaf, Sparkles } from 'lucide-react';
-import { databaseAPI, agentAPI } from '../services/api';
-import type { AgentChatResponse } from '../services/api.types';
+import { Database, FileText, Send, Loader2, AlertCircle, X, RefreshCw, Shield, Truck, ShoppingCart, Leaf, Sparkles, MessageSquare, Plus, Trash2, Archive, Clock, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { agentAPI } from '../services/api';
+import type { AgentChatResponse, AgentSession } from '../services/api.types';
 import { useAuth } from '../context/AuthContext.v2';
 import { useKnowledgeBases } from '../context/KnowledgeBaseContext';
+import { useDatabase } from '../context/DatabaseContext';
 import { cn } from '../lib/utils';
 import { parseAgentResponse } from '../lib/agent-utils';
 
@@ -64,12 +66,6 @@ interface Message {
 }
 
 
-interface DatabaseConnection {
-  name: string;
-  type: string;
-  host: string;
-  database: string;
-}
 
 export default function AIAgentPage() {
   const { user } = useAuth();
@@ -77,27 +73,38 @@ export default function AIAgentPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [isDatabaseConnected, setIsDatabaseConnected] = useState(false);
-  const { knowledgeBases, fetchKnowledgeBases, isLoading: isKBLoading } = useKnowledgeBases();
-  const [selectedKB, setSelectedKB] = useState<string>('');
-  const [selectedDBConnection, setSelectedDBConnection] = useState<string>('');
-  const [selectedPersona, setSelectedPersona] = useState<string>('generic');
+
+  const {
+    connections: dbConnections,
+    fetchConnections: loadDatabaseConnections,
+    isConnected: isDatabaseConnected,
+    selectedConnection: selectedDBConnection,
+    connect: handleConnect
+  } = useDatabase();
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Connection management state
   const [showDBModal, setShowDBModal] = useState(false);
   const [showKBModal, setShowKBModal] = useState(false);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
-  const [dbConnections, setDbConnections] = useState<DatabaseConnection[]>([]);
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [agentConfig, setAgentConfig] = useState<{ agent_type: string; is_customized: boolean } | null>(null);
+  const { knowledgeBases, fetchKnowledgeBases, isLoading: isKBLoading } = useKnowledgeBases();
+  const [selectedKB, setSelectedKB] = useState<string>('');
+  const [selectedPersona, setSelectedPersona] = useState<string>('generic');
+
+  // Session history state
+  const [sessions, setSessions] = useState<AgentSession[]>([]);
+  const [isSessionsLoading, setIsSessionsLoading] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     // Clear state when tenant changes
-    setDbConnections([]);
-    setSelectedKB('');
-    setSelectedDBConnection('');
-    setIsDatabaseConnected(false);
+    // setSelectedKB(''); // Actually maybe we want to KEEP it?
+    // setSelectedDBConnection('');
+    // setIsDatabaseConnected(false);
     setMessages([]);
     setAgentConfig(null);
     setSessionId(null);
@@ -105,9 +112,9 @@ export default function AIAgentPage() {
     // Load fresh data for the current tenant
     if (user?.tenantId) {
       fetchKnowledgeBases();
-      checkDatabaseConnection();
       loadDatabaseConnections();
       fetchAgentConfig();
+      loadSessions();
 
       // Restore session if exists
       const savedSessionId = localStorage.getItem(`ai_agent_session_${user.tenantId}`);
@@ -118,6 +125,28 @@ export default function AIAgentPage() {
       }
     }
   }, [user?.tenantId]); // Reload when tenant changes
+
+  const loadSessions = async () => {
+    try {
+      setIsSessionsLoading(true);
+      const data = await agentAPI.listSessions() as AgentSession[];
+      setSessions(data || []);
+    } catch (err) {
+      console.error('AI Agent: Failed to load sessions:', err);
+    } finally {
+      setIsSessionsLoading(false);
+    }
+  };
+
+  const categorizeSessions = (sessions: AgentSession[]) => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const active = sessions.filter(s => new Date(s.updated_at || s.created_at) >= thirtyDaysAgo);
+    const archived = sessions.filter(s => new Date(s.updated_at || s.created_at) < thirtyDaysAgo);
+
+    return { active, archived };
+  };
 
   const loadSessionHistory = async (sid: string) => {
     try {
@@ -188,45 +217,11 @@ export default function AIAgentPage() {
     setMessages(prev => [...prev, successMsg]);
   };
 
-  const checkDatabaseConnection = async () => {
-    try {
-      console.log('AI Agent: Checking database connection...');
-      await databaseAPI.getSchema();
-      setIsDatabaseConnected(true);
-      console.log('AI Agent: Database connected');
-    } catch (err) {
-      console.log('AI Agent: Database not connected');
-      setIsDatabaseConnected(false);
-    }
-  };
-
-  const loadDatabaseConnections = async () => {
-    try {
-      const data = await databaseAPI.listConnections() as any;
-      setDbConnections(data);
-    } catch (err) {
-      console.error('Failed to load database connections:', err);
-    }
-  };
 
   const handleConnectSavedDB = async (connectionName: string) => {
     setConnectionLoading(true);
     try {
-      const conn = await databaseAPI.loadConnection(connectionName) as any;
-
-      let dbUri: string;
-      if (conn.db_uri) {
-        dbUri = conn.db_uri;
-      } else if (conn.type === 'sqlite') {
-        dbUri = conn.db_path || conn.database;
-      } else {
-        dbUri = `${conn.type}://${conn.username}:${conn.password}@${conn.host}:${conn.port}/${conn.database}`;
-      }
-
-      console.log('AI Agent: Connecting with URI:', dbUri.replace(/:[^:@]+@/, ':****@'));
-      await databaseAPI.connect(dbUri);
-      setIsDatabaseConnected(true);
-      setSelectedDBConnection(connectionName);
+      await handleConnect(connectionName);
       setShowDBModal(false);
 
       const successMsg: Message = {
@@ -286,6 +281,7 @@ export default function AIAgentPage() {
         if (user?.tenantId) {
           localStorage.setItem(`ai_agent_session_${user.tenantId}`, response.session_id);
         }
+        loadSessions(); // Refresh session list
       }
 
       const assistantMessage: Message = {
@@ -312,493 +308,737 @@ export default function AIAgentPage() {
     }
   };
 
-  const handleReset = async () => {
-    if (!sessionId) return;
-
-    if (window.confirm('Are you sure you want to reset the conversation?')) {
+  const handleDeleteSession = async (e: React.MouseEvent, sid: string) => {
+    e.stopPropagation();
+    if (window.confirm('Delete this conversation?')) {
       try {
-        await agentAPI.reset(sessionId);
-        setMessages([]);
-        setSessionId(null);
-        if (user?.tenantId) {
-          localStorage.removeItem(`ai_agent_session_${user.tenantId}`);
+        await agentAPI.deleteSession(sid);
+        if (sid === sessionId) {
+          setMessages([]);
+          setSessionId(null);
+          if (user?.tenantId) {
+            localStorage.removeItem(`ai_agent_session_${user.tenantId}`);
+          }
         }
+        loadSessions();
       } catch (err) {
-        console.error('Failed to reset conversation:', err);
+        console.error('Failed to delete session:', err);
       }
     }
   };
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto h-[calc(100vh-4rem)] flex flex-col">
-      {/* Database Connection Modal */}
-      {showDBModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDBModal(false)}>
-          <Card className="p-6 bg-surface border-border max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-text flex items-center gap-2">
-                <Database className="w-5 h-5" />
-                Select Database
-              </h2>
-              <button onClick={() => setShowDBModal(false)} className="text-text-secondary hover:text-text">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+  const handleNewChat = () => {
+    setMessages([]);
+    setSessionId(null);
+    if (user?.tenantId) {
+      localStorage.removeItem(`ai_agent_session_${user.tenantId}`);
+    }
+  };
 
-            {dbConnections.length > 0 ? (
-              <div className="space-y-2">
-                {dbConnections.map((conn) => (
-                  <button
-                    key={conn.name}
-                    onClick={() => handleConnectSavedDB(conn.name)}
-                    disabled={connectionLoading}
-                    className="w-full p-3 bg-background border border-border rounded-lg text-left hover:bg-surface-hover transition-colors disabled:opacity-50"
-                  >
-                    <div className="font-medium text-text">{conn.name}</div>
-                    <div className="text-xs text-text-secondary">{conn.type} - {conn.database}</div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <Database className="w-12 h-12 text-text-secondary mx-auto mb-3" />
-                <p className="text-text-secondary mb-2">No saved database connections</p>
-                <p className="text-xs text-text-secondary">
-                  Go to Database Chat page to create connections
-                </p>
+  const { active: activeSessions, archived: archivedSessions } = categorizeSessions(sessions);
+
+  return (
+    <div className="p-6 max-w-full mx-auto h-[calc(100vh-4rem)] flex overflow-hidden relative">
+      {/* Sidebar - Chat History */}
+      <div className={cn(
+        "flex flex-col gap-4 shrink-0 transition-all duration-300 ease-in-out h-full overflow-hidden",
+        isSidebarCollapsed ? "w-0 opacity-0" : "w-80 opacity-100 mr-6"
+      )}>
+        <Button
+          onClick={handleNewChat}
+          className="w-full justify-start gap-2 shadow-sm py-6 text-base"
+          variant="outline"
+        >
+          <Plus className="w-5 h-5 text-primary" />
+          New Conversation
+        </Button>
+
+        <Card className="flex-1 overflow-hidden flex flex-col bg-surface border-border shadow-sm">
+          <div className="p-4 border-b border-border flex items-center justify-between bg-background/50">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-text-secondary" />
+              <span className="text-xs font-bold uppercase tracking-widest text-text-secondary">Chat History</span>
+            </div>
+            {sessions.length > 0 && (
+              <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                {sessions.length}
+              </span>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
+            {activeSessions.length === 0 && archivedSessions.length === 0 && !isSessionsLoading && (
+              <div className="flex flex-col items-center justify-center h-40 text-center opacity-50 grayscale">
+                <MessageSquare className="w-8 h-8 mb-2" />
+                <p className="text-xs">No previous chats</p>
               </div>
             )}
-          </Card>
-        </div>
-      )}
 
-      {/* Persona Selection Modal */}
-      {showPersonaModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowPersonaModal(false)}>
-          <Card className="p-6 bg-surface border-border max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-text flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" />
-                Select Persona
-              </h2>
-              <button onClick={() => setShowPersonaModal(false)} className="text-text-secondary hover:text-text">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {Object.entries(PERSONA_CONFIG).map(([key, config]) => {
-                const Icon = config.icon;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      setSelectedPersona(key);
-                      setShowPersonaModal(false);
-                      const msg: Message = {
-                        id: Date.now().toString(),
-                        type: 'system',
-                        content: `🎭 Persona switched to: ${config.label}`,
-                        timestamp: new Date(),
-                      };
-                      setMessages(prev => [...prev, msg]);
-                    }}
-                    className={`w-full p-4 border rounded-xl text-left transition-all flex items-start gap-4 ${selectedPersona === key
-                      ? 'bg-primary/10 border-primary/30 shadow-sm'
-                      : 'bg-background border-border hover:bg-surface-hover'
-                      }`}
-                  >
-                    <div className={`p-2 rounded-lg ${selectedPersona === key ? 'bg-primary text-white' : 'bg-surface text-primary'}`}>
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-text">{config.label}</div>
-                      <div className="text-sm text-text-secondary leading-tight mt-1">
-                        {config.description}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Knowledge Base Selection Modal */}
-      {showKBModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowKBModal(false)}>
-          <Card className="p-6 bg-surface border-border max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-text flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Select Knowledge Base
-              </h2>
-              <button onClick={() => setShowKBModal(false)} className="text-text-secondary hover:text-text">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {knowledgeBases.length > 0 ? (
-              <div className="space-y-2">
-                {knowledgeBases.map((kb) => (
-                  <button
-                    key={kb.id}
-                    onClick={() => handleSelectKB(kb.name)}
-                    disabled={connectionLoading}
-                    className={`w-full p-3 border rounded-lg text-left transition-colors disabled:opacity-50 ${selectedKB === kb.name
-                      ? 'bg-primary/10 border-primary/20'
-                      : 'bg-background border-border hover:bg-surface-hover'
-                      }`}
-                  >
-                    <div className="font-medium text-text">{kb.name}</div>
-                    <div className="text-xs text-text-secondary">
-                      {(kb.totalVectors || 0).toLocaleString()} vectors
-                    </div>
-                  </button>
-                ))}
+            {isSessionsLoading && activeSessions.length === 0 && (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
               </div>
-            ) : (
-              <div className="text-center py-8">
-                <FileText className="w-12 h-12 text-text-secondary mx-auto mb-3" />
-                {isKBLoading ? (
-                  <p className="text-text-secondary mb-2 flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Loading...
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-text-secondary mb-2">No knowledge bases available</p>
-                    <p className="text-xs text-text-secondary">
-                      Go to Knowledge Base page to create one
-                    </p>
-                  </>
+            )}
+
+            {activeSessions.map(s => (
+              <div
+                key={s.session_id}
+                onClick={() => {
+                  setSessionId(s.session_id);
+                  loadSessionHistory(s.session_id);
+                  if (user?.tenantId) {
+                    localStorage.setItem(`ai_agent_session_${user.tenantId}`, s.session_id);
+                  }
+                }}
+                className={cn(
+                  "group p-3 rounded-xl cursor-pointer transition-all border flex items-start gap-3 relative",
+                  sessionId === s.session_id
+                    ? "bg-primary/10 border-primary/30 shadow-sm"
+                    : "bg-transparent border-transparent hover:bg-surface-hover hover:border-border"
+                )}
+              >
+                <div className={cn(
+                  "p-2 rounded-lg shrink-0",
+                  sessionId === s.session_id ? "bg-primary text-white" : "bg-background text-text-secondary"
+                )}>
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0 pr-6">
+                  <div className={cn(
+                    "text-sm font-semibold truncate",
+                    sessionId === s.session_id ? "text-primary" : "text-text"
+                  )}>
+                    {s.last_message || 'New Conversation'}
+                  </div>
+                  <div className="text-[10px] text-text-secondary mt-1 font-medium">
+                    {new Date(s.updated_at || s.created_at).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => handleDeleteSession(e, s.session_id)}
+                  className="absolute right-3 top-3.5 opacity-0 group-hover:opacity-100 p-1.5 hover:text-error text-text-secondary transition-all rounded-md hover:bg-error/10"
+                  title="Delete conversation"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+
+            {archivedSessions.length > 0 && (
+              <div className="pt-4 mt-4 border-t border-border/50">
+                <button
+                  onClick={() => setShowArchived(!showArchived)}
+                  className="w-full p-2 flex items-center justify-between text-[11px] font-bold uppercase tracking-widest text-text-secondary hover:text-text transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Archive className="w-3.5 h-3.5" />
+                    <span>Archived Chats</span>
+                  </div>
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                    {archivedSessions.length}
+                  </Badge>
+                </button>
+
+                {showArchived && (
+                  <div className="mt-2 space-y-1.5">
+                    {archivedSessions.map(s => (
+                      <div
+                        key={s.session_id}
+                        onClick={() => {
+                          setSessionId(s.session_id);
+                          loadSessionHistory(s.session_id);
+                          if (user?.tenantId) {
+                            localStorage.setItem(`ai_agent_session_${user.tenantId}`, s.session_id);
+                          }
+                        }}
+                        className={cn(
+                          "group p-2.5 rounded-lg cursor-pointer transition-all border flex items-start gap-3",
+                          sessionId === s.session_id
+                            ? "bg-primary/5 border-primary/20"
+                            : "bg-transparent border-transparent hover:bg-surface-hover/50"
+                        )}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 mt-1 shrink-0 text-text-secondary/50" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium text-text-secondary truncate">
+                            {s.last_message || 'Archived Conversation'}
+                          </div>
+                          <div className="text-[9px] text-text-secondary/60 mt-0.5">
+                            {new Date(s.updated_at || s.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => handleDeleteSession(e, s.session_id)}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:text-error transition-all"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
-          </Card>
-        </div>
-      )}
-
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text flex items-center gap-2">
-            {(() => {
-              const persona = PERSONA_CONFIG[selectedPersona] || PERSONA_CONFIG.generic;
-              const Icon = persona.icon;
-              return (
-                <>
-                  <Icon className="w-6 h-6 text-primary" />
-                  {persona.label}
-                </>
-              );
-            })()}
-            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-normal">BETA</span>
-          </h1>
-          <p className="text-text-secondary mt-1">
-            {PERSONA_CONFIG[selectedPersona]?.description || PERSONA_CONFIG.generic.description}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => setShowPersonaModal(true)}
-          className="bg-surface hover:bg-surface-hover shadow-sm border-border"
-        >
-          <Sparkles className="w-4 h-4 mr-2 text-primary" />
-          Switch Persona
-        </Button>
+          </div>
+        </Card>
       </div>
 
-      {/* Controls */}
-      <Card className="p-4 bg-surface border-border mb-4">
-        <div className="flex flex-wrap items-center gap-4">
-          {/* KB Selection */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-text-secondary">Knowledge Base:</span>
-            <button
-              onClick={() => setShowKBModal(true)}
-              disabled={knowledgeBases.length === 0}
-              className={`px-3 py-1.5 border rounded-lg text-sm text-text transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${selectedKB
-                ? 'bg-primary/10 border-primary/20 hover:bg-primary/20'
-                : 'bg-background border-border hover:bg-surface-hover'
-                }`}
-            >
-              <FileText className={`w-4 h-4 ${selectedKB ? 'text-primary' : ''}`} />
-              {selectedKB || (knowledgeBases.length > 0 ? 'Select Knowledge Base' : 'No KBs Available')}
-            </button>
-            <button
-              onClick={handleRefreshKBs}
-              className="p-1.5 text-text-secondary hover:text-text transition-colors"
-              title="Refresh knowledge bases"
-            >
-              <RefreshCw className={cn("w-4 h-4", isKBLoading && "animate-spin")} />
-            </button>
-          </div>
-
-          {/* Database Selection */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-text-secondary">Database:</span>
-            <button
-              onClick={() => setShowDBModal(true)}
-              disabled={dbConnections.length === 0 && !isDatabaseConnected}
-              className={`px-3 py-1.5 border rounded-lg text-sm text-text transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${isDatabaseConnected
-                ? 'bg-primary/10 border-primary/20 hover:bg-primary/20'
-                : 'bg-background border-border hover:bg-surface-hover'
-                }`}
-            >
-              <Database className={`w-4 h-4 ${isDatabaseConnected ? 'text-primary' : ''}`} />
-              {selectedDBConnection || (isDatabaseConnected
-                ? 'Connected'
-                : (dbConnections.length > 0 ? 'Select Connection' : 'No Connections'))}
-            </button>
-          </div>
-
-          {/* Session Info & Reset */}
-          <div className="ml-auto flex items-center gap-3">
-            {sessionId && (
-              <>
-                <span className="text-xs text-text-secondary">
-                  Session: {sessionId.slice(0, 8)}...
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleReset}
-                  disabled={loading || messages.length === 0}
-                >
-                  Reset
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto mb-4 space-y-4">
-        {messages.length === 0 && (
-          <Card className="p-8 text-center bg-surface border-border">
-            {(() => {
-              const config = agentConfig && PERSONA_CONFIG[agentConfig.agent_type] ? PERSONA_CONFIG[agentConfig.agent_type] : PERSONA_CONFIG.generic;
-              const Icon = config.icon;
-              return <Icon className="w-12 h-12 text-text-secondary mx-auto mb-4" />;
-            })()}
-            <h3 className="text-lg font-medium text-text mb-2">
-              Ask {agentConfig && PERSONA_CONFIG[agentConfig.agent_type] ? `your ${PERSONA_CONFIG[agentConfig.agent_type].label}` : 'me'} anything
-            </h3>
-            <p className="text-text-secondary mb-4">
-              I can answer questions using your database or knowledge base documents
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl mx-auto text-left">
-              <div className="p-3 bg-background rounded-lg">
-                <Database className="w-4 h-4 text-primary mb-1" />
-                <p className="text-sm text-text font-medium">Database Queries</p>
-                <p className="text-xs text-text-secondary mt-1">
-                  "How many users registered last month?"
-                </p>
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* Database Connection Modal */}
+        {showDBModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDBModal(false)}>
+            <Card className="p-6 bg-surface border-border max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-text flex items-center gap-2">
+                  <Database className="w-5 h-5" />
+                  Select Database
+                </h2>
+                <button onClick={() => setShowDBModal(false)} className="text-text-secondary hover:text-text">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <div className="p-3 bg-background rounded-lg">
-                <FileText className="w-4 h-4 text-primary mb-1" />
-                <p className="text-sm text-text font-medium">Document Questions</p>
-                <p className="text-xs text-text-secondary mt-1">
-                  "What is the refund policy?"
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
 
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] ${msg.type === 'user' ? 'order-2' : 'order-1'}`}>
-              {msg.type === 'user' ? (
-                <div className="bg-primary text-white px-4 py-2 rounded-lg">
-                  {msg.content}
+              {dbConnections.length > 0 ? (
+                <div className="space-y-2">
+                  {dbConnections.map((conn) => (
+                    <button
+                      key={conn.name}
+                      onClick={() => handleConnectSavedDB(conn.name)}
+                      disabled={connectionLoading}
+                      className="w-full p-3 bg-background border border-border rounded-lg text-left hover:bg-surface-hover transition-colors disabled:opacity-50"
+                    >
+                      <div className="font-medium text-text">{conn.name}</div>
+                      <div className="text-xs text-text-secondary">{conn.type} - {conn.database}</div>
+                    </button>
+                  ))}
                 </div>
               ) : (
-                <Card className={`p-4 ${msg.type === 'system' && msg.isError ? 'bg-error/10 border-error/20' : 'bg-surface border-border'}`}>
-                  {msg.type === 'assistant' && (
-                    <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-primary/80">
-                      {(() => {
-                        const personaKey = msg.agent_type || selectedPersona;
-                        const config = PERSONA_CONFIG[personaKey] || PERSONA_CONFIG.generic;
-                        const Icon = config.icon;
-                        return (
-                          <>
-                            <Icon className="w-3.5 h-3.5" />
-                            {config.label}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  )}
-                  {msg.type === 'system' && msg.isError && (
-                    <div className="flex items-start gap-2 mb-2">
-                      <AlertCircle className="w-4 h-4 text-error flex-shrink-0 mt-0.5" />
-                      <span className="text-sm font-medium text-error">Error</span>
-                    </div>
-                  )}
-
-                  {msg.source && (
-                    <div className="flex items-center gap-1.5 mb-2 text-xs text-text-secondary">
-                      {msg.source === 'database' ? (
-                        <><Database className="w-3 h-3" /> Database Query</>
-                      ) : (
-                        <><FileText className="w-3 h-3" /> Knowledge Base</>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="text-text whitespace-pre-wrap">
-                    {(() => {
-                      const content = parseAgentResponse(msg.content);
-
-                      if (typeof content === 'object' && content !== null) {
-                        const type = content.type || content.component;
-                        switch (type) {
-                          case 'certificate_card':
-                            return (
-                              <CertificateCard
-                                project={content.project}
-                                status={content.status}
-                                date={content.date}
-                                tonnage={content.tonnage}
-                              />
-                            );
-                          case 'product_gallery':
-                          case 'product_list':
-                            return <ProductGallery products={content.products || []} />;
-                          case 'impact_stats':
-                            return (
-                              <ImpactStats
-                                contribution={content.contribution}
-                                trees_equivalent={content.trees_equivalent}
-                                rank={content.rank}
-                              />
-                            );
-                          case 'url_action':
-                            return (
-                              <UrlAction
-                                label={content.label}
-                                url={content.url}
-                                type={content.action_type}
-                              />
-                            );
-                          default:
-                            return <pre className="text-xs bg-background p-2 rounded max-w-full overflow-x-auto">{JSON.stringify(content, null, 2)}</pre>;
-                        }
-                      }
-
-                      return content;
-                    })()}
-                  </div>
-
-                  {msg.metadata?.sql && (
-                    <details className="mt-3">
-                      <summary className="text-xs text-text-secondary cursor-pointer hover:text-text">
-                        View SQL Query
-                      </summary>
-                      <pre className="mt-2 p-2 bg-background rounded text-xs overflow-x-auto">
-                        {msg.metadata.sql}
-                      </pre>
-                    </details>
-                  )}
-
-                  {msg.metadata?.results && msg.metadata.results.length > 0 && (
-                    <details className="mt-3" open>
-                      <summary className="text-xs text-text-secondary cursor-pointer hover:text-text mb-2">
-                        View Results ({msg.metadata.results.length} rows)
-                      </summary>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs border border-border">
-                          <thead className="bg-background">
-                            <tr>
-                              {Object.keys(msg.metadata.results[0]).map((col) => (
-                                <th key={col} className="px-2 py-1 text-left font-medium text-text border-b border-border">
-                                  {col}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border">
-                            {msg.metadata.results.slice(0, 10).map((row, idx) => (
-                              <tr key={idx} className="hover:bg-surface-hover">
-                                {Object.values(row).map((val, i) => (
-                                  <td key={i} className="px-2 py-1 text-text">
-                                    {val === null ? <span className="text-text-secondary italic">null</span> : String(val)}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {msg.metadata.results.length > 10 && (
-                          <p className="text-xs text-text-secondary mt-2">
-                            Showing 10 of {msg.metadata.results.length} rows
-                          </p>
-                        )}
-                      </div>
-                    </details>
-                  )}
-
-                  {msg.metadata?.sources && msg.metadata.sources.length > 0 && (
-                    <details className="mt-3">
-                      <summary className="text-xs text-text-secondary cursor-pointer hover:text-text">
-                        Sources ({msg.metadata.sources.length})
-                      </summary>
-                      <div className="mt-2 space-y-1">
-                        {msg.metadata.sources.map((source, idx) => (
-                          <div key={idx} className="text-xs p-2 bg-background rounded">
-                            <span className="font-medium text-text">{source.filename}</span>
-                            <span className="text-text-secondary ml-2">
-                              (relevance: {(source.relevance_score * 100).toFixed(1)}%)
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </Card>
+                <div className="text-center py-8">
+                  <Database className="w-12 h-12 text-text-secondary mx-auto mb-3" />
+                  <p className="text-text-secondary mb-2">No saved database connections</p>
+                  <p className="text-xs text-text-secondary">
+                    Go to Database Chat page to create connections
+                  </p>
+                </div>
               )}
-            </div>
+            </Card>
           </div>
-        ))}
+        )}
 
-        {loading && (
-          <div className="flex justify-start">
-            <Card className="p-4 bg-surface border-border">
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm text-text-secondary">Thinking...</span>
+        {/* Persona Selection Modal */}
+        {showPersonaModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowPersonaModal(false)}>
+            <Card className="p-6 bg-surface border-border max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-text flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  Select Persona
+                </h2>
+                <button onClick={() => setShowPersonaModal(false)} className="text-text-secondary hover:text-text">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {Object.entries(PERSONA_CONFIG).map(([key, config]) => {
+                  const Icon = config.icon;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        setSelectedPersona(key);
+                        setShowPersonaModal(false);
+                        const msg: Message = {
+                          id: Date.now().toString(),
+                          type: 'system',
+                          content: `🎭 Persona switched to: ${config.label}`,
+                          timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, msg]);
+                      }}
+                      className={`w-full p-4 border rounded-xl text-left transition-all flex items-start gap-4 ${selectedPersona === key
+                        ? 'bg-primary/10 border-primary/30 shadow-sm'
+                        : 'bg-background border-border hover:bg-surface-hover'
+                        }`}
+                    >
+                      <div className={`p-2 rounded-lg ${selectedPersona === key ? 'bg-primary text-white' : 'bg-surface text-primary'}`}>
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-text">{config.label}</div>
+                        <div className="text-sm text-text-secondary leading-tight mt-1">
+                          {config.description}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </Card>
           </div>
         )}
 
-        <div ref={messagesEndRef} />
-      </div>
+        {/* Knowledge Base Selection Modal */}
+        {showKBModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowKBModal(false)}>
+            <Card className="p-6 bg-surface border-border max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-text flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  Select Knowledge Base
+                </h2>
+                <button onClick={() => setShowKBModal(false)} className="text-text-secondary hover:text-text">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-      {/* Input Area */}
-      <Card className="p-4 bg-surface border-border">
-        <div className="flex gap-2">
-          <textarea
-            className="flex-1 px-3 py-2 bg-background border border-border rounded-lg resize-none text-text placeholder:text-text-secondary focus:border-primary focus:outline-none"
-            rows={2}
-            placeholder="Ask a question about your data..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            disabled={loading}
-          />
-          <Button onClick={handleSend} disabled={loading || !input.trim()}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </Button>
+              {knowledgeBases.length > 0 ? (
+                <div className="space-y-2">
+                  {knowledgeBases.map((kb) => (
+                    <button
+                      key={kb.id}
+                      onClick={() => handleSelectKB(kb.name)}
+                      disabled={connectionLoading}
+                      className={`w-full p-3 border rounded-lg text-left transition-colors disabled:opacity-50 ${selectedKB === kb.name
+                        ? 'bg-primary/10 border-primary/20'
+                        : 'bg-background border-border hover:bg-surface-hover'
+                        }`}
+                    >
+                      <div className="font-medium text-text">{kb.name}</div>
+                      <div className="text-xs text-text-secondary">
+                        {(kb.totalVectors || 0).toLocaleString()} vectors
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <FileText className="w-12 h-12 text-text-secondary mx-auto mb-3" />
+                  {isKBLoading ? (
+                    <p className="text-text-secondary mb-2 flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading...
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-text-secondary mb-2">No knowledge bases available</p>
+                      <p className="text-xs text-text-secondary">
+                        Go to Knowledge Base page to create one
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
+
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="bg-surface border-border hover:bg-surface-hover shadow-sm h-10 w-10 shrink-0"
+              title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+              {isSidebarCollapsed ? <PanelLeftOpen className="w-5 h-5 text-primary" /> : <PanelLeftClose className="w-5 h-5 text-text-secondary" />}
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-text flex items-center gap-2">
+                {(() => {
+                  const persona = PERSONA_CONFIG[selectedPersona] || PERSONA_CONFIG.generic;
+                  const Icon = persona.icon;
+                  return (
+                    <>
+                      <Icon className="w-6 h-6 text-primary" />
+                      {persona.label}
+                    </>
+                  );
+                })()}
+                <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-normal">BETA</span>
+              </h1>
+              <p className="text-text-secondary mt-1 text-sm">
+                {PERSONA_CONFIG[selectedPersona]?.description || PERSONA_CONFIG.generic.description}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {user?.role === 'superadmin' && (
+              <Button
+                variant="outline"
+                onClick={() => setShowPersonaModal(true)}
+                className="bg-surface hover:bg-surface-hover shadow-sm border-border h-10"
+              >
+                <Sparkles className="w-4 h-4 mr-2 text-primary" />
+                Switch Persona
+              </Button>
+            )}
+          </div>
         </div>
-      </Card>
-    </div>
+
+        {/* Controls */}
+        <Card className="p-4 bg-surface border-border mb-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* KB Selection */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-text-secondary">Knowledge Base:</span>
+              <button
+                onClick={() => setShowKBModal(true)}
+                disabled={knowledgeBases.length === 0}
+                className={`px-3 py-1.5 border rounded-lg text-sm text-text transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${selectedKB
+                  ? 'bg-primary/10 border-primary/20 hover:bg-primary/20'
+                  : 'bg-background border-border hover:bg-surface-hover'
+                  }`}
+              >
+                <FileText className={`w-4 h-4 ${selectedKB ? 'text-primary' : ''}`} />
+                {selectedKB || (knowledgeBases.length > 0 ? 'Select' : 'None')}
+              </button>
+              <button
+                onClick={handleRefreshKBs}
+                className="p-1.5 text-text-secondary hover:text-text transition-colors"
+                title="Refresh knowledge bases"
+              >
+                <RefreshCw className={cn("w-4 h-4", isKBLoading && "animate-spin")} />
+              </button>
+            </div>
+
+            <div className="h-6 w-px bg-border/50"></div>
+
+            {/* Database Selection */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-text-secondary">Database:</span>
+              <button
+                onClick={() => setShowDBModal(true)}
+                disabled={dbConnections.length === 0 && !isDatabaseConnected}
+                className={`px-3 py-1.5 border rounded-lg text-sm text-text transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${isDatabaseConnected
+                  ? 'bg-primary/10 border-primary/20 hover:bg-primary/20'
+                  : 'bg-background border-border hover:bg-surface-hover'
+                  }`}
+              >
+                <Database className={`w-4 h-4 ${isDatabaseConnected ? 'text-primary' : ''}`} />
+                {selectedDBConnection || (isDatabaseConnected
+                  ? 'Connected'
+                  : (dbConnections.length > 0 ? 'Select' : 'None'))}
+              </button>
+            </div>
+
+            {/* Session Info & Actions */}
+            <div className="ml-auto flex items-center gap-3">
+              {sessionId && (
+                <div className="flex items-center gap-2 bg-background/50 px-3 py-1.5 rounded-lg border border-border">
+                  <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></div>
+                  <span className="text-[10px] font-mono text-text-secondary uppercase">
+                    Session: {sessionId.slice(0, 8)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {/* Messages Area */}
+        <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 custom-scrollbar">
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full">
+              <Card className="p-10 text-center bg-surface border-border max-w-2xl shadow-xl relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary/50 via-primary to-primary/50"></div>
+                {(() => {
+                  const config = agentConfig && PERSONA_CONFIG[agentConfig.agent_type] ? PERSONA_CONFIG[agentConfig.agent_type] : PERSONA_CONFIG.generic;
+                  const Icon = config.icon;
+                  return (
+                    <div className="inline-flex p-4 rounded-2xl bg-primary/10 mb-6 transition-transform group-hover:scale-110">
+                      <Icon className="w-12 h-12 text-primary" />
+                    </div>
+                  );
+                })()}
+                <h3 className="text-2xl font-bold text-text mb-3">
+                  How can I help you today?
+                </h3>
+                <p className="text-text-secondary mb-8 text-base leading-relaxed max-w-md mx-auto">
+                  I'm your {agentConfig && PERSONA_CONFIG[agentConfig.agent_type] ? PERSONA_CONFIG[agentConfig.agent_type].label : 'AI assistant'}.
+                  Ask me anything about your documents or databases.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                  <button
+                    onClick={() => setInput("How many users registered last month?")}
+                    className="p-4 bg-background border border-border rounded-xl hover:border-primary/50 hover:bg-surface-hover transition-all group/card"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Database className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-bold text-text">Database Query</span>
+                    </div>
+                    <p className="text-sm text-text-secondary group-hover/card:text-text italic">
+                      "How many users registered last month?"
+                    </p>
+                  </button>
+                  <button
+                    onClick={() => setInput("What is the refund policy?")}
+                    className="p-4 bg-background border border-border rounded-xl hover:border-primary/50 hover:bg-surface-hover transition-all group/card"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-bold text-text">Document Search</span>
+                    </div>
+                    <p className="text-sm text-text-secondary group-hover/card:text-text italic">
+                      "What is the refund policy?"
+                    </p>
+                  </button>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {messages.map((msg) => (
+            <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[85%] ${msg.type === 'user' ? 'order-2' : 'order-1'} group/msg relative`}>
+                {msg.type === 'user' ? (
+                  <div className="bg-primary text-white px-5 py-3 rounded-2xl rounded-tr-none shadow-md">
+                    <p className="text-sm leading-relaxed">{msg.content as string}</p>
+                    <span className="text-[9px] opacity-60 mt-1 block text-right">
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ) : (
+                  <Card className={`p-5 rounded-2xl rounded-tl-none shadow-sm ${msg.type === 'system' && msg.isError ? 'bg-error/5 border-error/20' : 'bg-surface border-border'}`}>
+                    {msg.type === 'assistant' && (
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1 px-2 rounded-lg bg-primary/10 text-xs font-bold text-primary flex items-center gap-1.5">
+                          {(() => {
+                            const personaKey = msg.agent_type || selectedPersona;
+                            const config = PERSONA_CONFIG[personaKey] || PERSONA_CONFIG.generic;
+                            const Icon = config.icon;
+                            return (
+                              <>
+                                <Icon className="w-3.5 h-3.5" />
+                                <span className="uppercase tracking-wider">{config.label}</span>
+                              </>
+                            );
+                          })()}
+                        </div>
+                        {msg.source && (
+                          <div className="flex items-center gap-1 text-[10px] text-text-secondary font-medium uppercase tracking-tighter">
+                            {msg.source === 'database' ? (
+                              <><Database className="w-3 h-3" /> Source: DB</>
+                            ) : (
+                              <><FileText className="w-3 h-3" /> Source: KB</>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {msg.type === 'system' && msg.isError && (
+                      <div className="flex items-center gap-2 mb-3 text-error">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span className="text-xs font-bold uppercase">System Error</span>
+                      </div>
+                    )}
+
+                    <div className="text-text text-sm leading-relaxed whitespace-pre-wrap">
+                      {(() => {
+                        const content = parseAgentResponse(msg.content);
+
+                        if (typeof content === 'object' && content !== null) {
+                          const type = content.type || content.component;
+                          switch (type) {
+                            case 'certificate_card':
+                              return (
+                                <div className="my-4">
+                                  <CertificateCard
+                                    project={content.project}
+                                    status={content.status}
+                                    date={content.date}
+                                    tonnage={content.tonnage}
+                                  />
+                                </div>
+                              );
+                            case 'product_gallery':
+                            case 'product_list':
+                              return <div className="my-4"><ProductGallery products={content.products || []} /></div>;
+                            case 'impact_stats':
+                              return (
+                                <div className="my-4">
+                                  <ImpactStats
+                                    contribution={content.contribution}
+                                    trees_equivalent={content.trees_equivalent}
+                                    rank={content.rank}
+                                  />
+                                </div>
+                              );
+                            case 'url_action':
+                              return (
+                                <div className="my-4">
+                                  <UrlAction
+                                    label={content.label}
+                                    url={content.url}
+                                    type={content.action_type}
+                                  />
+                                </div>
+                              );
+                            default:
+                              return <pre className="text-xs bg-background p-3 rounded-xl border border-border mt-2 overflow-x-auto">{JSON.stringify(content, null, 2)}</pre>;
+                          }
+                        }
+
+                        return content;
+                      })()}
+                    </div>
+
+                    {msg.metadata?.sql && (
+                      <div className="mt-4 pt-4 border-t border-border/50">
+                        <details className="group/sql">
+                          <summary className="text-[10px] font-bold uppercase tracking-widest text-text-secondary cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5 list-none">
+                            <span className="w-4 h-4 rounded bg-background flex items-center justify-center transition-transform group-open/sql:rotate-90">›</span>
+                            SQL Query
+                          </summary>
+                          <div className="mt-3 p-3 bg-background rounded-xl border border-border text-xs font-mono text-primary/80 overflow-x-auto">
+                            {msg.metadata.sql}
+                          </div>
+                        </details>
+                      </div>
+                    )}
+
+                    {msg.metadata?.results && msg.metadata.results.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-border/50">
+                        <details className="group/results" open>
+                          <summary className="text-[10px] font-bold uppercase tracking-widest text-text-secondary cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5 list-none mb-3">
+                            <span className="w-4 h-4 rounded bg-background flex items-center justify-center transition-transform group-open/results:rotate-90">›</span>
+                            Query Results ({msg.metadata.results.length})
+                          </summary>
+                          <div className="overflow-x-auto rounded-xl border border-border bg-background">
+                            <table className="w-full text-xs text-left border-collapse">
+                              <thead>
+                                <tr className="bg-background/80">
+                                  {Object.keys(msg.metadata.results[0]).map((col) => (
+                                    <th key={col} className="px-3 py-2 font-bold text-text-secondary border-b border-border uppercase tracking-tighter">
+                                      {col}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border/50">
+                                {msg.metadata.results.slice(0, 5).map((row, idx) => (
+                                  <tr key={idx} className="hover:bg-primary/5 transition-colors">
+                                    {Object.values(row).map((val, i) => (
+                                      <td key={i} className="px-3 py-2 text-text font-medium">
+                                        {val === null ? <span className="text-text-secondary italic opacity-50">null</span> : String(val)}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {msg.metadata.results.length > 5 && (
+                              <div className="p-2 text-center border-t border-border/50 bg-background/30">
+                                <span className="text-[10px] font-bold text-text-secondary uppercase">
+                                  + {msg.metadata.results.length - 5} more rows
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </details>
+                      </div>
+                    )}
+
+                    {msg.metadata?.sources && msg.metadata.sources.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-border/50">
+                        <details className="group/sources">
+                          <summary className="text-[10px] font-bold uppercase tracking-widest text-text-secondary cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5 list-none">
+                            <span className="w-4 h-4 rounded bg-background flex items-center justify-center transition-transform group-open/sources:rotate-90">›</span>
+                            Context Sources ({msg.metadata.sources.length})
+                          </summary>
+                          <div className="mt-3 space-y-2">
+                            {msg.metadata.sources.map((source, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-3 bg-background rounded-xl border border-border group/source hover:border-primary/30 transition-all">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg bg-primary/5 flex items-center justify-center">
+                                    <FileText className="w-4 h-4 text-primary" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-bold text-text truncate max-w-[200px]">{source.filename}</p>
+                                    <p className="text-[10px] text-text-secondary font-medium uppercase mt-0.5">Rank #{idx + 1}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs font-bold text-primary">{(source.relevance_score * 100).toFixed(0)}%</p>
+                                  <p className="text-[9px] text-text-secondary uppercase font-semibold">Match</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      </div>
+                    )}
+
+                    <span className="text-[9px] text-text-secondary mt-3 block">
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </Card>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="flex items-center gap-3 bg-surface border border-border px-4 py-3 rounded-2xl rounded-tl-none shadow-sm">
+                <div className="flex gap-1">
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"></div>
+                </div>
+                <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">AI is thinking...</span>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input Area */}
+        <Card className="p-4 bg-surface border-border shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-focus-within:opacity-100 transition-opacity"></div>
+          <div className="flex gap-3 items-end">
+            <div className="flex-1 relative">
+              <textarea
+                className="w-full px-4 py-3 bg-background border border-border rounded-xl resize-none text-sm text-text placeholder:text-text-secondary focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all min-h-[56px] max-h-32"
+                rows={1}
+                placeholder="Message your AI assistant..."
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                disabled={loading}
+              />
+            </div>
+            <Button
+              onClick={handleSend}
+              disabled={loading || !input.trim()}
+              className="h-14 w-14 rounded-xl shadow-lg shadow-primary/20 shrink-0"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+            </Button>
+          </div>
+          <p className="text-[10px] text-text-secondary mt-2 text-center font-medium uppercase tracking-tighter opacity-70">
+            AI can make mistakes. Verify important information.
+          </p>
+        </Card>
+      </div >
+    </div >
   );
 }

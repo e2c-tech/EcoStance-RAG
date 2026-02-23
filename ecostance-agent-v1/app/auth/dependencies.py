@@ -28,7 +28,6 @@ async def get_tenant_id(
             payload = verify_token(credentials.credentials)
             jwt_tenant_id = payload.get("tenant_id")
         except HTTPException:
-            # If token is invalid, try fallback
             pass
     
     # If both present, they must match
@@ -174,8 +173,6 @@ async def get_current_user(
     if credentials:
         try:
             payload = verify_token(credentials.credentials)
-            tenant_id = payload.get("tenant_id")
-            user_id = payload.get("user_id", "system")  # Default to "system" if not provided
         except HTTPException:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -222,20 +219,6 @@ async def get_current_user(
             detail="User is not a member of this tenant"
         )
 
-    # Get the internal TenantUser ID
-    tenant_user_id = None
-    if user_id and user_id != "system":
-        # Import here to avoid circular dependencies
-        from ..models.tenant_user import TenantUser
-        
-        tenant_user = db.query(TenantUser).filter(
-            TenantUser.tenant_id == tenant_id,
-            TenantUser.user_id == user_id
-        ).first()
-        
-        if tenant_user:
-            tenant_user_id = tenant_user.id
-    
     return {
         "tenant_id": target_tenant_id,
         "user_id": user_id,

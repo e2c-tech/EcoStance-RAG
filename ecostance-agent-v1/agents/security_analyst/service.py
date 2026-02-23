@@ -34,19 +34,28 @@ from app.services.multilingual_utils import MultilingualAgentMixin
 logger = logging.getLogger(__name__)
 
 SECURITY_SYSTEM_PROMPTS = {
-    "en": """You are a Senior Security Analyst. You have access to two primary data sources:
-1. **Database (SQL)**: Best for structured data, asset inventory, and quantitative analysis (e.g., "top 10 IPs", "count of alerts", "list of servers").
-2. **Knowledge Base (RAG)**: Best for unstructured text, investigation notes, SOPs, policies, and raw exported log documents.
+    "en": """You are an Expert Senior Security Analyst (SOC Assistant). 
+Your goal is to provide intelligent, summarized, and actionable security insights. 
 
 ### DATA SOURCE SELECTION RULES:
-- **USE DATABASE** for any question involving "Top", "Count", "Sum", "List of Assets", or "Frequency". If you need to analyze logs and a database is connected, check the database tables first to see if logs are stored there in a structured format.
-- **USE KNOWLEDGE BASE** for questions about "How to", "Policy on", "SOP for", or searching through raw imported log files/text documents.
-- **CROSS-REFERENCE**: Use the KB to find a policy, then use the DB to check if assets are compliant. Or find a suspicious IP in the KB logs and look up its owner in the DB.
+1. **Database (SQL)**: USE FOR: "Top", "Count", "Sum", "List of Assets", "Frequency", or "Analytics".
+2. **Knowledge Base (RAG)**: USE FOR: "How to", "Policy", "SOP", or searching raw text/logs.
+3. **ONLY USE SEARCH TOOLS** if a source is listed as 'Active' in your context.
 
-### GUIDELINES:
-1. **Quantitative = Database**: If the user asks for "top source IPs" or "how many", your first instinct MUST be to check the database.
-2. **Qualitative = Knowledge Base**: If the user asks "how do I handle a breach", your first instinct MUST be the KB.
-3. **Professional Tone**: Maintain an analytical, helpful, and objective tone. Cite your source clearly.
+### INTELLIGENCE & FORMATTING RULES:
+1. **NO RAW DATA DUMPS**: NEVER just list raw database rows, IP lists, or long strings of IDs. 
+2. **SUMMARIZE & ANALYZE**: 
+   - Instead of "Found 10 alerts", say "A total of 10 high-severity alerts were identified, primarily originating from the DMZ."
+   - Categorize findings (e.g., "The top 3 attack types are SQL Injection, Brute Force, and XSS").
+3. **EXPERT CONTEXT**: Provide a security-focused explanation. If you see Tor exit nodes or failed logins, explain the risk.
+4. **ACTIONABLE RECOMMENDATIONS**: Always conclude with a brief "Recommended Action" (e.g., "Immediate endpoint isolation recommended for infected hosts").
+5. **HUMAN-FRIENDLY NAMES**: If you find IDs in a database, try to cross-reference or describe them by their types or names if available. Avoid strings like "Sensors with ids 1, 3, 5". Say "Sensors in the Finance and HR segments" if possible.
+6. **BE PROFESSIONAL**: Use an analytical, objective, and authoritative tone.
+
+### EXAMPLE OF EXPERT RESPONSE:
+**User**: Show critical alerts in last 24 hours
+**Expert Analysis**: In the last 24 hours, **7 critical alerts** were detected across the network. The most significant threats include multiple **SQL injection attempts** targeting the primary web gateway and three instances of **suspicious PowerShell execution** on endpoint EDR-WIN-22. 
+**Recommended Action**: Immediate review of web application logs and endpoint isolation of EDR-WIN-22 for deeper forensic analysis.
 """
 }
 
@@ -115,10 +124,10 @@ class SecurityAnalystService(MultilingualAgentMixin):
 {chr(10).join(tool_details)}
 
 ### INVESTIGATION STRATEGY:
-- **STEP 1**: If the query involves "Top", "Count", "Summary", or "Analytics", you **MUST** call `list_database_tables` and then `query_database`.
+- **STEP 1**: If the query involves "Top", "Count", "Summary", "Analytics", or "Listing" of any assets, you **MUST** call `list_database_tables` (to see the tables AND their column names) and then `query_database`.
 - **STEP 2**: If the query involves "Policy", "Procedure", "SOP", or "Raw Logs", call `search_knowledge_base`.
 - **STEP 3**: If you search the Knowledge Base and see results that look like structured log entries, check if those logs are also available in the Database for better analytical querying.
-- Do not guess table names. Always call `list_database_tables` if a database is connected.
+- **CRITICAL**: Do NOT guess table or column names. The metadata provided in `list_database_tables` is the ONLY source of truth for the schema.
 """
 
     def chat(self, session_id: str, message: str, user_language: str = None, chat_history: List[Dict] = None, **kwargs) -> Dict:
@@ -164,11 +173,20 @@ class SecurityAnalystService(MultilingualAgentMixin):
                 is_last_turn = (iteration == max_iterations)
                 instruction = f"""
 ### MANDATORY RESPONSE FORMAT:
-You MUST respond with a valid JSON object only. 
+You MUST respond with EXACTLY ONE valid JSON object only. 
+DO NOT include any text outside the JSON. 
+DO NOT simulate tool results or "TOOL_RESULT" blocks.
+DO NOT provide multiple JSON blocks.
 
 1. ANALYZE PREVIOUS TOOL RESULTS:
+   - If a tool result contains an error like "No such column" or "Invalid column", you MUST call `list_database_tables` immediately to find the correct schema.
    - If the previous tool result contains the answer, output the final answer using the 'none' tool immediately.
    - Do NOT search again for the same thing.
+
+### DATABASE DISCOVERY RULE:
+- If a Database is connected and you need to query it:
+  1. You MUST call `list_database_tables` first to see the schema (unless you did so in this session).
+  2. NEVER guess column names. Use the exact names from `list_database_tables`.
 
 2. CHOOSE YOUR ACTION:
    - If you need more data (e.g. searching logs):
@@ -181,7 +199,7 @@ You MUST respond with a valid JSON object only.
    - If you have the answer OR if the search failed multiple times:
      {{
          "tool": "none",
-         "response": "Final answer for the user goes here",
+         "response": "Final Expert Analysis: Your human-friendly final answer here. DO NOT list raw IDs (like 1, 2, 3), use sensor names or categories instead. Include a 'Recommended Action'.",
          "type": "text"
      }}
 
@@ -194,19 +212,30 @@ You MUST respond with a valid JSON object only.
                 text = result.content
                 logger.info(f"LLM Response received ({len(text)} chars)")
                 
+                # Robust JSON extraction: look for the first '{' and corresponding '}' or just the first JSON-like block
+                import re
                 match = re.search(r'\{.*\}', text, re.DOTALL)
-                if not match:
-                    # Non-JSON response: treating as final
+                
+                decision = None
+                if match:
+                    json_str = match.group(0)
+                    # Handle cases where LLM might include multiple JSON blocks or trailing text
+                    try:
+                        decision = json.loads(json_str)
+                    except json.JSONDecodeError:
+                        # Try to find the FIRST JSON object if the greedy one fails
+                        first_match = re.search(r'\{.*?\}', text, re.DOTALL)
+                        if first_match:
+                            try:
+                                decision = json.loads(first_match.group(0))
+                            except:
+                                pass
+
+                if not decision:
+                    # Non-JSON response or parsing failed: treating as final if it looks like a message
                     final_text = text
                     self.conversations[session_id].append({"role": "assistant", "content": final_text})
                     return {"response": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
-
-                try:
-                    decision = json.loads(match.group(0))
-                except json.JSONDecodeError:
-                    final_text = text
-                    self.conversations[session_id].append({"role": "assistant", "content": final_text})
-                    return {"response": final_text, "session_id": session_id, "success": True}
 
                 tool_name = decision.get('tool')
                 
@@ -218,11 +247,24 @@ You MUST respond with a valid JSON object only.
                 if tool_name in self.tool_map:
                     args = decision.get('args', {})
                     
-                    # Force selected knowledge base if provided via UI
-                    if tool_name == "search_knowledge_base" and kb_name:
-                        if args.get("kb_name") != kb_name:
-                            logger.info(f"Forcing knowledge base from '{args.get('kb_name')}' to '{kb_name}'")
-                            args["kb_name"] = kb_name
+                    # STRICT SELECTION ENFORCEMENT
+                    if tool_name in ["query_database", "list_database_tables"]:
+                         if not db_name:
+                              from app.routers import db_router
+                              if not (db_router.db_connector and (db_router.db_connector.engine or db_router.db_connector.client)):
+                                   err_msg = "Database tool called but no Database is currently connected. Please connect a database from the sidebar."
+                                   self.conversations[session_id].append({"role": "assistant", "content": err_msg})
+                                   return {"response": err_msg, "session_id": session_id, "success": True}
+
+                    if tool_name == "search_knowledge_base":
+                        if kb_name:
+                            if args.get("kb_name") != kb_name:
+                                logger.info(f"Forcing knowledge base from '{args.get('kb_name')}' to '{kb_name}'")
+                                args["kb_name"] = kb_name
+                        elif not args.get("kb_name"):
+                            kb_msg = "Please select a Knowledge Base from the sidebar before searching documents."
+                            self.conversations[session_id].append({"role": "assistant", "content": kb_msg})
+                            return {"response": kb_msg, "session_id": session_id, "success": True}
 
                     logger.info(f"Executing {tool_name} with {args}")
                     

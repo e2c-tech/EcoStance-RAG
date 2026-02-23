@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 import uuid
 import logging
 
-from app.services.multilingual_integration_service import get_multilingual_integration_service
 from app.auth.dependencies import get_current_user
 from app.db.database import get_db
 from app.models.public_agent import PublicAgentConfig
@@ -33,8 +32,8 @@ class ChatResponse(BaseModel):
     session_id: str
     success: bool
     agent_type: str
+    timestamp: str
     error: Optional[str] = None
-
 
 class ConversationHistory(BaseModel):
     session_id: str
@@ -75,10 +74,7 @@ async def chat_with_agent(
 ):
     """Chat with the assigned AI agent for the tenant"""
     try:
-        # Generate session ID if not provided
         session_id = request.session_id or str(uuid.uuid4())
-        
-        # Get tenant_id from request or current user
         tenant_id = request.tenant_id or current_user.get("tenant_id")
         
         if not tenant_id:
@@ -91,6 +87,28 @@ async def chat_with_agent(
         # Get service
         agent_service = get_agent_service(tenant_id, db, request.database_connection)
         
+        # --- Persistence Integration ---
+        from app.services.public_agent_service import PublicAgentService
+        persistence_service = PublicAgentService(db)
+        
+        # Ensure session exists and get history
+        persistence_service.get_or_create_session(session_id, tenant_id)
+        db_history = persistence_service.get_session_messages(session_id, tenant_id)
+        
+        # Format history for the agent service
+        # Agent services expect list of {"role": "user/assistant", "content": "..."}
+        if db_history:
+            formatted_history = []
+            for msg in db_history:
+                formatted_history.append({"role": msg.role, "content": msg.content})
+            
+            # Load into agent service memory
+            if hasattr(agent_service, 'conversations'):
+                agent_service.conversations[session_id] = formatted_history
+        
+        # Add current user message to DB
+        persistence_service.add_message(session_id, tenant_id, "user", request.message)
+        
         # Process message via thread pool (chat is synchronous)
         result = await run_in_threadpool(
             agent_service.chat,
@@ -100,12 +118,24 @@ async def chat_with_agent(
             database_connection=request.database_connection
         )
         
-        return ChatResponse(agent_type=agent_type, **result)
+        # Add assistant response to DB
+        assistant_response = result.get("response", "")
+        tool_used = result.get("tool_used")
+        persistence_service.add_message(session_id, tenant_id, "assistant", assistant_response, tool_used=tool_used)
+        
+        # Update session activity
+        persistence_service.update_session_activity(session_id, tenant_id, is_query=True)
+        
+        from datetime import datetime
+        return ChatResponse(
+            agent_type=agent_type, 
+            timestamp=datetime.utcnow().isoformat(),
+            **result
+        )
         
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/agent/history/{session_id}", response_model=ConversationHistory)
 async def get_conversation_history(
@@ -123,7 +153,6 @@ async def get_conversation_history(
         logger.error(f"Error getting conversation history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.post("/agent/reset/{session_id}")
 async def reset_conversation(
     session_id: str,
@@ -140,7 +169,6 @@ async def reset_conversation(
             "message": "Conversation reset successfully" if success else "Session not found",
             "success": success
         }
-        
     except Exception as e:
         logger.error(f"Error resetting conversation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -159,4 +187,35 @@ async def get_agent_config(
         "tenant_id": tenant_id,
         "agent_type": agent_type,
         "is_customized": config is not None
+    }
+
+@router.get("/agent/sessions")
+async def get_agent_sessions(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List all agent chat sessions for the current tenant"""
+    from app.models.public_agent import PublicAgentSession
+    tenant_id = current_user.get("tenant_id")
+    
+    sessions = db.query(PublicAgentSession).filter(
+        PublicAgentSession.tenant_id == tenant_id
+    ).order_by(PublicAgentSession.last_activity.desc()).all()
+    
+    return [s.to_dict() for s in sessions]
+
+@router.get("/agent/summary")
+async def get_agent_summary(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a summary of agent activity for the tenant"""
+    from app.models.public_agent import PublicAgentSession
+    tenant_id = current_user.get("tenant_id")
+    
+    total_sessions = db.query(PublicAgentSession).filter(PublicAgentSession.tenant_id == tenant_id).count()
+    
+    return {
+        "total_sessions": total_sessions,
+        "tenant_id": tenant_id
     }

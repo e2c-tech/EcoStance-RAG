@@ -63,6 +63,7 @@ Guidelines:
 4. NEVER make up information - only use data returned by the tools
 5. For cross-language information, synthesize content from multiple languages appropriately
 6. Maintain cultural sensitivity in responses
+7. **NO RAW DATA**: Do not just repeat raw database rows or tracking logs. Summarize the shipment status and information in a helpful, conversational way.
 
 Available Tools:
 **Shipment & Database Tools:** (same as before)
@@ -420,93 +421,99 @@ Y a-t-il quelque chose lié aux expéditions ou à la logistique avec lequel je 
             # Get language-appropriate system prompt
             system_prompt = self._get_system_prompt(preferred_language)
             
-            # Use LLM to analyze query and decide which tool to use
-            analysis_prompt = f"""{system_prompt}
+            max_iterations = 5
+            iteration = 0
+            
+            while iteration < max_iterations:
+                iteration += 1
+                is_last_turn = (iteration == max_iterations)
+                
+                # Use LLM to analyze query and decide which tool to use
+                analysis_prompt = f"""{system_prompt}
 
-Analyze this customer query and determine which tool to use.
+Analyze the customer query and previous tool results to determine your next action.
 
+### CONTEXT:
 Query: "{message}"
-Detected Language: {detected_language} (confidence: {confidence:.2f})
+Detected Language: {detected_language}
 Preferred Response Language: {preferred_language}{context_info}
+Turn: {iteration}/{max_iterations}
 
-Available tools:
+### AVAILABLE TOOLS:
 {self._get_tool_descriptions(preferred_language)}
 
-Respond with ONLY a JSON object in this format:
+### INSTRUCTIONS:
+1. Respond with ONLY a JSON object.
+2. DO NOT include any text outside the JSON.
+3. DO NOT simulate tool results or "TOOL_RESULT" blocks.
+4. If you need data (shipment status, policies), call the appropriate tool.
+5. If you have the tool result, explain it politely to the customer in {preferred_language}.
+6. Do NOT just return the raw tool result. Provide a helpful, human-friendly summary.
+7. If the user asks about something out of scope, explain what you CAN do.
+
+FORMAT:
 {{
     "tool": "tool_name",
-    "args": {{"arg1": "value1", "arg2": "value2"}},
+    "args": {{...}},
     "reasoning": "why this tool",
     "response_language": "{preferred_language}"
 }}
-
-If no tool is needed (greeting, clarification, etc.), respond with:
+OR (if finished):
 {{
     "tool": "none",
-    "response": "your direct response in {preferred_language}",
+    "response": "your human-friendly final response in {preferred_language}",
     "response_language": "{preferred_language}"
 }}
 
-IMPORTANT: Always respond in {preferred_language} language."""
-            
-            logger.info(f"Asking LLM to analyze multilingual query: {message}")
-            
-            # Track LLM call
-            start_time = time.time()
-            analysis_response = self._invoke_llm_with_tracing(analysis_prompt, session_id, preferred_language)
-            latency_ms = int((time.time() - start_time) * 1000)
-            
-            analysis_text = analysis_response.content if hasattr(analysis_response, 'content') else str(analysis_response)
-            
-            # Track usage if we have db_session and tenant_id
-            if self.db_session and self.tenant_id:
-                try:
-                    from app.services.llm_tracking_service import LLMTrackingService
-                    
-                    # Estimate tokens (rough approximation: 1 token ≈ 4 chars)
-                    input_tokens = len(analysis_prompt) // 4
-                    output_tokens = len(analysis_text) // 4
-                    
-                    LLMTrackingService.track_llm_call(
-                        db=self.db_session,
-                        tenant_id=str(self.tenant_id),
-                        model=AGENT_MODEL,
-                        operation_type='multilingual_agent',
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        success=True,
-                        latency_ms=latency_ms,
-                        endpoint='/api/v1/beta/multilingual-agent/chat',
-                        session_id=session_id,
-                        metadata={
-                            "detected_language": detected_language,
-                            "preferred_language": preferred_language,
-                            "confidence": confidence
-                        }
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to track multilingual LLM usage: {e}")
-            
-            logger.info(f"Multilingual LLM analysis: {analysis_text}")
-            
-            # Parse the LLM's decision
-            try:
-                # Extract JSON from response
-                json_match = re.search(r'```json\s*(\{.*?\})\s*```', analysis_text, re.DOTALL)
-                if json_match:
-                    analysis_text = json_match.group(1)
-                else:
-                    json_match = re.search(r'\{.*\}', analysis_text, re.DOTALL)
-                    if json_match:
-                        analysis_text = json_match.group(0)
+{ "CRITICAL: This is your LAST turn. You MUST provide the final response now." if is_last_turn else "" }
+"""
                 
-                decision = json.loads(analysis_text)
+                logger.info(f"Asking Multilingual LLM turn {iteration}: {message[:50]}...")
+                
+                # Build message list for history-aware reasoning (optional but good)
+                # For now keeping it simple like the previous implementation but in a loop
+                
+                # Track LLM call
+                start_time = time.time()
+                analysis_response = self._invoke_llm_with_tracing(analysis_prompt, session_id, preferred_language)
+                latency_ms = int((time.time() - start_time) * 1000)
+                
+                analysis_text = analysis_response.content if hasattr(analysis_response, 'content') else str(analysis_response)
+                
+                # Robust JSON extraction
+                json_match = re.search(r'\{.*\}', analysis_text, re.DOTALL)
+                decision = None
+                if json_match:
+                    json_str = json_match.group(0)
+                    try:
+                        decision = json.loads(json_str)
+                    except json.JSONDecodeError:
+                        first_match = re.search(r'\{.*?\}', analysis_text, re.DOTALL)
+                        if first_match:
+                            try:
+                                decision = json.loads(first_match.group(0))
+                            except: pass
+
+                if not decision:
+                     # Non-JSON response: treating as final
+                    self.conversations[session_id]["messages"].append({
+                        "role": "assistant",
+                        "content": analysis_text,
+                        "language": preferred_language
+                    })
+                    return {
+                        "response": analysis_text,
+                        "session_id": session_id,
+                        "language": preferred_language,
+                        "success": True
+                    }
+
                 tool_name = decision.get('tool')
                 response_language = decision.get('response_language', preferred_language)
                 
-                # If no tool needed, return direct response
-                if tool_name == 'none':
-                    response_text = decision.get('response', "I'm here to help! What would you like to know?")
+                # If no tool needed, or last turn, return direct response
+                if tool_name == 'none' or not tool_name or is_last_turn:
+                    response_text = decision.get('response', decision.get('reasoning', analysis_text))
                     
                     self.conversations[session_id]["messages"].append({
                         "role": "assistant",
@@ -533,107 +540,49 @@ IMPORTANT: Always respond in {preferred_language} language."""
                         if 'user_language' not in tool_args:
                             tool_args['user_language'] = preferred_language
                     
-                    # Handle KB and DB selection logic (similar to original)
+                    # Handle KB selection logic
                     if tool_name == 'search_multilingual_knowledge_base':
-                        if session_id in self.session_kb:
-                            tool_args['kb_name'] = self.session_kb[session_id]
-                        elif 'kb_name' not in tool_args:
+                        ui_selected_kb = self.session_kb.get(session_id)
+                        if ui_selected_kb:
+                            tool_args['kb_name'] = ui_selected_kb
+                        elif not tool_args.get('kb_name'):
                             kb_msg = self._get_kb_selection_message(preferred_language)
                             self.conversations[session_id]["messages"].append({
-                                "role": "assistant",
-                                "content": kb_msg,
-                                "language": preferred_language
+                                "role": "assistant", "content": kb_msg, "language": preferred_language
                             })
-                            return {
-                                "response": kb_msg,
-                                "session_id": session_id,
-                                "language": preferred_language,
-                                "detected_language": detected_language,
-                                "confidence": confidence,
-                                "success": True
-                            }
+                            return {"response": kb_msg, "session_id": session_id, "success": True}
+
+                    logger.info(f"Executing multilingual tool: {tool_name}")
                     
-                    logger.info(f"Executing multilingual tool: {tool_name} with args: {tool_args}")
-                    
-                    try:
-                        result = tool.invoke(tool_args)
-                        logger.info(f"Multilingual tool returned: {result[:100]}...")
-                        
-                        self.conversations[session_id]["messages"].append({
-                            "role": "assistant",
-                            "content": result,
-                            "language": response_language,
-                            "tool_used": tool_name
-                        })
-                        
-                        return {
-                            "response": result,
-                            "session_id": session_id,
-                            "language": response_language,
-                            "detected_language": detected_language,
-                            "confidence": confidence,
-                            "tool_used": tool_name,
-                            "success": True
-                        }
-                    except Exception as e:
-                        error_msg = self._get_error_message(str(e), preferred_language)
-                        logger.error(error_msg, exc_info=True)
-                        
-                        self.conversations[session_id]["messages"].append({
-                            "role": "assistant",
-                            "content": error_msg,
-                            "language": preferred_language
-                        })
-                        
-                        return {
-                            "response": error_msg,
-                            "session_id": session_id,
-                            "language": preferred_language,
-                            "detected_language": detected_language,
-                            "confidence": confidence,
-                            "success": False,
-                            "error": str(e)
-                        }
-                else:
-                    error_msg = self._get_tool_not_found_message(tool_name, preferred_language)
-                    logger.warning(error_msg)
-                    
+                    # Add assistant's thought to message list so next iteration sees it
                     self.conversations[session_id]["messages"].append({
                         "role": "assistant",
-                        "content": error_msg,
-                        "language": preferred_language
+                        "content": json.dumps(decision),
+                        "language": response_language
                     })
-                    
-                    return {
-                        "response": error_msg,
-                        "session_id": session_id,
-                        "language": preferred_language,
-                        "detected_language": detected_language,
-                        "confidence": confidence,
-                        "success": False
-                    }
-                    
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse multilingual LLM decision: {e}")
-                logger.error(f"LLM response was: {analysis_text}")
-                
-                # Fallback response in appropriate language
-                fallback_msg = self._get_fallback_message(preferred_language)
-                
-                self.conversations[session_id]["messages"].append({
-                    "role": "assistant",
-                    "content": fallback_msg,
-                    "language": preferred_language
-                })
-                
-                return {
-                    "response": fallback_msg,
-                    "session_id": session_id,
-                    "language": preferred_language,
-                    "detected_language": detected_language,
-                    "confidence": confidence,
-                    "success": True
-                }
+
+                    try:
+                        result = tool.invoke(tool_args)
+                        # Add tool result to context for next iteration
+                        context_info += f"\n\nTOOL_RESULT ({tool_name}): {str(result)}"
+                        
+                        self.conversations[session_id]["messages"].append({
+                            "role": "system",
+                            "content": f"TOOL_RESULT ({tool_name}): {str(result)}",
+                            "tool_used": tool_name
+                        })
+                    except Exception as e:
+                        error_msg = f"Error executing tool {tool_name}: {str(e)}"
+                        context_info += f"\n\n{error_msg}"
+                        self.conversations[session_id]["messages"].append({
+                            "role": "system", "content": error_msg
+                        })
+                else:
+                    error_msg = f"Tool '{tool_name}' not found."
+                    context_info += f"\n\n{error_msg}"
+                    self.conversations[session_id]["messages"].append({
+                        "role": "system", "content": error_msg
+                    })
             
         except Exception as e:
             logger.error(f"Error in multilingual agent chat: {e}", exc_info=True)

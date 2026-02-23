@@ -1,47 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { tenantsAPI, quotaAPI, rbacAPI, publicAgentAPI } from '../services/api';
+import { rbacAPI } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import RoleManagement from '../components/rbac/RoleManagement';
 import UserManagement from '../components/rbac/UserManagement';
 import { usePermissions } from '../hooks/usePermissions';
 import { Settings, CreditCard, Bell, BarChart3, AlertCircle, Shield, Users, Plug, Brain } from 'lucide-react';
+import { useTenant, Tenant } from '../context/TenantContext';
 import GmailSettings from '../components/gmail/GmailSettings';
 import DynamicsSettings from '../components/dynamics/DynamicsSettings';
 import CustomCrmSettings from '../components/custom-crm/CustomCrmSettings';
 import { PricingGrid } from '../components/PricingGrid';
 
-interface Tenant {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  billing_tier: string;
-  billing_status: string;
-  created_at: string;
-  gmail_config?: {
-    is_connected: boolean;
-    connected_email?: string;
-  };
-}
 
-interface QuotaStatus {
-  storage: { limit_bytes: number; used_bytes: number; usage_percent: number };
-  queries: { daily_limit: number; daily_used: number; monthly_limit: number; monthly_used: number };
-  documents: { limit: number; used: number; usage_percent: number };
-}
-
-interface AgentConfig {
-  agent_type: string;
-  enabled: boolean;
-  allowed_tools: string[];
-  branding: {
-    logo_url?: string;
-    primary_color: string;
-    company_name: string;
-  };
-}
 
 const AGENT_TYPE_INFO = {
   generic: {
@@ -86,60 +58,27 @@ const DEFAULT_AGENT_INFO = {
 export default function TenantSettingsPage() {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'profile' | 'usage' | 'billing' | 'notifications' | 'rbac' | 'integrations'>((searchParams.get('tab') as any) || 'profile');
-  const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [quotaStatus, setQuotaStatus] = useState<QuotaStatus | null>(null);
-  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
-  const [agentLoading, setAgentLoading] = useState(false);
-  const [error, setError] = useState('');
+
+  const {
+    tenant,
+    quotaStatus,
+    agentConfig,
+    isLoading: tenantLoading,
+    error: error,
+    fetchTenantData,
+    fetchQuotaStatus,
+    fetchAgentConfig
+  } = useTenant();
+
+  const agentLoading = tenantLoading; // Map loading state
 
   const { canManageRoles, canViewTenantSettings, loading: permissionsLoading } = usePermissions();
 
   useEffect(() => {
-    loadTenantData();
-    loadQuotaStatus();
-    loadAgentConfig();
-  }, []);
-
-  const loadTenantData = async () => {
-    try {
-      const data = await tenantsAPI.getCurrentTenant() as Tenant;
-      setTenant(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load tenant data');
-    }
-  };
-
-  const loadQuotaStatus = async () => {
-    try {
-      const response = await quotaAPI.getStatus() as { data: QuotaStatus };
-      setQuotaStatus(response.data);
-    } catch (err: any) {
-      console.error('Failed to load quota:', err);
-    }
-  };
-
-  const loadAgentConfig = async () => {
-    setAgentLoading(true);
-    try {
-      // Try to get the current tenant's agent configuration
-      const config = await publicAgentAPI.admin.getConfig();
-      setAgentConfig(config as AgentConfig);
-    } catch (err: any) {
-      console.error('Failed to load agent config:', err);
-      // Set default if no config exists
-      setAgentConfig({
-        agent_type: 'generic',
-        enabled: false,
-        allowed_tools: [],
-        branding: {
-          primary_color: '#0066CC',
-          company_name: tenant?.name || 'Company'
-        }
-      });
-    } finally {
-      setAgentLoading(false);
-    }
-  };
+    fetchTenantData();
+    fetchQuotaStatus();
+    fetchAgentConfig();
+  }, [fetchTenantData, fetchQuotaStatus, fetchAgentConfig]);
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';

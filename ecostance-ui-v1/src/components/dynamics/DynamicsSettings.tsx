@@ -1,71 +1,59 @@
 import React, { useState, useEffect } from 'react';
+import { useIntegrations } from '../../context/IntegrationContext';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Label } from '../ui/Label';
 import { Badge } from '../ui/Badge';
-import { dynamicsAPI, DynamicsConfigPayload } from '../../services/dynamicsAPI';
+import { dynamicsAPI } from '../../services/dynamicsAPI';
 import { CheckCircle, XCircle, Loader2, Save, Play } from 'lucide-react';
 
 export default function DynamicsSettings() {
-    const [config, setConfig] = useState<DynamicsConfigPayload & { is_configured?: boolean; last_sync?: string }>({
-        tenant_id: '',
-        client_id: '',
-        client_secret: '',
-        resource_url: '',
-        is_configured: false
-    });
-    const [loading, setLoading] = useState(false);
+    const {
+        dynamicsConfig: config,
+        fetchDynamicsConfig: loadConfig,
+        isLoading: loading
+    } = useIntegrations();
+
+    const [configState, setConfigState] = useState(config);
+
+    // Sync local state when context config changes
+    useEffect(() => {
+        setConfigState(config);
+    }, [config]);
+
+    const [localLoading, setLocalLoading] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [testing, setTesting] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     useEffect(() => {
         loadConfig();
-    }, []);
+    }, [loadConfig]);
 
-    const loadConfig = async () => {
-        try {
-            setLoading(true);
-            const data = await dynamicsAPI.getConfig();
-            // Only populate non-secret fields if they exist
-            setConfig(prev => ({
-                ...prev,
-                tenant_id: data.tenant_id || '',
-                client_id: data.client_id || '',
-                resource_url: data.resource_url || '',
-                is_configured: data.is_configured,
-                last_sync: data.last_sync || undefined
-            }));
-        } catch (err: any) {
-            console.error('Failed to load dynamics config', err);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        setConfig(prev => ({ ...prev, [name]: value }));
+        setConfigState(prev => ({ ...prev, [name]: value }));
     };
 
     const handleSave = async () => {
         try {
-            setLoading(true);
+            setLocalLoading(true);
             setMessage(null);
             await dynamicsAPI.saveConfig({
-                tenant_id: config.tenant_id,
-                client_id: config.client_id,
-                client_secret: config.client_secret,
-                resource_url: config.resource_url
+                tenant_id: configState.tenant_id,
+                client_id: configState.client_id,
+                client_secret: configState.client_secret,
+                resource_url: configState.resource_url
             });
             setMessage({ type: 'success', text: 'Configuration saved successfully' });
             // Reload to update status
-            loadConfig();
+            loadConfig(true);
         } catch (err: any) {
             setMessage({ type: 'error', text: err.message || 'Failed to save configuration' });
         } finally {
-            setLoading(false);
+            setLocalLoading(false);
         }
     };
 
@@ -112,7 +100,7 @@ export default function DynamicsSettings() {
                         </p>
                     </div>
                     <div>
-                        {config.is_configured ? (
+                        {configState.is_configured ? (
                             <Badge variant="success" className="flex items-center gap-1">
                                 <CheckCircle className="w-3 h-3" /> Connected
                             </Badge>
@@ -137,7 +125,7 @@ export default function DynamicsSettings() {
                             <Input
                                 id="tenant_id"
                                 name="tenant_id"
-                                value={config.tenant_id}
+                                value={configState.tenant_id}
                                 onChange={handleInputChange}
                                 placeholder="00000000-0000-0000-0000-000000000000"
                                 className="bg-background border-border text-text"
@@ -148,7 +136,7 @@ export default function DynamicsSettings() {
                             <Input
                                 id="client_id"
                                 name="client_id"
-                                value={config.client_id}
+                                value={configState.client_id}
                                 onChange={handleInputChange}
                                 placeholder="00000000-0000-0000-0000-000000000000"
                                 className="bg-background border-border text-text"
@@ -162,7 +150,7 @@ export default function DynamicsSettings() {
                             id="client_secret"
                             name="client_secret"
                             type="password"
-                            value={config.client_secret}
+                            value={configState.client_secret}
                             onChange={handleInputChange}
                             placeholder="Value from App Registration"
                             className="bg-background border-border text-text"
@@ -175,7 +163,7 @@ export default function DynamicsSettings() {
                         <Input
                             id="resource_url"
                             name="resource_url"
-                            value={config.resource_url}
+                            value={configState.resource_url}
                             onChange={handleInputChange}
                             placeholder="https://org123.crm.dynamics.com"
                             className="bg-background border-border text-text"
@@ -188,8 +176,8 @@ export default function DynamicsSettings() {
                         {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         Test Connection
                     </Button>
-                    <Button onClick={handleSave} disabled={loading || testing || syncing}>
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                    <Button onClick={handleSave} disabled={loading || localLoading || testing || syncing}>
+                        {localLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                         Save Configuration
                     </Button>
                 </div>

@@ -202,7 +202,6 @@ def get_multilingual_config_info() -> dict:
             "detection_enabled": LANGUAGE_DETECTION_ENABLED,
             "min_confidence": LANGUAGE_DETECTION_MIN_CONFIDENCE
         },
-        "tenant_whitelist": TENANT_MULTILINGUAL_WHITELIST,
         "collection_suffix": MULTILINGUAL_COLLECTION_SUFFIX,
         "fallback_enabled": FALLBACK_TO_LEGACY
     }

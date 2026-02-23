@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { DocumentsTable, Document } from '../components/DocumentsTable';
 import { useKnowledgeBase } from '../hooks/useKnowledgeBase';
 import { filesAPI, documentProcessingAPI } from '../services/api';
+import { ProcessingJob } from '../services/api.types';
 
 interface KnowledgeBase {
   id: string;
@@ -48,72 +49,56 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
   const [kbName, setKbName] = useState(knowledgeBase?.name || "");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [progressMessage, setProgressMessage] = useState<string>("");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { getKBDetails, deleteFileFromKB } = useKnowledgeBase();
 
-  React.useEffect(() => {
-    const fetchKBData = async () => {
-      setIsLoading(true);
-      try {
-        const data = await getKBDetails(kbId!);
-        console.log('KB Details API Response:', data);
+  const fetchKBData = React.useCallback(async (force = false) => {
+    setIsLoading(true);
+    try {
+      const data = await getKBDetails(kbId!, force);
+      console.log('KB Details API Response:', data);
 
-        if (data) {
-          // Calculate total chunks from all files
-          const totalChunks = (data.files || []).reduce((sum: number, file: any) => {
-            return sum + (file.chunk_count || 0);
-          }, 0);
+      if (data) {
+        // Calculate total chunks from all files
+        const totalChunks = (data.files || []).reduce((sum: number, file: any) => {
+          return sum + (file.chunk_count || 0);
+        }, 0);
 
-          console.log('Calculated total chunks:', totalChunks);
+        console.log('Calculated total chunks:', totalChunks);
 
-          // Transform API response to match our interface
-          const transformedKB: KnowledgeBase = {
-            id: kbId!,
-            name: data.name || kbId!,
-            status: 'Ready',
-            lastUpdated: new Date().toISOString(),
-            totalVectors: data.vectors_count || data.total_points || 0,
-            documents: data.files_count || 0,
-            vectorSize: data.vector_size || 1536,
-            totalChunks: totalChunks,
-            documentData: (data.files || []).map((file: any) => ({
-              id: file.filename,
-              filename: file.filename,
-              fileType: mapFileType(file.file_type),
-              uploadDate: file.upload_date || new Date().toISOString(),
-              chunks: file.chunk_count || 0,
-              fileSize: file.file_size_mb || 'Unknown',
-              characters: file.total_characters || 0,
-              status: 'Indexed',
-              filePath: file.filename,
-              processingDate: file.processing_date || file.upload_date || new Date().toISOString(),
-              chunkSize: 512,
-              embeddingModel: 'text-embedding-ada-002',
-              processingDuration: '0s',
-              firstChunkPreview: '',
-            })),
-          };
-          setKnowledgeBase(transformedKB);
-          setKbName(transformedKB.name);
-        } else {
-          // KB exists but is empty - create a minimal KB object
-          setKnowledgeBase({
-            id: kbId!,
-            name: kbId!,
-            status: 'Ready',
-            lastUpdated: new Date().toISOString(),
-            totalVectors: 0,
-            documents: 0,
-            vectorSize: 1536,
-            totalChunks: 0,
-            documentData: [],
-          });
-          setKbName(kbId!);
-        }
-      } catch (err) {
-        console.error('Error fetching KB data:', err);
-        // KB might be newly created and empty - don't show error
+        // Transform API response to match our interface
+        const transformedKB: KnowledgeBase = {
+          id: kbId!,
+          name: data.name || kbId!,
+          status: 'Ready',
+          lastUpdated: new Date().toISOString(),
+          totalVectors: data.vectors_count || data.total_points || 0,
+          documents: data.files_count || 0,
+          vectorSize: data.vector_size || 1536,
+          totalChunks: totalChunks,
+          documentData: (data.files || []).map((file: any) => ({
+            id: file.filename,
+            filename: file.filename,
+            fileType: mapFileType(file.file_type),
+            uploadDate: file.upload_date || new Date().toISOString(),
+            chunks: file.chunk_count || 0,
+            fileSize: file.file_size_mb || 'Unknown',
+            characters: file.total_characters || 0,
+            status: 'Indexed',
+            filePath: file.filename,
+            processingDate: file.processing_date || file.upload_date || new Date().toISOString(),
+            chunkSize: 512,
+            embeddingModel: 'text-embedding-ada-002',
+            processingDuration: '0s',
+            firstChunkPreview: '',
+          })),
+        };
+        setKnowledgeBase(transformedKB);
+        setKbName(transformedKB.name);
+      } else {
+        // KB exists but is empty - create a minimal KB object
         setKnowledgeBase({
           id: kbId!,
           name: kbId!,
@@ -126,13 +111,30 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
           documentData: [],
         });
         setKbName(kbId!);
-      } finally {
-        setIsLoading(false);
       }
-    };
-
-    fetchKBData();
+    } catch (err) {
+      console.error('Error fetching KB data:', err);
+      // KB might be newly created and empty - don't show error
+      setKnowledgeBase({
+        id: kbId!,
+        name: kbId!,
+        status: 'Ready',
+        lastUpdated: new Date().toISOString(),
+        totalVectors: 0,
+        documents: 0,
+        vectorSize: 1536,
+        totalChunks: 0,
+        documentData: [],
+      });
+      setKbName(kbId!);
+    } finally {
+      setIsLoading(false);
+    }
   }, [kbId, getKBDetails]);
+
+  React.useEffect(() => {
+    fetchKBData();
+  }, [fetchKBData]);
 
   React.useEffect(() => {
     if (knowledgeBase) {
@@ -207,40 +209,7 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
       await deleteFileFromKB(kbId!, doc.filename);
 
       // Refresh the KB details to update the list
-      const data = await getKBDetails(kbId!);
-      if (data) {
-        const totalChunks = (data.files || []).reduce((sum: number, file: any) => {
-          return sum + (file.chunk_count || 0);
-        }, 0);
-
-        const transformedKB: KnowledgeBase = {
-          id: kbId!,
-          name: data.name || kbId!,
-          status: 'Ready',
-          lastUpdated: new Date().toISOString(),
-          totalVectors: data.vectors_count || data.total_points || 0,
-          documents: data.files_count || 0,
-          vectorSize: data.vector_size || 1536,
-          totalChunks: totalChunks,
-          documentData: (data.files || []).map((file: any) => ({
-            id: file.filename,
-            filename: file.filename,
-            fileType: (file.file_type?.replace('pdf-digital', 'pdf') || 'unknown').toLowerCase() as any,
-            uploadDate: file.upload_date || new Date().toISOString(),
-            chunks: file.chunk_count || 0,
-            fileSize: file.file_size_mb || 'Unknown',
-            characters: file.total_characters || 0,
-            status: 'Indexed',
-            filePath: file.filename,
-            processingDate: file.processing_date || file.upload_date || new Date().toISOString(),
-            chunkSize: 512,
-            embeddingModel: file.embedding_model || 'text-embedding-ada-002',
-            processingDuration: '0s',
-            firstChunkPreview: '',
-          })),
-        };
-        setKnowledgeBase(transformedKB);
-      }
+      await fetchKBData(true);
     } catch (error) {
       console.error('Delete failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete document';
@@ -271,40 +240,7 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
       );
 
       // Refresh the KB details to update the list
-      const data = await getKBDetails(kbId!);
-      if (data) {
-        const totalChunks = (data.files || []).reduce((sum: number, file: any) => {
-          return sum + (file.chunk_count || 0);
-        }, 0);
-
-        const transformedKB: KnowledgeBase = {
-          id: kbId!,
-          name: data.name || kbId!,
-          status: 'Ready',
-          lastUpdated: new Date().toISOString(),
-          totalVectors: data.vectors_count || data.total_points || 0,
-          documents: data.files_count || 0,
-          vectorSize: data.vector_size || 1536,
-          totalChunks: totalChunks,
-          documentData: (data.files || []).map((file: any) => ({
-            id: file.filename,
-            filename: file.filename,
-            fileType: (file.file_type?.replace('pdf-digital', 'pdf') || 'unknown').toLowerCase() as any,
-            uploadDate: file.upload_date || new Date().toISOString(),
-            chunks: file.chunk_count || 0,
-            fileSize: file.file_size_mb || 'Unknown',
-            characters: file.total_characters || 0,
-            status: 'Indexed',
-            filePath: file.filename,
-            processingDate: file.processing_date || file.upload_date || new Date().toISOString(),
-            chunkSize: 512,
-            embeddingModel: file.embedding_model || 'text-embedding-ada-002',
-            processingDuration: '0s',
-            firstChunkPreview: '',
-          })),
-        };
-        setKnowledgeBase(transformedKB);
-      }
+      await fetchKBData(true);
     } catch (error) {
       console.error('Bulk delete failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete documents';
@@ -325,55 +261,42 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
 
     setIsUploading(true);
     setUploadError(null);
+    setProgressMessage("Uploading file...");
 
     try {
-      // Step 1: Upload the file
-      const uploadResponse = await filesAPI.upload(file) as any;
-      console.log('File uploaded:', uploadResponse);
+      // Unified call - upload and trigger processing immediately
+      const res = await filesAPI.upload(file, true, kbId!) as any;
 
-      // Step 2: Process the file to the knowledge base
-      // Use the file_path returned by the upload endpoint
-      const processResponse = await documentProcessingAPI.processToKnowledgeBase(
-        uploadResponse.file_path,
-        kbId!
-      );
-      console.log('File processed:', processResponse);
+      if (res.job_id) {
+        // Start polling the new status endpoint
+        const pollStatus = async () => {
+          try {
+            const status = await documentProcessingAPI.getProcessingStatus(res.job_id) as ProcessingJob;
+            setProgressMessage(status.progress_message || "Processing...");
 
-      // Step 3: Refresh the KB details to show the new document
-      const data = await getKBDetails(kbId!);
-      if (data) {
-        // Calculate total chunks from all files
-        const totalChunks = (data.files || []).reduce((sum: number, file: any) => {
-          return sum + (file.chunk_count || 0);
-        }, 0);
-
-        const transformedKB: KnowledgeBase = {
-          id: kbId!,
-          name: data.name || kbId!,
-          status: 'Ready',
-          lastUpdated: new Date().toISOString(),
-          totalVectors: data.vectors_count || data.total_points || 0,
-          documents: data.files_count || 0,
-          vectorSize: data.vector_size || 1536,
-          totalChunks: totalChunks,
-          documentData: (data.files || []).map((file: any) => ({
-            id: file.filename,
-            filename: file.filename,
-            fileType: (file.file_type?.replace('pdf-digital', 'pdf') || 'unknown').toLowerCase() as any,
-            uploadDate: file.upload_date || new Date().toISOString(),
-            chunks: file.chunk_count || 0,
-            fileSize: file.file_size_mb || 'Unknown',
-            characters: file.total_characters || 0,
-            status: 'Indexed',
-            filePath: file.filename,
-            processingDate: file.processing_date || file.upload_date || new Date().toISOString(),
-            chunkSize: 512,
-            embeddingModel: file.embedding_model || 'text-embedding-ada-002',
-            processingDuration: '0s',
-            firstChunkPreview: '',
-          })),
+            if (status.status === 'completed') {
+              setIsUploading(false);
+              setProgressMessage("");
+              fetchKBData(true); // Reload the list
+            } else if (status.status === 'failed') {
+              setUploadError(status.error_message || status.error || "Processing failed");
+              setIsUploading(false);
+              setProgressMessage("");
+            } else {
+              setTimeout(pollStatus, 1000); // Poll every second
+            }
+          } catch (err) {
+            console.error('Polling error:', err);
+            setUploadError("Failed to get processing status");
+            setIsUploading(false);
+            setProgressMessage("");
+          }
         };
-        setKnowledgeBase(transformedKB);
+        pollStatus();
+      } else {
+        // Fallback for when job_id is not returned (old backend behavior)
+        setIsUploading(false);
+        fetchKBData(true);
       }
 
       // Reset file input
@@ -384,8 +307,8 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
       console.error('Upload failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to upload document';
       setUploadError(errorMessage);
-    } finally {
       setIsUploading(false);
+      setProgressMessage("");
     }
   };
 
@@ -472,7 +395,7 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
         <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4" role="alert">
           <div className="flex items-center">
             <Icons.Spinner className="h-4 w-4 animate-spin mr-2" />
-            <span>Uploading and processing document...</span>
+            <span>{progressMessage || "Uploading and processing document..."}</span>
           </div>
         </div>
       )}

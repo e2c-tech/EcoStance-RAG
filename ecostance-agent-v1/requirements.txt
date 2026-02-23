@@ -208,3 +208,4 @@ zstandard==0.25.0
 stripe
 razorpay
 mysql-connector-python
+aiofiles

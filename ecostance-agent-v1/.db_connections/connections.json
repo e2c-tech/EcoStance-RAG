@@ -27,12 +27,12 @@
     "db_path": null,
     "tenant_id": "badcd123-6cc6-4011-b01b-d33d1153f10d"
   },
-  "a5ff464b-b13d-45fd-a418-def60ba7d503_sensor-data2": {
+  "a5ff464b-b13d-45fd-a418-def60ba7d503_sensor-data-db": {
     "type": "mysql",
     "host": "mysql-1fd4b455-products-rb.i.aivencloud.com",
     "port": "12429",
     "username": "avnadmin",
-    "password": "gAAAAABpla4uQPgrABfW-B0m9pfs9FhDSaja-VLP04Edt12jhUEMqlgQp_d9L4f0RbZam-uiDVdOKcnYZfx32RQC4aisg-aYMZHjR76hHTpbLHqG9VQHgtQ=",
+    "password": "gAAAAABpmCwIHxN4hQbNOVytm6Iff0ubQMYVFvw_jmnubVuoyNGLVYSjdfc96OF_0r_BGFGBLrqhlz8pTS5Hr9ShWn6iRpP_LPD0piVTXtuFUXameTjhJ-8=",
     "database": "ai_security_sensors",
     "db_path": null,
     "tenant_id": "a5ff464b-b13d-45fd-a418-def60ba7d503"

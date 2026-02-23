@@ -10,12 +10,13 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 
-from .config import AGENT_MODEL, GOOGLE_API_KEY, GROQ_API_KEY, LLM_PROVIDER, AGENT_TEMPERATURE
+from .config import AGENT_MODEL, GOOGLE_API_KEY, GROQ_API_KEY, LLM_PROVIDER, AGENT_TEMPERATURE, ECOMMERCE_API_URL
+import requests
 from .tools.certificate_tools import get_certificate_details, search_certificates, get_certificate_stats
 from .tools.shopping_tools import search_eco_products, get_eco_impact_summary
 from .tools.kb_tools import create_ecostance_kb_tools
 
-from agents.generic_agent.tools.db_tools import create_db_query_tool
+from agents.generic_agent.tools.db_tools import create_db_query_tool, create_list_db_tables_tool
 
 # Shared tools from the platform
 from app.tools.shared_tools import (
@@ -48,10 +49,12 @@ You MUST use these tags to render cards:
 3. If a user asks "show my certificates" without an ID, ask them to provide their Certificate Number first (unless they are logged in and you have their user_id).
 
 ### KNOWLEDGE BASE HINTS
-- For product/project searches, typically use `kb_name="eco-product-list"`.
+- For product/project searches, use the provided Knowledge Base name if one is 'Active'. 
+- If no Knowledge Base is active, do NOT attempt to search. Ask the user to select one instead.
 
 ### DATABASE USAGE
 - If a database connection is active, you can use `query_database` to look up structured information that might not be in the knowledge base.
+- Do NOT search the database unless a connection is listed as Active.
 
 CRITICAL: Always use type: "text" in your response containing the tags.
 """
@@ -110,8 +113,54 @@ class EcoStanceAgentService(MultilingualAgentMixin):
             
         self.tool_map = {tool.name: tool for tool in self.tools}
         self.conversations: Dict[str, List[Dict]] = {}
+        self._product_registry = {}  # Cache: { "name": "[PRODUCT:id]" }
         
-    def chat(self, session_id: str, message: str, knowledge_base: str = None, database_connection: str = None, user_id: str = None, user_language: str = None) -> Dict:
+    def _get_dynamic_product_mapping(self, context_text: str = "") -> str:
+        """
+        Dynamically builds a mapping string for the prompt based on existing products.
+        If context_text is provided, it can prioritize mentioned products.
+        """
+        try:
+            # 1. Refresh registry if empty
+            if not self._product_registry:
+                # Load products
+                res = requests.get(f"{ECOMMERCE_API_URL}/products", timeout=3)
+                if res.status_code == 200:
+                    data = res.json().get('data', [])
+                    for p in data:
+                        p_id = p.get('id')
+                        p_name = p.get('name')
+                        if p_id and p_name:
+                            self._product_registry[p_name] = f"[PRODUCT:{p_id}]"
+                
+                # Load projects
+                res = requests.get(f"{ECOMMERCE_API_URL}/projects", timeout=3)
+                if res.status_code == 200:
+                    data = res.json().get('data', [])
+                    for p in data:
+                        p_id = p.get('id')
+                        p_title = p.get('title')
+                        if p_id and p_title:
+                            self._product_registry[p_title] = f"[PROJECT:{p_id}]"
+
+            # 2. Filter mapping to only include products mentioned in context_text (if any)
+            relevant_mapping = []
+            for name, tag in self._product_registry.items():
+                if not context_text or name.lower() in context_text.lower():
+                    relevant_mapping.append(f'- "{name}" -> {tag}')
+            
+            if not relevant_mapping:
+                 # If context given but no match, return empty to avoid bloat
+                 if context_text: return "No matching products found in this context."
+                 # If no context given (global fetch), show top few
+                 return "\n".join([f'- "{k}" -> {v}' for k, v in list(self._product_registry.items())[:12]])
+                
+            return "\n".join(relevant_mapping)
+        except Exception as e:
+            logger.error(f"Error building dynamic registry: {e}")
+            return "No specific mapping available."
+        
+    def chat(self, session_id: str, message: str, knowledge_base: str = None, database_connection: str = None, user_id: str = None, user_language: str = None, chat_history: List[Dict] = None, **kwargs) -> Dict:
         try:
             detected_lang, preferred_lang, confidence = self.get_language_context(
                 message, session_id, user_language
@@ -119,6 +168,11 @@ class EcoStanceAgentService(MultilingualAgentMixin):
             
             if session_id not in self.conversations:
                 self.conversations[session_id] = []
+                if chat_history:
+                    # Filter history to only include user and assistant roles for compatibility
+                    for msg in chat_history:
+                        if msg.get("role") in ["user", "assistant"]:
+                            self.conversations[session_id].append(msg)
             
             self.conversations[session_id].append({"role": "user", "content": message})
             
@@ -236,59 +290,55 @@ Format for tool call:
                         elif tool_name == 'search_eco_products':
                             if isinstance(tool_result, list) and len(tool_result) > 0:
                                 # Convert the list of products into a tagged response
-                                items_tags = "".join([f"[PRODUCT:{item.get('id', 'unknown')}]" if item.get('item_type') != 'project' else f"[PROJECT:{item.get('id', 'unknown')}]" for item in tool_result[:3]])
+                                items_tags = "".join([f"[PRODUCT:{item.get('id', 'unknown')}]" if item.get('item_type') != 'project' else f"[PROJECT:{item.get('id', 'unknown')}]" for item in tool_result[:5]])
                                 final_response = {
                                     "type": "text",
                                     "message": f"I've found some options for you! {items_tags}",
                                     "data": None
                                 }
                             else:
-                                # Fallback: Try searching Knowledge Base if store API failed
-                                logger.info("Product search empty, falling back to KB search")
-                                kb_tool = self.tool_map.get('search_knowledge_base')
-                                if kb_tool:
-                                    kb_query = tool_args.get('search') or tool_args.get('category') or message
-                                    # Fix: Provide both query and kb_name
-                                    kb_result = kb_tool.invoke({
-                                        "query": kb_query, 
-                                        "kb_name": tool_args.get('kb_name', 'eco-product-list')
-                                    })
-                                    
-                                    # Use the KB formatter logic
-                                    format_prompt = f"""
-                                    You are the expert EcoStance Ambassador.
-                                    User Query: {message}
-                                    Knowledge Base Content: {kb_result}
-                                    
-                                    YOUR GOAL: Answer the user's question, but YOU MUST SHOW THE PRODUCT CARD.
-                                    
-                                    INSTRUCTIONS:
-                                    1. Identify if the content mentions a product.
-                                    2. Manually map it to one of these IDs if possible:
-                                       - "Nitrous Gas Removal" -> [PRODUCT:e1]
-                                       - "Piedra Wind Farm" -> [PRODUCT:e2]
-                                       - "SantaClara" -> [PRODUCT:e3]
-                                       - "Xinjiang" -> [PRODUCT:e4]
-                                       - "Piedra II" -> [PRODUCT:e5]
-                                       - "Solar Cooker" -> [PRODUCT:e6]
-                                       - "PACAJAI" -> [PRODUCT:e7]
-                                       - "KARIBA" -> [PRODUCT:e8]
-                                       - "VALPARAISO" -> [PRODUCT:e9]
-                                       - "Siviru" -> [PRODUCT:e10]
-                                       - "Seima" -> [PRODUCT:e11]
-                                       - "REC Certificate" -> [PRODUCT:e12]
-                                    
-                                    3. Construct a natural response.
-                                    4. CRITICAL: Append the [PRODUCT:id] tag to your response.
-                                    
-                                    Respond ONLY with the natural chat text containing the tag.
-                                    """
-                                    format_res = self.llm.invoke([HumanMessage(content=format_prompt)])
-                                    final_response = {"type": "text", "message": format_res.content, "data": None}
+                                # Fallback: Try searching Knowledge Base IF one is selected
+                                selected_kb = knowledge_base or tool_args.get('kb_name')
+                                if selected_kb:
+                                    logger.info(f"Product search empty, falling back to KB search in: {selected_kb}")
+                                    kb_tool = self.tool_map.get('search_knowledge_base')
+                                    if kb_tool:
+                                        kb_query = tool_args.get('search') or tool_args.get('category') or message
+                                        kb_result = kb_tool.invoke({
+                                            "query": kb_query, 
+                                            "kb_name": selected_kb
+                                        })
+                                        
+                                        # Use the KB formatter logic
+                                        format_prompt = f"""
+                                        You are the expert EcoStance Ambassador.
+                                        User Query: {message}
+                                        Knowledge Base Content: {kb_result}
+                                        
+                                        YOUR GOAL: Answer the user's question. You MUST show relevant PRODUCT or PROJECT cards.
+                                        
+                                        INSTRUCTIONS:
+                                        1. Identify the MOST RELEVANT products/projects (MAX 3) mentioned in the Knowledge Base Content provided below.
+                                        2. Map names to IDs using this guide:
+    {self._get_dynamic_product_mapping(str(kb_result))}
+                                        
+                                        3. Construct a natural response.
+                                        4. CRITICAL: Include ONLY the top relevant [PRODUCT:id] or [PROJECT:id] tags. Do NOT list products that are not in the search results.
+                                        
+                                        Respond ONLY with the natural chat text containing the tags.
+                                        """
+                                        format_res = self.llm.invoke([HumanMessage(content=format_prompt)])
+                                        final_response = {"type": "text", "message": format_res.content, "data": None}
+                                    else:
+                                        final_response = {
+                                            "type": "text",
+                                            "message": "I couldn't find those products in the store or our records.",
+                                            "data": None
+                                        }
                                 else:
                                     final_response = {
                                         "type": "text",
-                                        "message": "I couldn't find those products in the store or our records.",
+                                        "message": "I couldn't find those products in the store. Please select a Knowledge Base to search for more detailed documentation.",
                                         "data": None
                                     }
                         elif tool_name == 'get_eco_impact_summary':
@@ -298,40 +348,38 @@ Format for tool call:
                                 "data": tool_result
                             }
                         elif tool_name in ['search_knowledge_base', 'search_faq']:
-                            # Use the LLM to format the KB result into a conversation response with [PRODUCT:id] tags
-                            format_prompt = f"""
-                            You are the expert EcoStance Ambassador.
-                            User Query: {message}
-                            Knowledge Base Content: {tool_result}
-                            
-                            YOUR GOAL: Answer the user's question, but YOU MUST SHOW THE PRODUCT CARD.
-                            
-                            INSTRUCTIONS:
-                            1. Identify if the content mentions a product (e.g., "Gas Removal", "Wind Farm", "Cooker").
-                            2. Manually map it to one of these IDs if possible:
-                               - "Nitrous Gas Removal" -> [PRODUCT:e1]
-                               - "Piedra Wind Farm" -> [PRODUCT:e2]
-                               - "SantaClara" -> [PRODUCT:e3]
-                               - "Xinjiang" -> [PRODUCT:e4]
-                               - "Piedra II" -> [PRODUCT:e5]
-                               - "Solar Cooker" -> [PRODUCT:e6]
-                               - "PACAJAI" -> [PRODUCT:e7]
-                               - "KARIBA" -> [PRODUCT:e8]
-                               - "VALPARAISO" -> [PRODUCT:e9]
-                               - "Siviru" -> [PRODUCT:e10]
-                               - "Seima" -> [PRODUCT:e11]
-                               - "REC Certificate" -> [PRODUCT:e12]
-                            
-                            3. Construct a natural response that answers the specific question (like price).
-                            4. CRITICAL: Append the [PRODUCT:id] tag to your response.
-                            
-                            Example: "The price for Nitrous Gas Removal is $540. [PRODUCT:e1]"
-                            
-                            Respond ONLY with the natural chat text containing the tag.
-                            """
-                            format_res = self.llm.invoke([HumanMessage(content=format_prompt)])
-                            # Force type: text as per protocol
-                            final_response = {"type": "text", "message": format_res.content, "data": None}
+                            # Intercept if no KB selected
+                            selected_kb = knowledge_base or tool_args.get('kb_name')
+                            if not selected_kb:
+                                final_response = {
+                                    "type": "text",
+                                    "message": "Please select a Knowledge Base from the sidebar before I can search for expert documentation.",
+                                    "data": None
+                                }
+                            else:
+                                # Use the LLM to format the KB result into a conversation response with [PRODUCT:id] tags
+                                format_prompt = f"""
+                                You are the expert EcoStance Ambassador.
+                                User Query: {message}
+                                Knowledge Base Content: {tool_result}
+                                
+                                YOUR GOAL: Answer the user's question. You MUST show relevant PRODUCT or PROJECT cards.
+                                
+                                INSTRUCTIONS:
+                                1. Identify the MOST RELEVANT products/projects (MAX 3) mentioned in the tool results provided below.
+                                2. Map names to IDs using this guide:
+    {self._get_dynamic_product_mapping(str(tool_result))}
+                                
+                                3. Construct a natural response that answers the specific question.
+                                4. CRITICAL: Include ONLY the relevant [PRODUCT:id] or [PROJECT:id] tags. Do NOT tag products that are not found in the results.
+                                
+                                Example: "We have Nitrous Gas Removal ($540). [PRODUCT:e1]"
+                                
+                                Respond ONLY with the natural chat text containing the tags.
+                                """
+                                format_res = self.llm.invoke([HumanMessage(content=format_prompt)])
+                                # Force type: text as per protocol
+                                final_response = {"type": "text", "message": format_res.content, "data": None}
                         else:
                             final_response = {
                                 "type": "text",

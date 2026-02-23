@@ -149,7 +149,7 @@ class PublicAgentService(MultilingualAgentMixin):
         
         return any(indicator in message_lower for indicator in out_of_scope_indicators)
     
-    def chat(self, session_id: str, message: str, knowledge_base: str = None, database_connection: str = None, user_language: str = None) -> Dict:
+    def chat(self, session_id: str, message: str, knowledge_base: str = None, database_connection: str = None, user_id: str = None, user_language: str = None, chat_history: List[Dict] = None, **kwargs) -> Dict:
         """
         Process a chat message using ReAct pattern with multilingual support
         """
@@ -162,6 +162,10 @@ class PublicAgentService(MultilingualAgentMixin):
             # Initialize conversation history if new session
             if session_id not in self.conversations:
                 self.conversations[session_id] = []
+                if chat_history:
+                    for msg in chat_history:
+                        if msg.get("role") in ["user", "assistant"]:
+                            self.conversations[session_id].append(msg)
             
             # Store selected knowledge base for this session
             if not hasattr(self, 'session_kb'):
