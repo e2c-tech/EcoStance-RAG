@@ -8,8 +8,10 @@ import logging
 from typing import List, Dict, Any, Optional
 from threading import Lock
 import numpy as np
+import httpx
 
 from .langsmith_service import trace_embedding
+from app.config import USE_REMOTE_EMBEDDING, EMBEDDING_SERVER_URL
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +39,10 @@ def set_multilingual_config(enabled: bool, model_name: str = None, batch_size: i
 def load_multilingual_embedding_model():
     """
     Load BGE-M3 multilingual embedding model. 
-    Redirects to the main embedding_service singleton to save memory.
+    If USE_REMOTE_EMBEDDING is enabled, returns None to save memory.
     """
-    global _multilingual_embedding_model
+    if USE_REMOTE_EMBEDDING:
+        return None
     
     if not MULTILINGUAL_ENABLED:
         logger.info("Multilingual embedding disabled")
@@ -70,12 +73,6 @@ def load_multilingual_embedding_model():
                     
                     logger.info("✓ Multilingual embedding model provider ready")
                     
-                    logger.info("✓ BGE-M3 multilingual embedding model loaded successfully")
-                    
-                except ImportError as e:
-                    logger.error(f"BGE-M3 dependencies not installed: {e}")
-                    logger.info("Install with: pip install FlagEmbedding")
-                    return None
                 except Exception as e:
                     logger.error(f"Failed to load multilingual model: {e}")
                     return None
@@ -117,10 +114,10 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None) -> 
         logger.warning("Multilingual embedding called but not enabled")
         return chunks
     
-    if model is None:
+    if model is None and not USE_REMOTE_EMBEDDING:
         model = load_multilingual_embedding_model()
         
-    if model is None:
+    if model is None and not USE_REMOTE_EMBEDDING:
         logger.error("Could not load multilingual embedding model")
         return chunks
     
@@ -135,35 +132,53 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None) -> 
             texts_to_embed.append(text)
         
         logger.info(f"Creating multilingual embeddings for {len(texts_to_embed)} chunks")
-        
-        # Process in batches
+
         all_embeddings = []
-        for i in range(0, len(texts_to_embed), BGE_M3_BATCH_SIZE):
-            batch_texts = texts_to_embed[i:i + BGE_M3_BATCH_SIZE]
-            
-            # Generate embeddings (handle both FlagEmbedding and SentenceTransformer)
-            # BGEM3FlagModel accepts max_length, SentenceTransformer does not
-            encode_kwargs = {"batch_size": len(batch_texts)}
-            
-            # Use specific library check to determine if we should pass max_length
-            from sentence_transformers import SentenceTransformer
-            if not isinstance(model, SentenceTransformer):
-                encode_kwargs["max_length"] = BGE_M3_MAX_LENGTH
-            
-            raw_output = model.encode(batch_texts, **encode_kwargs)
-            
-            # FlagEmbedding returns a dict with 'dense_vecs', SentenceTransformer returns array directly
-            if isinstance(raw_output, dict):
-                batch_embeddings = raw_output['dense_vecs']
-            else:
-                batch_embeddings = raw_output
-            
-            # Normalize if requested
-            if BGE_M3_NORMALIZE:
-                norms = np.linalg.norm(batch_embeddings, axis=1, keepdims=True)
-                batch_embeddings = batch_embeddings / norms
-            
-            all_embeddings.extend(batch_embeddings)
+
+        if USE_REMOTE_EMBEDDING:
+            logger.info(f"Using remote embedding server: {EMBEDDING_SERVER_URL}")
+            try:
+                # Process in batches to avoid giant HTTP requests
+                for i in range(0, len(texts_to_embed), BGE_M3_BATCH_SIZE * 2): # Larger batches for HTTP
+                    batch_texts = texts_to_embed[i:i + BGE_M3_BATCH_SIZE * 2]
+                    response = httpx.post(
+                        f"{EMBEDDING_SERVER_URL}/embed", 
+                        json={"text": batch_texts},
+                        timeout=120.0
+                    )
+                    response.raise_for_status()
+                    all_embeddings.extend(response.json()["embeddings"])
+            except Exception as e:
+                logger.error(f"Remote embedding failed: {e}")
+                raise ValueError(f"Remote embedding server error: {str(e)}")
+        else:
+            # Process in batches locally
+            for i in range(0, len(texts_to_embed), BGE_M3_BATCH_SIZE):
+                batch_texts = texts_to_embed[i:i + BGE_M3_BATCH_SIZE]
+                
+                # Generate embeddings (handle both FlagEmbedding and SentenceTransformer)
+                # BGEM3FlagModel accepts max_length, SentenceTransformer does not
+                encode_kwargs = {"batch_size": len(batch_texts)}
+                
+                # Use specific library check to determine if we should pass max_length
+                from sentence_transformers import SentenceTransformer
+                if not isinstance(model, SentenceTransformer):
+                    encode_kwargs["max_length"] = BGE_M3_MAX_LENGTH
+                
+                raw_output = model.encode(batch_texts, **encode_kwargs)
+                
+                # FlagEmbedding returns a dict with 'dense_vecs', SentenceTransformer returns array directly
+                if isinstance(raw_output, dict):
+                    batch_embeddings = raw_output['dense_vecs']
+                else:
+                    batch_embeddings = raw_output
+                
+                # Normalize if requested
+                if BGE_M3_NORMALIZE:
+                    norms = np.linalg.norm(batch_embeddings, axis=1, keepdims=True)
+                    batch_embeddings = batch_embeddings / norms
+                
+                all_embeddings.extend(batch_embeddings)
         
         # Attach embeddings to chunks
         for chunk, embedding in zip(chunks, all_embeddings):

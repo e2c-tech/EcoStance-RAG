@@ -1,13 +1,49 @@
 version: '3.8'
 
 services:
-  # Ecostance Agent Backend
+  # 1. Message Broker (REQUIRED for Celery)
+  redis:
+    image: redis:alpine
+    container_name: ecostance-redis
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # 2. Shared Embedding Server (The Model Owner)
+  # This container loads the BGE-M3 model and serves vectors on port 9003
+  ecostance-embedding:
+    build:
+      context: ./ecostance-agent-v1
+      dockerfile: Dockerfile
+    container_name: ecostance-embedding
+    command: python -m app.services.embedding_server
+    environment:
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-BAAI/bge-m3}
+      - EMBEDDING_SERVER_PORT=9003
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # 3. Main API Server (Now Lightweight)
   ecostance-agent:
     build:
       context: ./ecostance-agent-v1
       dockerfile: Dockerfile
     container_name: ecostance-agent
     environment:
+      # Hybrid Config
+      - REDIS_URL=redis://redis:6379/0
+      - USE_REMOTE_EMBEDDING=true
+      - EMBEDDING_SERVER_HOST=ecostance-embedding
+      - EMBEDDING_SERVER_PORT=9003
+      # Existing Config
       - DATABASE_URL=${DATABASE_URL}
       - QDRANT_URL=${QDRANT_URL}
       - QDRANT_API_KEY=${QDRANT_API_KEY}
@@ -46,11 +82,43 @@ services:
       - ./ecostance-agent-v1/data:/app/data
     ports:
       - "9000:9000"
+    depends_on:
+      - redis
+      - ecostance-embedding
     restart: unless-stopped
     networks:
       - app-network
 
-  # Ecostance UI Frontend
+  # 4. Background Celery Worker (Handles binary/heavy tasks)
+  ecostance-worker:
+    build:
+      context: ./ecostance-agent-v1
+      dockerfile: Dockerfile
+    container_name: ecostance-worker
+    # Use -P solo for Windows/Simple Linux, or --concurrency=1 for stability
+    command: celery -A app.worker.tasks worker --loglevel=info -P solo
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - USE_REMOTE_EMBEDDING=true
+      - EMBEDDING_SERVER_HOST=ecostance-embedding
+      - EMBEDDING_SERVER_PORT=9003
+      - DATABASE_URL=${DATABASE_URL}
+      - QDRANT_URL=${QDRANT_URL}
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+    volumes:
+      - ./ecostance-agent-v1/uploads:/app/uploads
+      - ./ecostance-agent-v1/data:/app/data
+    depends_on:
+      - redis
+      - ecostance-embedding
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # 5. UI Frontend
   ecostance-ui:
     build:
       context: ./ecostance-ui-v1
@@ -71,4 +139,3 @@ services:
 networks:
   app-network:
     driver: bridge
-

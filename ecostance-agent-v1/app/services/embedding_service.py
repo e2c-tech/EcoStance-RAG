@@ -4,8 +4,10 @@ import torch
 from typing import List, Dict, Any, Optional
 from threading import Lock
 import logging
+import httpx
 
 from .langsmith_service import trace_embedding
+from app.config import USE_REMOTE_EMBEDDING, EMBEDDING_SERVER_URL
 
 logger = logging.getLogger(__name__)
 
@@ -16,18 +18,15 @@ _embedding_model_lock = Lock()
 
 
 @trace_embedding
-def load_embedding_model() -> SentenceTransformer:
+def load_embedding_model() -> Optional[SentenceTransformer]:
     """
     Returns a singleton embedding model instance.
-    
-    This ensures the model is loaded only once and reused across all requests,
-    significantly improving performance and reducing memory usage.
-    
-    The model loading is expensive (~500MB RAM, ~2-3 seconds), so we cache it.
-    
-    Returns:
-        SentenceTransformer: Singleton embedding model instance
+    If USE_REMOTE_EMBEDDING is enabled, returns None to save memory.
     """
+    if USE_REMOTE_EMBEDDING:
+        logger.info("Remote embedding enabled. Skipping local model load.")
+        return None
+
     global _embedding_model
     
     # Double-checked locking pattern for thread-safe singleton
@@ -59,17 +58,32 @@ def get_langchain_embeddings():
     if _langchain_embeddings is None:
         with _embedding_model_lock:
             if _langchain_embeddings is None:
-                from langchain_community.embeddings import HuggingFaceEmbeddings
-                from app.config import EMBEDDING_MODEL_NAME as CONFIG_MODEL_NAME
-                
-                # Ensure the base model is loaded
-                base_model = load_embedding_model()
-                
-                logger.info("Creating LangChain embeddings wrapper for singleton model")
-                _langchain_embeddings = HuggingFaceEmbeddings(
-                    model_name=os.getenv('EMBEDDING_MODEL_NAME', CONFIG_MODEL_NAME or 'BAAI/bge-m3'),
-                    client=base_model
-                )
+                if USE_REMOTE_EMBEDDING:
+                    logger.info("Creating custom RemoteEmbeddings wrapper for LangChain")
+                    class RemoteEmbeddings:
+                        def embed_documents(self, texts: List[str]) -> List[List[float]]:
+                            response = httpx.post(f"{EMBEDDING_SERVER_URL}/embed", json={"text": texts}, timeout=120.0)
+                            response.raise_for_status()
+                            return response.json()["embeddings"]
+                        
+                        def embed_query(self, text: str) -> List[float]:
+                            response = httpx.post(f"{EMBEDDING_SERVER_URL}/embed", json={"text": text}, timeout=60.0)
+                            response.raise_for_status()
+                            return response.json()["embedding"]
+                    
+                    _langchain_embeddings = RemoteEmbeddings()
+                else:
+                    from langchain_community.embeddings import HuggingFaceEmbeddings
+                    from app.config import EMBEDDING_MODEL_NAME as CONFIG_MODEL_NAME
+                    
+                    # Ensure the base model is loaded
+                    base_model = load_embedding_model()
+                    
+                    logger.info("Creating LangChain embeddings wrapper for singleton model")
+                    _langchain_embeddings = HuggingFaceEmbeddings(
+                        model_name=os.getenv('EMBEDDING_MODEL_NAME', CONFIG_MODEL_NAME or 'BAAI/bge-m3'),
+                        client=base_model
+                    )
     
     return _langchain_embeddings
 
@@ -116,13 +130,27 @@ def create_embeddings(chunks: List[Dict[str, Any]], model: SentenceTransformer) 
     # Extract the text content from each chunk to be embedded.
     texts_to_embed = [chunk['text'] for chunk in chunks]
 
-    # Generate embeddings for all texts in a single batch.
-    # The `encode` method returns a list of numpy arrays.
-    embeddings = model.encode(texts_to_embed, show_progress_bar=False)
+    if USE_REMOTE_EMBEDDING:
+        logger.info(f"Using remote embedding server: {EMBEDDING_SERVER_URL}")
+        try:
+            # For query embeddings often passed here, or small batches
+            response = httpx.post(
+                f"{EMBEDDING_SERVER_URL}/embed", 
+                json={"text": texts_to_embed},
+                timeout=60.0
+            )
+            response.raise_for_status()
+            embeddings = response.json()["embeddings"] if isinstance(texts_to_embed, list) and len(texts_to_embed) > 1 else [response.json()["embedding"]]
+        except Exception as e:
+            logger.error(f"Remote embedding failed: {e}")
+            raise ValueError(f"Remote embedding server error: {str(e)}")
+    else:
+        # Generate embeddings for all texts in a single batch.
+        # The `encode` method returns a list of numpy arrays.
+        embeddings = [e.tolist() for e in model.encode(texts_to_embed, show_progress_bar=False)]
 
     # Attach the generated embedding to its corresponding chunk.
-    # We convert the numpy array to a list to ensure it's easily serializable (e.g., for JSON).
     for chunk, embedding in zip(chunks, embeddings):
-        chunk['embedding'] = embedding.tolist()
+        chunk['embedding'] = embedding
 
     return chunks

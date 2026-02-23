@@ -30,3 +30,14 @@ LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "tr
 LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY")
 LANGCHAIN_PROJECT = os.getenv("LANGCHAIN_PROJECT", "ecostance-agent-v1")
 LANGCHAIN_ENDPOINT = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+
+# --- Celery & Redis Configuration ---
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
+
+# --- Embedding Server Configuration ---
+EMBEDDING_SERVER_HOST = os.getenv("EMBEDDING_SERVER_HOST", "localhost")
+EMBEDDING_SERVER_PORT = int(os.getenv("EMBEDDING_SERVER_PORT", "9003"))
+EMBEDDING_SERVER_URL = f"http://{EMBEDDING_SERVER_HOST}:{EMBEDDING_SERVER_PORT}"
+USE_REMOTE_EMBEDDING = os.getenv("USE_REMOTE_EMBEDDING", "false").lower() == "true"

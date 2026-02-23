@@ -3,6 +3,7 @@ import os
 
 from ..services.multilingual_integration_service import process_file_intelligently
 from ..services.job_service import job_tracker
+from ..worker.tasks import process_file_task
 from ..services.qdrant_service import get_qdrant_client
 from ..services.tenant_service import get_tenant_service
 from ..auth.dependencies import get_current_user
@@ -75,9 +76,8 @@ async def upload_to_qdrant(
     # Create a job for tracking
     job_id = job_tracker.create_job(file_path, collection_name, tenant_id=tenant_id)
     
-    # Add the processing task to background tasks with tenant context
-    background_tasks.add_task(
-        background_process_file, 
+    # Add the processing task to Celery
+    process_file_task.delay(
         job_id, 
         file_path, 
         collection_name,

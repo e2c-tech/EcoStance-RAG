@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 # Import processing logic from qdrant_upload
 from .qdrant_upload import background_process_file
+from ..worker.tasks import process_file_task
 from ..services.job_service import job_tracker
 from ..services.qdrant_service import get_qdrant_client
 from ..services.tenant_service import get_tenant_service
@@ -99,9 +100,8 @@ async def upload_file(
             job_id = job_tracker.create_job(file_location, collection_name, tenant_id=tenant_id)
             job_tracker.update_progress(job_id, "Upload complete. Starting processing...")
             
-            # Add processing task
-            background_tasks.add_task(
-                background_process_file, 
+            # Add processing task to Celery
+            process_file_task.delay(
                 job_id, 
                 file_location, 
                 collection_name,
