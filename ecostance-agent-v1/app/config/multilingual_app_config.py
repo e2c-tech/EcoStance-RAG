@@ -21,7 +21,7 @@ FALLBACK_TO_LEGACY = os.getenv("FALLBACK_TO_LEGACY", "true").lower() == "true"
 BGE_M3_MODEL_NAME = "BAAI/bge-m3"
 BGE_M3_EMBEDDING_DIMENSION = 1024
 BGE_M3_MAX_SEQUENCE_LENGTH = 8192
-BGE_M3_BATCH_SIZE = int(os.getenv("BGE_M3_BATCH_SIZE", "32"))
+BGE_M3_BATCH_SIZE = int(os.getenv("BGE_M3_BATCH_SIZE", "128"))
 BGE_M3_NORMALIZE = os.getenv("BGE_M3_NORMALIZE", "true").lower() == "true"
 BGE_M3_DEVICE = os.getenv("BGE_M3_DEVICE", "auto")  # auto, cpu, cuda
 
