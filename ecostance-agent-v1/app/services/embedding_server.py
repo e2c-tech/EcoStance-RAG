@@ -24,6 +24,24 @@ def load_model():
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         logger.info(f"Loading embedding model on device: {device}")
         
+        # Apply GPU VRAM Limit if on CUDA
+        if device == 'cuda':
+            try:
+                # Hardcoded 8GB limit for the Tesla P40
+                vram_limit_mb = 8192 
+                
+                # Get physical device memory
+                total_memory = torch.cuda.get_device_properties(0).total_memory
+                total_memory_mb = total_memory / (1024 * 1024)
+                
+                # Calculate required fraction (e.g., 8192 / 24576 = 0.333...)
+                fraction = min(1.0, vram_limit_mb / total_memory_mb)
+                
+                torch.cuda.set_per_process_memory_fraction(fraction, 0)
+                logger.info(f"✓ GPU VRAM limit hardcoded to {vram_limit_mb}MB ({fraction:.1%} of total {total_memory_mb:.0f}MB)")
+            except Exception as e:
+                logger.warning(f"Could not set GPU memory limit: {e}")
+
         # Determine model name
         model_name = os.getenv('EMBEDDING_MODEL_NAME', EMBEDDING_MODEL_NAME or 'BAAI/bge-m3')
         logger.info(f"Model: {model_name}")
