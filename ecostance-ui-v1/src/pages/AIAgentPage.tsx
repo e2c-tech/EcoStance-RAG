@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { Database, FileText, Send, Loader2, AlertCircle, X, RefreshCw, Shield, Truck, ShoppingCart, Leaf, Sparkles, MessageSquare, Plus, Trash2, Archive, Clock, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Database, FileText, Send, Loader2, AlertCircle, X, RefreshCw, Shield, Truck, ShoppingCart, Leaf, Sparkles, MessageSquare, Plus, Trash2, Archive, Clock, PanelLeftClose, PanelLeftOpen, Edit2, Check } from 'lucide-react';
 import { agentAPI } from '../services/api';
 import type { AgentChatResponse, AgentSession } from '../services/api.types';
 import { useAuth } from '../context/AuthContext.v2';
@@ -98,6 +98,8 @@ export default function AIAgentPage() {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [isSessionsLoading, setIsSessionsLoading] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
@@ -129,8 +131,10 @@ export default function AIAgentPage() {
   const loadSessions = async () => {
     try {
       setIsSessionsLoading(true);
-      const data = await agentAPI.listSessions() as AgentSession[];
-      setSessions(data || []);
+      const response = await agentAPI.listSessions() as any;
+      // Handle both direct array and { sessions: [] } wrapper
+      const sessionsData = Array.isArray(response) ? response : (response?.sessions || []);
+      setSessions(sessionsData);
     } catch (err) {
       console.error('AI Agent: Failed to load sessions:', err);
     } finally {
@@ -139,11 +143,30 @@ export default function AIAgentPage() {
   };
 
   const categorizeSessions = (sessions: AgentSession[]) => {
+    if (!Array.isArray(sessions)) return { active: [], archived: [] };
+
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const active = sessions.filter(s => new Date(s.updated_at || s.created_at) >= thirtyDaysAgo);
-    const archived = sessions.filter(s => new Date(s.updated_at || s.created_at) < thirtyDaysAgo);
+    const active: AgentSession[] = [];
+    const archived: AgentSession[] = [];
+
+    sessions.forEach(s => {
+      const dateStr = s.updated_at || s.created_at;
+      const sessionDate = dateStr ? new Date(dateStr) : new Date();
+
+      if (!isNaN(sessionDate.getTime()) && sessionDate < thirtyDaysAgo) {
+        archived.push(s);
+      } else {
+        active.push(s);
+      }
+    });
+
+    // If for some reason filtering resulted in empty lists but we have sessions, 
+    // put them all in active to ensure the user sees them.
+    if (sessions.length > 0 && active.length === 0 && archived.length === 0) {
+      return { active: sessions, archived: [] };
+    }
 
     return { active, archived };
   };
@@ -151,18 +174,32 @@ export default function AIAgentPage() {
   const loadSessionHistory = async (sid: string) => {
     try {
       setLoading(true);
-      const history = await agentAPI.getHistory(sid) as any;
-      if (history && history.messages && Array.isArray(history.messages)) {
-        console.log('AI Agent: Loaded history:', history.messages.length, 'messages');
-        const mappedMessages: Message[] = history.messages.map((msg: any, index: number) => ({
-          id: `hist-${index}-${Date.now()}`,
-          type: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.timestamp),
-          agent_type: msg.agent_type // Assuming backend stores/returns this, otherwise undefined (generic)
-        }));
-        setMessages(mappedMessages);
-      }
+      const response = await agentAPI.getHistory(sid) as any;
+
+      // Handle both { messages: [] } and direct array responses
+      const rawMessages = Array.isArray(response)
+        ? response
+        : (response?.messages || response?.data?.messages || []);
+
+      console.log('AI Agent: Loaded history:', rawMessages.length, 'messages');
+
+      const mappedMessages: Message[] = rawMessages.map((msg: any, index: number) => {
+        // Handle inconsistent field names between live chat and history
+        const content = msg.content || msg.response || msg.message || '';
+        const role = msg.role || msg.type || 'assistant';
+
+        return {
+          id: msg.id || `hist-${index}-${Date.now()}`,
+          type: role === 'user' || role === 'human' ? 'user' : 'assistant',
+          content: content,
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+          agent_type: msg.agent_type || msg.metadata?.agent_type,
+          source: msg.source || msg.metadata?.source,
+          metadata: msg.metadata || {}
+        };
+      });
+
+      setMessages(mappedMessages);
     } catch (err) {
       console.error('AI Agent: Failed to load session history:', err);
       // If session is invalid, clear it
@@ -287,7 +324,7 @@ export default function AIAgentPage() {
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: response.response,
+        content: response.content || (response as any).response, // Fallback for transition
         timestamp: new Date(response.timestamp),
         agent_type: response.agent_type || agentConfig?.agent_type,
       };
@@ -324,6 +361,23 @@ export default function AIAgentPage() {
       } catch (err) {
         console.error('Failed to delete session:', err);
       }
+    }
+  };
+
+  const handleRenameSession = async (e: React.FormEvent, sid: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!editingTitle.trim()) {
+      setEditingSessionId(null);
+      return;
+    }
+    try {
+      await agentAPI.renameSession(sid, editingTitle.trim());
+      loadSessions();
+    } catch (err) {
+      console.error('AI Agent: Failed to rename session:', err);
+    } finally {
+      setEditingSessionId(null);
     }
   };
 
@@ -404,19 +458,43 @@ export default function AIAgentPage() {
                   <MessageSquare className="w-4 h-4" />
                 </div>
                 <div className="flex-1 min-w-0 pr-6">
-                  <div className={cn(
-                    "text-sm font-semibold truncate",
-                    sessionId === s.session_id ? "text-primary" : "text-text"
-                  )}>
-                    {s.last_message || 'New Conversation'}
-                  </div>
+                  {editingSessionId === s.session_id ? (
+                    <form
+                      onSubmit={(e) => handleRenameSession(e, s.session_id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1"
+                    >
+                      <input
+                        autoFocus
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        className="bg-background border border-primary/50 text-xs px-1 py-0.5 rounded w-full outline-none focus:ring-1 focus:ring-primary"
+                        onBlur={() => setEditingSessionId(null)}
+                      />
+                      <button type="submit" className="text-primary hover:text-primary/70">
+                        <Check className="w-3 h-3" />
+                      </button>
+                    </form>
+                  ) : (
+                    <div className={cn(
+                      "text-sm font-semibold truncate flex items-center gap-2",
+                      sessionId === s.session_id ? "text-primary" : "text-text"
+                    )}>
+                      {s.title || s.last_message || 'New Conversation'}
+                    </div>
+                  )}
                   <div className="text-[10px] text-text-secondary mt-1 font-medium">
-                    {new Date(s.updated_at || s.created_at).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
+                    {(() => {
+                      const dateStr = s.updated_at || s.created_at;
+                      const date = dateStr ? new Date(dateStr) : null;
+                      if (!date || isNaN(date.getTime())) return 'Recently';
+                      return date.toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      });
+                    })()}
                   </div>
                 </div>
                 <button
@@ -425,6 +503,17 @@ export default function AIAgentPage() {
                   title="Delete conversation"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingSessionId(s.session_id);
+                    setEditingTitle(s.title || s.last_message || 'New Conversation');
+                  }}
+                  className="absolute right-9 top-1/2 -translate-y-1/2 p-1 text-text-secondary opacity-0 group-hover:opacity-100 hover:text-primary transition-all rounded-md hover:bg-surface"
+                  title="Rename session"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             ))}
@@ -800,7 +889,12 @@ export default function AIAgentPage() {
               <div className={`max-w-[85%] ${msg.type === 'user' ? 'order-2' : 'order-1'} group/msg relative`}>
                 {msg.type === 'user' ? (
                   <div className="bg-primary text-white px-5 py-3 rounded-2xl rounded-tr-none shadow-md">
-                    <p className="text-sm leading-relaxed">{msg.content as string}</p>
+                    <p className="text-sm leading-relaxed">
+                      {(() => {
+                        const content = parseAgentResponse(msg.content);
+                        return typeof content === 'object' ? JSON.stringify(content) : content;
+                      })()}
+                    </p>
                     <span className="text-[9px] opacity-60 mt-1 block text-right">
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>

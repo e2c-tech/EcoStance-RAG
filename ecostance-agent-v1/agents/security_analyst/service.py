@@ -235,14 +235,14 @@ DO NOT provide multiple JSON blocks.
                     # Non-JSON response or parsing failed: treating as final if it looks like a message
                     final_text = text
                     self.conversations[session_id].append({"role": "assistant", "content": final_text})
-                    return {"response": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
+                    return {"content": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
 
                 tool_name = decision.get('tool')
                 
                 if tool_name == 'none' or not tool_name or is_last_turn:
                     final_text = decision.get('response', decision.get('reasoning', text))
                     self.conversations[session_id].append({"role": "assistant", "content": final_text})
-                    return {"response": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
+                    return {"content": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
                 
                 if tool_name in self.tool_map:
                     args = decision.get('args', {})
@@ -300,11 +300,11 @@ DO NOT provide multiple JSON blocks.
             # Exhausted iterations
             final_text = "I've analyzed the available sources but could not find a definitive answer. Please provide more clues or try a different query."
             self.conversations[session_id].append({"role": "assistant", "content": final_text})
-            return {"response": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
+            return {"content": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
             
         except Exception as e:
             logger.error(f"Security Analyst Error: {e}")
-            return {"response": "An internal error occurred during analysis.", "session_id": session_id, "success": False}
+            return {"content": "An internal error occurred during analysis.", "session_id": session_id, "success": False}
 
     def get_conversation_history(self, session_id: str) -> List[Dict]:
         return self.conversations.get(session_id, [])

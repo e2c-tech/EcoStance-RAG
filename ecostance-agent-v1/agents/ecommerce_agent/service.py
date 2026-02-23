@@ -126,6 +126,13 @@ class EcommerceAgentService(MultilingualAgentMixin):
         """Simple keyword check for clearly out-of-scope queries."""
         return False
 
+    def reset_conversation(self, session_id: str) -> bool:
+        """Reset conversation history for a session."""
+        if session_id in self.conversations:
+            self.conversations[session_id] = []
+            return True
+        return False
+
     def chat(self, session_id: str, message: str, knowledge_base: str = None, database_connection: str = None, user_id: str = None, user_language: str = None, chat_history: List[Dict] = None, **kwargs) -> Dict:
         """
         Process a chat message using ReAct pattern with multilingual support
@@ -241,15 +248,20 @@ OR (if finished):
                 if not decision:
                     final_msg = {"type": "text", "message": text, "data": None}
                     self.conversations[session_id].append({"role": "assistant", "content": text})
-                    return {"response": final_msg, "session_id": session_id, "success": True}
+                    return {"content": text, "session_id": session_id, "success": True}
 
                 tool_name = decision.get('tool')
                 
                 if tool_name == 'none' or not tool_name or is_last_turn:
-                    final_response = decision.get('response', {"type": "text", "message": text, "data": None})
-                    self.conversations[session_id].append({"role": "assistant", "content": json.dumps(final_response)})
+                    final_response = decision.get('response', text)
+                    if isinstance(final_response, dict):
+                        content = final_response.get('message', str(final_response))
+                    else:
+                        content = str(final_response)
+                        
+                    self.conversations[session_id].append({"role": "assistant", "content": content})
                     return {
-                        "response": final_response,
+                        "content": content,
                         "session_id": session_id,
                         "language": preferred_lang,
                         "success": True

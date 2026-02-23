@@ -874,7 +874,7 @@ export const billingAPI = {
   },
 };
 
-// AI Agent Beta API
+// AI Agent API
 export const agentAPI = {
   chat: async (
     message: string,
@@ -896,7 +896,7 @@ export const agentAPI = {
     }
     if (databaseConnection) body.database_connection = databaseConnection;
 
-    const response = await fetchWithAuth('/beta/agent/chat', {
+    const response = await fetchWithAuth('/public-agent/agent/chat', {
       method: 'POST',
       body: JSON.stringify(body),
     });
@@ -904,29 +904,37 @@ export const agentAPI = {
   },
 
   getConfig: async () => {
-    const response = await fetchWithAuth('/beta/agent/config');
+    const response = await fetchWithAuth('/public-agent/agent/config');
     return handleResponse(response);
   },
 
   getHistory: async (sessionId: string) => {
-    const response = await fetchWithAuth(`/beta/agent/history/${sessionId}`);
+    const response = await fetchWithAuth(`/public-agent/agent/history/${sessionId}`);
     return handleResponse(response);
   },
 
   reset: async (sessionId: string) => {
-    const response = await fetchWithAuth(`/beta/agent/reset/${sessionId}`, {
+    const response = await fetchWithAuth(`/public-agent/agent/reset/${sessionId}`, {
       method: 'POST',
     });
     return handleResponse(response);
   },
 
   listSessions: async () => {
-    const response = await fetchWithAuth('/beta/agent/sessions');
+    const response = await fetchWithAuth('/public-agent/agent/sessions');
+    return handleResponse(response);
+  },
+
+  renameSession: async (sessionId: string, title: string) => {
+    const response = await fetchWithAuth(`/public-agent/agent/rename/${sessionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    });
     return handleResponse(response);
   },
 
   deleteSession: async (sessionId: string) => {
-    const response = await fetchWithAuth(`/beta/agent/sessions/${sessionId}`, {
+    const response = await fetchWithAuth(`/public-agent/agent/sessions/${sessionId}`, {
       method: 'DELETE',
     });
     return handleResponse(response);

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Form, BackgroundTasks
 import os
 import logging
+from typing import Optional
 
-from ..services.file_upload_service import save_upload_file
+from ..services.file_upload_service import save_upload_file_async
 from ..services.file_access_service import get_file_access_service
 from ..auth.dependencies import get_tenant_id, get_current_user
 from ..auth.rbac import RBACService
@@ -11,26 +12,33 @@ from ..services.audit_service import AuditService
 from ..db.database import get_db
 from sqlalchemy.orm import Session
 
+# Import processing logic from qdrant_upload
+from .qdrant_upload import background_process_file
+from ..services.job_service import job_tracker
+from ..services.qdrant_service import get_qdrant_client
+from ..services.tenant_service import get_tenant_service
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 @router.post("/upload/")
-def upload_file(
+async def upload_file(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    process_now: bool = Form(False),
+    kb_name: str = Form("default"),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Accepts a file upload, saves it to a tenant-specific directory,
-    and returns the path to the saved file. This endpoint ONLY handles the upload.
+    Accepts a file upload, saves it to a tenant-specific directory.
+    
+    If process_now is True, it automatically starts the Qdrant processing pipeline
+    and returns a job_id for tracking both upload and processing.
     
     Files are stored in: uploads/{tenant_id}/{filename}
-    
-    Includes storage quota checking to prevent exceeding limits.
-    
-    Requires: FILE_UPLOAD permission
     """
     tenant_id = current_user["tenant_id"]
     user_id = current_user["user_id"]
@@ -42,54 +50,65 @@ def upload_file(
     try:
         file_service = get_file_access_service()
         
-        # Get file size
-        file.file.seek(0, 2)  # Seek to end
+        # Get file size safely
+        file.file.seek(0, 2)
         file_size = file.file.tell()
-        file.file.seek(0)  # Reset to beginning
+        file.file.seek(0)
         
-        # TODO: Get quota from tenant settings in database
-        # For now, use default quota of 10GB
-        default_quota_mb = 10000
+        # Get quota (default 10GB if not found)
+        from ..services.quota_service import QuotaService
+        quota_service = QuotaService(db)
+        quotas = quota_service.get_tenant_quotas(tenant_id)
+        max_storage_bytes = quotas.get("max_storage_bytes", 10 * 1024 * 1024 * 1024)
         
         # Check storage quota
         quota_check = file_service.check_storage_quota(
             tenant_id,
-            default_quota_mb,
+            max_storage_bytes / (1024 * 1024),
             file_size
         )
         
         if not quota_check['within_quota']:
-            logger.warning(
-                f"Upload rejected for tenant {tenant_id}: quota exceeded "
-                f"({quota_check['usage_percent']}% used)"
-            )
             raise HTTPException(
                 status_code=413,
-                detail={
-                    "error": "Storage quota exceeded",
-                    "quota_mb": quota_check['quota_mb'],
-                    "current_usage_mb": quota_check['current_usage_mb'],
-                    "available_mb": quota_check['available_mb'],
-                    "usage_percent": quota_check['usage_percent']
-                }
+                detail="Storage quota exceeded"
             )
         
         # Create tenant-specific upload directory
         upload_dir = file_service.ensure_tenant_directory(tenant_id)
         file_location = os.path.join(upload_dir, file.filename)
         
-        # Save file
-        save_upload_file(upload_file=file, destination=file_location)
+        # Save file asynchronously
+        await save_upload_file_async(upload_file=file, destination=file_location)
         
-        # Get updated usage
-        usage = file_service.get_tenant_storage_usage(tenant_id)
+        # If processing is requested, start the background job
+        job_id = None
+        if process_now:
+            # Check KB_UPLOAD permission if processing is requested
+            rbac.require_permission(tenant_id, user_id, Permission.KB_UPLOAD)
+            
+            # Generate collection name
+            qdrant_client = get_qdrant_client()
+            tenant_service = get_tenant_service(qdrant_client)
+            collection_name = tenant_service.get_collection_name(tenant_id, kb_name)
+            
+            # Ensure collection exists
+            tenant_service.create_tenant_collection(tenant_id, kb_name)
+            
+            # Create a job for tracking
+            job_id = job_tracker.create_job(file_location, collection_name)
+            job_tracker.update_progress(job_id, "Upload complete. Starting processing...")
+            
+            # Add processing task
+            background_tasks.add_task(
+                background_process_file, 
+                job_id, 
+                file_location, 
+                collection_name,
+                tenant_id
+            )
         
-        logger.info(
-            f"File uploaded for tenant {tenant_id}: {file.filename} "
-            f"({round(file_size / (1024 * 1024), 2)} MB)"
-        )
-        
-        # Log successful upload (non-blocking)
+        # Log successful upload
         try:
             audit = AuditService(db)
             audit.log_action(
@@ -100,7 +119,9 @@ def upload_file(
                 resource_id=file.filename,
                 details={
                     "filename": file.filename,
-                    "size_mb": round(file_size / (1024 * 1024), 2)
+                    "size_mb": round(file_size / (1024 * 1024), 2),
+                    "processed": process_now,
+                    "job_id": job_id
                 },
                 status="success",
                 request=request
@@ -109,38 +130,16 @@ def upload_file(
             logger.warning(f"Failed to log audit for file upload: {audit_error}")
         
         return {
-            "message": "File uploaded successfully. Use the returned path to process the file.",
+            "message": "File uploaded successfully" + (". Processing started." if process_now else "."),
             "file_path": file_location,
-            "tenant_id": tenant_id,
             "filename": file.filename,
             "size_mb": round(file_size / (1024 * 1024), 2),
-            "storage_usage": {
-                "total_files": usage['total_files'],
-                "total_mb": usage['total_mb'],
-                "quota_mb": default_quota_mb,
-                "usage_percent": round((usage['total_mb'] / default_quota_mb) * 100, 2)
-            }
+            "job_id": job_id,
+            "status_url": f"/api/v1/processing-status/{job_id}" if job_id else None
         }
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Upload failed for tenant {tenant_id}: {e}")
-        
-        # Log failure (non-blocking)
-        try:
-            audit = AuditService(db)
-            audit.log_action(
-                tenant_id=tenant_id,
-                user_id=user_id,
-                action="upload_file",
-                resource_type="file",
-                details={"filename": file.filename},
-                status="failure",
-                error_message=str(e),
-                request=request
-            )
-        except Exception as audit_error:
-            logger.warning(f"Failed to log audit for failed upload: {audit_error}")
-        
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")

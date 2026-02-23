@@ -149,6 +149,7 @@ class PublicAgentService:
         session = PublicAgentSession(
             session_id=session_id,
             tenant_id=tenant_id,
+            title="New Conversation",
             session_metadata=json.dumps(metadata or {})
         )
         self.db.add(session)
@@ -171,6 +172,28 @@ class PublicAgentService:
             if is_query:
                 session.query_count += 1
             self.db.commit()
+
+    def rename_session(self, session_id: str, tenant_id: str, new_title: str) -> bool:
+        """Rename a session title with tenant verification."""
+        session = self.db.query(PublicAgentSession).filter(
+            and_(
+                PublicAgentSession.session_id == session_id,
+                PublicAgentSession.tenant_id == tenant_id
+            )
+        ).first()
+
+        if session:
+            session.title = new_title
+            session.last_activity = datetime.utcnow()
+            self.db.commit()
+            return True
+        return False
+
+    def list_sessions(self, tenant_id: str) -> List[PublicAgentSession]:
+        """List all sessions for a tenant, ordered by last activity."""
+        return self.db.query(PublicAgentSession).filter(
+            PublicAgentSession.tenant_id == tenant_id
+        ).order_by(PublicAgentSession.last_activity.desc()).all()
 
     def get_session(self, session_id: str, tenant_id: str = None) -> Optional[PublicAgentSession]:
         """Get session by ID with optional tenant filtering."""

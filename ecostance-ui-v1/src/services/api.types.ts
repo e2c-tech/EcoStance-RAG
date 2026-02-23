@@ -472,7 +472,7 @@ export interface AgentChatRequest {
 }
 
 export interface AgentChatResponse {
-  response: any;
+  content: any;
   agent_type?: string;
   session_id: string;
   timestamp: string;
@@ -492,6 +492,7 @@ export interface AgentHistoryResponse {
 
 export interface AgentSession {
   session_id: string;
+  title?: string;
   last_message?: string;
   updated_at: string;
   created_at: string;

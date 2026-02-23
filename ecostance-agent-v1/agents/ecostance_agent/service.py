@@ -393,10 +393,11 @@ Format for tool call:
                     # It was already a direct response in JSON or malformed
                     final_response = decision if 'type' in decision else {"type": "text", "message": str(decision), "data": None}
 
-            self.conversations[session_id].append({"role": "assistant", "content": json.dumps(final_response)})
+            content = final_response.get("message") if isinstance(final_response, dict) else str(final_response)
+            self.conversations[session_id].append({"role": "assistant", "content": content})
             
             return {
-                "response": final_response,
+                "content": content,
                 "session_id": session_id,
                 "language": preferred_lang,
                 "success": True
@@ -405,7 +406,14 @@ Format for tool call:
         except Exception as e:
             logger.error(f"EcoStance Agent Error: {e}", exc_info=True)
             return {
-                "response": {"type": "text", "message": "I'm having a bit of trouble, please try again."},
+                "content": "I'm having a bit of trouble connecting to my service, please try again.",
                 "session_id": session_id,
-                "success": False
+                "success": False,
+                "error": str(e)
             }
+    def reset_conversation(self, session_id: str) -> bool:
+        """Reset conversation history for a session."""
+        if session_id in self.conversations:
+            self.conversations[session_id] = []
+            return True
+        return False

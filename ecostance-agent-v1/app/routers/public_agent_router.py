@@ -296,7 +296,7 @@ async def chat_with_public_agent(
 
 
 @router.get(
-    "/api/v1/public-agent/config",
+    "/api/v1/public-agent/agent/config",
     response_model=PublicAgentConfigResponse,
     responses={
         503: {"model": PublicAgentConfigDisabledResponse}
@@ -305,15 +305,14 @@ async def chat_with_public_agent(
 )
 async def get_public_agent_config(
     request: Request,
+    current_user: dict = Depends(get_current_user), # Use auth to get tenant
     db: Session = Depends(get_db)
 ):
     """
     Get the current public agent configuration for rendering the UI.
-    
-    This endpoint is public and does not require authentication.
     """
     try:
-        tenant_id = get_tenant_id_from_request(request)
+        tenant_id = current_user.get("tenant_id")
         service = PublicAgentService(db)
         
         config = service.get_config(tenant_id)
@@ -408,8 +407,117 @@ async def submit_feedback(
 
 
 # ============================================================================
-# Admin Configuration Endpoints (Authentication Required)
+# Session & History Management
 # ============================================================================
+
+class ConversationMessage(BaseModel):
+    role: str
+    content: str
+    timestamp: Optional[str] = None
+    tool_used: Optional[str] = None
+
+class ConversationHistory(BaseModel):
+    session_id: str
+    messages: List[ConversationMessage]
+
+class RenameSessionRequest(BaseModel):
+    title: str
+
+@router.get(
+    "/api/v1/public-agent/agent/sessions",
+    tags=["Public Agent"]
+)
+async def list_agent_sessions(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List agent chat sessions for the current user/tenant."""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        service = PublicAgentService(db)
+        sessions = service.list_sessions(tenant_id)
+        return {"sessions": [s.to_dict() for s in sessions]}
+    except Exception as e:
+        logger.error(f"Error listing sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get(
+    "/api/v1/public-agent/agent/history/{session_id}",
+    response_model=ConversationHistory,
+    tags=["Public Agent"]
+)
+async def get_agent_history(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get content-standardized conversation history."""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        service = PublicAgentService(db)
+        
+        db_messages = service.get_session_messages(session_id, tenant_id)
+        messages = [
+            ConversationMessage(
+                role=msg.role,
+                content=msg.content,
+                timestamp=msg.timestamp.isoformat() if msg.timestamp else None,
+                tool_used=msg.tool_used
+            )
+            for msg in db_messages
+        ]
+        
+        return ConversationHistory(session_id=session_id, messages=messages)
+    except Exception as e:
+        logger.error(f"Error getting history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch(
+    "/api/v1/public-agent/agent/rename/{session_id}",
+    tags=["Public Agent"]
+)
+async def rename_agent_session(
+    session_id: str,
+    request: RenameSessionRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Rename a conversation session."""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        service = PublicAgentService(db)
+        success = service.rename_session(session_id, tenant_id, request.title)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found or unauthorized")
+            
+        return {"message": "Session renamed successfully", "success": True}
+    except Exception as e:
+        logger.error(f"Error renaming session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post(
+    "/api/v1/public-agent/agent/reset/{session_id}",
+    tags=["Public Agent"]
+)
+async def reset_agent_conversation(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Reset conversation for a session."""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        # Reuse existing QuickShip agent logic for resetting
+        from agents.quickship_agent.router import get_agent_service
+        agent_service = get_agent_service(tenant_id, db)
+        success = agent_service.reset_conversation(session_id)
+        
+        return {"message": "Conversation reset", "success": success}
+    except Exception as e:
+        logger.error(f"Error resetting conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get(
     "/api/v1/admin/public-agent/config",

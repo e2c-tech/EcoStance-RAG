@@ -28,16 +28,23 @@ class ChatRequest(BaseModel):
     database_connection: Optional[str] = None
 
 class ChatResponse(BaseModel):
-    response: str
+    content: str
     session_id: str
     success: bool
     agent_type: str
     timestamp: str
+    tool_used: Optional[str] = None
     error: Optional[str] = None
+
+class ConversationMessage(BaseModel):
+    role: str
+    content: str
+    timestamp: Optional[str] = None
+    tool_used: Optional[str] = None
 
 class ConversationHistory(BaseModel):
     session_id: str
-    messages: List[Dict]
+    messages: List[ConversationMessage]
 
 # --- Service Factory ---
 
@@ -115,13 +122,14 @@ async def chat_with_agent(
             session_id, 
             request.message, 
             knowledge_base=request.knowledge_base,
-            database_connection=request.database_connection
+            database_connection=request.database_connection,
+            chat_history=formatted_history
         )
         
         # Add assistant response to DB
-        assistant_response = result.get("response", "")
+        content = result.get("content", "")
         tool_used = result.get("tool_used")
-        persistence_service.add_message(session_id, tenant_id, "assistant", assistant_response, tool_used=tool_used)
+        persistence_service.add_message(session_id, tenant_id, "assistant", content, tool_used=tool_used)
         
         # Update session activity
         persistence_service.update_session_activity(session_id, tenant_id, is_query=True)
@@ -146,12 +154,27 @@ async def get_conversation_history(
     """Get conversation history for a session"""
     try:
         tenant_id = current_user.get("tenant_id")
-        agent_service = get_agent_service(tenant_id, db)
-        messages = agent_service.get_conversation_history(session_id)
+        from app.services.public_agent_service import PublicAgentService as PersistenceService
+        persistence_service = PersistenceService(db)
+        
+        db_messages = persistence_service.get_session_messages(session_id, tenant_id)
+        messages = [
+            ConversationMessage(
+                role=msg.role,
+                content=msg.content,
+                timestamp=msg.timestamp.isoformat() if msg.timestamp else None,
+                tool_used=msg.tool_used
+            )
+            for msg in db_messages
+        ]
+        
         return ConversationHistory(session_id=session_id, messages=messages)
     except Exception as e:
         logger.error(f"Error getting conversation history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+class RenameSessionRequest(BaseModel):
+    title: str
 
 @router.post("/agent/reset/{session_id}")
 async def reset_conversation(
@@ -171,6 +194,31 @@ async def reset_conversation(
         }
     except Exception as e:
         logger.error(f"Error resetting conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/agent/rename/{session_id}")
+async def rename_session(
+    session_id: str,
+    request: RenameSessionRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Rename a conversation session"""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        from app.services.public_agent_service import PublicAgentService
+        service = PublicAgentService(db)
+        
+        success = service.rename_session(session_id, tenant_id, request.title)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found or unauthorized")
+            
+        return {"message": "Session renamed successfully", "success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error renaming session: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/agent/config")

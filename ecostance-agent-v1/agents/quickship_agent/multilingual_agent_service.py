@@ -502,7 +502,7 @@ OR (if finished):
                         "language": preferred_language
                     })
                     return {
-                        "response": analysis_text,
+                        "content": analysis_text,
                         "session_id": session_id,
                         "language": preferred_language,
                         "success": True
@@ -522,7 +522,7 @@ OR (if finished):
                     })
                     
                     return {
-                        "response": response_text,
+                        "content": response_text,
                         "session_id": session_id,
                         "language": response_language,
                         "detected_language": detected_language,
@@ -550,7 +550,7 @@ OR (if finished):
                             self.conversations[session_id]["messages"].append({
                                 "role": "assistant", "content": kb_msg, "language": preferred_language
                             })
-                            return {"response": kb_msg, "session_id": session_id, "success": True}
+                            return {"content": kb_msg, "session_id": session_id, "success": True}
 
                     logger.info(f"Executing multilingual tool: {tool_name}")
                     
@@ -596,7 +596,7 @@ OR (if finished):
                 })
             
             return {
-                "response": error_response,
+                "content": error_response,
                 "session_id": session_id,
                 "language": preferred_language if 'preferred_language' in locals() else "en",
                 "detected_language": detected_language if 'detected_language' in locals() else "unknown",

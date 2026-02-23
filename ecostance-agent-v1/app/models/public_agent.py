@@ -63,6 +63,7 @@ class PublicAgentSession(Base):
 
     session_id = Column(String(100), primary_key=True)
     tenant_id = Column(String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255))
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     ended_at = Column(DateTime)
     message_count = Column(Integer, default=0, nullable=False)
@@ -78,11 +79,13 @@ class PublicAgentSession(Base):
         return {
             "session_id": self.session_id,
             "tenant_id": self.tenant_id,
+            "title": self.title,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "ended_at": self.ended_at.isoformat() if self.ended_at else None,
             "message_count": self.message_count,
             "query_count": self.query_count,
             "last_activity": self.last_activity.isoformat() if self.last_activity else None,
+            "updated_at": self.last_activity.isoformat() if self.last_activity else None,
             "metadata": json.loads(self.session_metadata) if isinstance(self.session_metadata, str) else self.session_metadata,
         }
 
