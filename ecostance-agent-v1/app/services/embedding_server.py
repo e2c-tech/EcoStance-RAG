@@ -46,13 +46,8 @@ def load_model():
         model_name = os.getenv('EMBEDDING_MODEL_NAME', EMBEDDING_MODEL_NAME or 'BAAI/bge-m3')
         logger.info(f"Model: {model_name}")
         
-        # Force safetensors to avoid the CVE-2025-32434 torch.load block on older torch versions
-        model = SentenceTransformer(
-            model_name, 
-            device=device,
-            model_kwargs={"use_safetensors": True}
-        )
-        logger.info("✓ Model loaded successfully using SafeTensors!")
+        model = SentenceTransformer(model_name, device=device)
+        logger.info("✓ Model loaded successfully!")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
         raise e

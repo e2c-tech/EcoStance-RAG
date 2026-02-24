@@ -37,15 +37,11 @@ def load_embedding_model() -> Optional[SentenceTransformer]:
                 device = 'cuda' if torch.cuda.is_available() else 'cpu'
                 logger.info(f"Loading embedding model singleton on device: {device}")
                 
-                # Load a pre-trained model using SafeTensors to bypass torch.load vulnerabilities
+                # Load a pre-trained model.
                 from app.config import EMBEDDING_MODEL_NAME as CONFIG_MODEL_NAME
                 model_name = os.getenv('EMBEDDING_MODEL_NAME', CONFIG_MODEL_NAME or 'BAAI/bge-m3')
                 logger.info(f"Using embedding model: {model_name}")
-                _embedding_model = SentenceTransformer(
-                    model_name, 
-                    device=device,
-                    model_kwargs={"use_safetensors": True}
-                )
+                _embedding_model = SentenceTransformer(model_name, device=device)
                 
                 logger.info("✓ Embedding model singleton loaded successfully")
     
