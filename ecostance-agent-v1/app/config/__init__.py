@@ -21,9 +21,9 @@ AGENT_MODEL = os.getenv("AGENT_MODEL", "gemini-2.5-flash-lite")
 AGENT_TEMPERATURE = float(os.getenv("AGENT_TEMPERATURE", "0.3"))
 
 # --- Embedding Model Configuration ---
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-m3")
-EMBEDDING_VECTOR_SIZE = int(os.getenv("EMBEDDING_VECTOR_SIZE", "1024"))
-DISTANCE_METRIC = os.getenv("DISTANCE_METRIC", "Cosine")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME")
+EMBEDDING_VECTOR_SIZE = int(os.getenv("EMBEDDING_VECTOR_SIZE"))
+DISTANCE_METRIC = os.getenv("DISTANCE_METRIC")
 
 # --- LangSmith Configuration ---
 LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
@@ -38,6 +38,6 @@ CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
 
 # --- Embedding Server Configuration ---
 EMBEDDING_SERVER_HOST = os.getenv("EMBEDDING_SERVER_HOST", "localhost")
-EMBEDDING_SERVER_PORT = int(os.getenv("EMBEDDING_SERVER_PORT", "9003"))
+EMBEDDING_SERVER_PORT = int(os.getenv("EMBEDDING_SERVER_PORT", "8001"))
 EMBEDDING_SERVER_URL = f"http://{EMBEDDING_SERVER_HOST}:{EMBEDDING_SERVER_PORT}"
-USE_REMOTE_EMBEDDING = os.getenv("USE_REMOTE_EMBEDDING", "false").lower() == "true"
+USE_REMOTE_EMBEDDING = os.getenv("USE_REMOTE_EMBEDDING", "true").lower() == "true"
