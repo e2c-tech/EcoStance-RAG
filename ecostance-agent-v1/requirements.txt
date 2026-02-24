@@ -174,7 +174,7 @@ sqlparse==0.5.5
 sqlmodel==0.0.22
 starlette==0.50.0
 streamlit==1.52.2
-sympy==1.14.0
+sympy==1.13.1
 tenacity==8.5.0
 threadpoolctl==3.6.0
 tiktoken==0.12.0
