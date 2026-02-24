@@ -97,7 +97,7 @@ def get_client_metadata(request: Request) -> dict:
 # ============================================================================
 
 @router.post(
-    "/api/v1/public-agent/chat",
+    "/api/v1/public-agent/agent/chat",
     response_model=PublicAgentChatResponse,
     responses={
         429: {"model": RateLimitError},
@@ -359,7 +359,7 @@ async def get_public_agent_config(
 
 
 @router.post(
-    "/api/v1/public-agent/feedback",
+    "/api/v1/public-agent/agent/feedback",
     response_model=PublicAgentFeedbackResponse,
     tags=["Public Agent"]
 )
