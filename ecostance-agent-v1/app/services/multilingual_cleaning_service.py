@@ -6,6 +6,8 @@ Extends the base cleaning service with improved language detection and metadata
 import hashlib
 import re
 import logging
+import concurrent.futures
+import math
 from typing import List, Dict, Any, Tuple
 from langdetect import detect, detect_langs, LangDetectException
 
@@ -58,55 +60,73 @@ def is_multilingual_content(text: str, threshold: float = 0.3) -> Tuple[bool, Li
     except LangDetectException:
         return False, []
 
-def clean_and_enrich_blocks_multilingual(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Enhanced cleaning with multilingual metadata enrichment.
+def _clean_segment(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Helper function to clean a segment of blocks, safe for multiprocessing."""
+    enriched_segment = []
     
-    This extends the base cleaning service with:
-    - Improved language detection with confidence scores
-    - Multi-language content detection
-    - Language distribution analysis
-    - Enhanced metadata for multilingual processing
+    doc_primary_lang = None
+    doc_lang_distribution = {}
     
-    Args:
-        blocks: List of data blocks from extraction stage
-        
-    Returns:
-        List of enriched and cleaned data blocks with multilingual metadata
-    """
-    enriched_blocks = []
-    seen_hashes = set()  # For in-batch deduplication
-    
-    for block in blocks:
-        # --- 1. Clean and Normalize Text ---
+    for i, block in enumerate(blocks):
+        # 1. Clean and Normalize Text
         text = block.get('text', '')
         cleaned_text = re.sub(r'\s+', ' ', text).strip()
         
         if not cleaned_text:
             continue
         
-        # --- 2. Attach Enriched Metadata ---
+        # 2. Attach Enriched Metadata
         metadata = block.get('metadata', {})
-        
-        # a. Generate hash
         text_hash = hashlib.sha256(cleaned_text.encode('utf-8')).hexdigest()
         metadata['normalized_text_hash'] = text_hash
         
-        # b. Enhanced language detection
-        primary_lang, confidence, lang_distribution = detect_language_with_confidence(cleaned_text)
+        # Language Detection
+        # detect_langs is extremely slow (10ms+ per call). 
+        # Over 19,000 blocks, this takes ~3+ minutes.
+        use_cached_lang = False
+        
+        # Once we establish the document language (first 20 blocks)
+        # We only double-check the language every 50 blocks to save massive CPU time.
+        if doc_primary_lang and i > 20:
+            if i % 50 != 0:
+                use_cached_lang = True
+            
+        if use_cached_lang:
+            primary_lang = doc_primary_lang
+            confidence = 1.0
+            lang_distribution = doc_lang_distribution
+            is_multilingual = len(doc_lang_distribution) > 1
+            detected_languages = list(doc_lang_distribution.keys())
+        else:
+            try:
+                lang_probs = detect_langs(cleaned_text)
+                if lang_probs:
+                    primary_lang = lang_probs[0].lang
+                    confidence = lang_probs[0].prob
+                    lang_distribution = {l.lang: l.prob for l in lang_probs if l.prob >= 0.1}
+                    detected_languages = [l.lang for l in lang_probs if l.prob >= 0.3]
+                    is_multilingual = len(detected_languages) > 1
+                    
+                    if doc_primary_lang is None or i < 100:
+                        doc_primary_lang = primary_lang
+                        doc_lang_distribution = lang_distribution
+                else:
+                    primary_lang = doc_primary_lang or 'unknown'
+                    confidence, lang_distribution = 0.0, {}
+                    is_multilingual, detected_languages = False, []
+            except LangDetectException:
+                primary_lang = doc_primary_lang or 'unknown'
+                confidence, lang_distribution = 0.0, {}
+                is_multilingual, detected_languages = False, []
+
         metadata['language'] = primary_lang
         metadata['language_confidence'] = confidence
         metadata['language_distribution'] = lang_distribution
-        
-        # c. Check for multilingual content
-        is_multilingual, detected_languages = is_multilingual_content(cleaned_text)
         metadata['is_multilingual'] = is_multilingual
         metadata['languages_detected'] = detected_languages
         
-        # d. Language tier classification
         tier_1_languages = ['en', 'es', 'fr', 'de', 'pt']
         tier_2_languages = ['it', 'nl', 'ru', 'zh', 'ja']
-        
         if primary_lang in tier_1_languages:
             metadata['language_tier'] = 1
         elif primary_lang in tier_2_languages:
@@ -114,29 +134,57 @@ def clean_and_enrich_blocks_multilingual(blocks: List[Dict[str, Any]]) -> List[D
         else:
             metadata['language_tier'] = 3
         
-        # e. Cleaning version
-        metadata['cleaning_version'] = '2.0'  # Multilingual version
-        
-        # f. Text metrics
+        metadata['cleaning_version'] = '2.0'
         metadata['text_length'] = len(cleaned_text)
         metadata['token_count'] = len(cleaned_text.split())
-        
-        # g. Confidence score
         metadata['confidence'] = metadata.get('ocr_confidence', 1.0)
-        
-        # h. In-batch deduplication
-        if text_hash in seen_hashes:
-            metadata['is_duplicate'] = True
-        else:
-            metadata['is_duplicate'] = False
-            seen_hashes.add(text_hash)
-        
-        # i. Multilingual processing flag
         metadata['multilingual_processed'] = True
         
-        # Update block
         block['text'] = cleaned_text
         block['metadata'] = metadata
+        enriched_segment.append(block)
+        
+    return enriched_segment
+
+
+def clean_and_enrich_blocks_multilingual(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Enhanced cleaning using multi-core parallel processing (ProcessPoolExecutor).
+    """
+    if not blocks:
+        return []
+
+    # Only spin up multiple processes if the document is decently sized
+    num_blocks = len(blocks)
+    max_workers = 4
+    
+    if num_blocks < 200:
+        # For small documents, the overhead of creating processes isn't worth it
+        all_cleaned_blocks = _clean_segment(blocks)
+    else:
+        # Split blocks into equal chunks for each CPU core
+        chunk_size = math.ceil(num_blocks / max_workers)
+        block_chunks = [blocks[i:i + chunk_size] for i in range(0, num_blocks, chunk_size)]
+        
+        all_cleaned_blocks = []
+        logger.info(f"Parallelizing cleaning across {max_workers} processes...")
+        
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            # map preserves order
+            for result_segment in executor.map(_clean_segment, block_chunks):
+                all_cleaned_blocks.extend(result_segment)
+
+    # Perform final deduplication pass globally
+    enriched_blocks = []
+    seen_hashes = set()
+    
+    for block in all_cleaned_blocks:
+        text_hash = block['metadata']['normalized_text_hash']
+        if text_hash in seen_hashes:
+            block['metadata']['is_duplicate'] = True
+        else:
+            block['metadata']['is_duplicate'] = False
+            seen_hashes.add(text_hash)
         enriched_blocks.append(block)
     
     # Log language statistics
