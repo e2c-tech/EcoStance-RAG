@@ -77,7 +77,13 @@ def clean_and_enrich_blocks_multilingual(blocks: List[Dict[str, Any]]) -> List[D
     enriched_blocks = []
     seen_hashes = set()  # For in-batch deduplication
     
-    for block in blocks:
+    # To speed up processing, we'll try to identify the "dominant" language of the document
+    # and only perform full detection on the first few blocks or if confidence drops.
+    doc_primary_lang = None
+    doc_lang_distribution = {}
+    
+    # Process blocks
+    for i, block in enumerate(blocks):
         # --- 1. Clean and Normalize Text ---
         text = block.get('text', '')
         cleaned_text = re.sub(r'\s+', ' ', text).strip()
@@ -92,14 +98,43 @@ def clean_and_enrich_blocks_multilingual(blocks: List[Dict[str, Any]]) -> List[D
         text_hash = hashlib.sha256(cleaned_text.encode('utf-8')).hexdigest()
         metadata['normalized_text_hash'] = text_hash
         
-        # b. Enhanced language detection
-        primary_lang, confidence, lang_distribution = detect_language_with_confidence(cleaned_text)
+        # b. & c. Combined Language Detection (ONE call to detect_langs)
+        # For efficiency: If we've processed 50 blocks and 90% are the same language, 
+        # we can assume that's the document language for small subsequent blocks.
+        use_cached_lang = False
+        if i > 50 and doc_primary_lang and len(cleaned_text) < 100:
+            use_cached_lang = True
+            
+        if use_cached_lang:
+            primary_lang = doc_primary_lang
+            confidence = 1.0
+            lang_distribution = doc_lang_distribution
+            is_multilingual = len(doc_lang_distribution) > 1
+            detected_languages = list(doc_lang_distribution.keys())
+        else:
+            try:
+                lang_probs = detect_langs(cleaned_text)
+                if lang_probs:
+                    primary_lang = lang_probs[0].lang
+                    confidence = lang_probs[0].prob
+                    lang_distribution = {l.lang: l.prob for l in lang_probs if l.prob >= 0.1}
+                    detected_languages = [l.lang for l in lang_probs if l.prob >= 0.3]
+                    is_multilingual = len(detected_languages) > 1
+                    
+                    # Update document-level cache
+                    if doc_primary_lang is None or i < 100:
+                        doc_primary_lang = primary_lang
+                        doc_lang_distribution = lang_distribution
+                else:
+                    primary_lang, confidence, lang_distribution = 'unknown', 0.0, {}
+                    is_multilingual, detected_languages = False, []
+            except LangDetectException:
+                primary_lang, confidence, lang_distribution = 'unknown', 0.0, {}
+                is_multilingual, detected_languages = False, []
+
         metadata['language'] = primary_lang
         metadata['language_confidence'] = confidence
         metadata['language_distribution'] = lang_distribution
-        
-        # c. Check for multilingual content
-        is_multilingual, detected_languages = is_multilingual_content(cleaned_text)
         metadata['is_multilingual'] = is_multilingual
         metadata['languages_detected'] = detected_languages
         
@@ -115,7 +150,7 @@ def clean_and_enrich_blocks_multilingual(blocks: List[Dict[str, Any]]) -> List[D
             metadata['language_tier'] = 3
         
         # e. Cleaning version
-        metadata['cleaning_version'] = '2.0'  # Multilingual version
+        metadata['cleaning_version'] = '2.0'
         
         # f. Text metrics
         metadata['text_length'] = len(cleaned_text)

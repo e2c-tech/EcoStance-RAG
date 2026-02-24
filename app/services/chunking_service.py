@@ -14,8 +14,8 @@ except nltk.downloader.DownloadError:
 
 def chunk_blocks(
     blocks: List[Dict[str, Any]], 
-    target_chunk_words: int = 150, 
-    overlap_sentences: int = 2
+    target_chunk_words: int = 500, 
+    overlap_sentences: int = 1
 ) -> List[Dict[str, Any]]:
     """
     Chunks the text content of each block using a semantic, sentence-aware strategy.

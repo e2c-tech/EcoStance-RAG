@@ -22,7 +22,7 @@ _multilingual_embedding_model_lock = Lock()
 # Configuration
 MULTILINGUAL_ENABLED = False  # Will be set from config
 BGE_M3_MODEL_NAME = "BAAI/bge-m3"
-BGE_M3_BATCH_SIZE = 32
+BGE_M3_BATCH_SIZE = 128
 BGE_M3_MAX_LENGTH = 8192
 BGE_M3_NORMALIZE = True
 
