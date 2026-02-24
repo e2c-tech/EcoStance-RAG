@@ -896,7 +896,7 @@ export const agentAPI = {
     }
     if (databaseConnection) body.database_connection = databaseConnection;
 
-    const response = await fetchWithAuth('/public-agent/agent/chat', {
+    const response = await fetchWithAuth('/beta/agent/chat', {
       method: 'POST',
       body: JSON.stringify(body),
     });
@@ -904,29 +904,29 @@ export const agentAPI = {
   },
 
   getConfig: async () => {
-    const response = await fetchWithAuth('/public-agent/agent/config');
+    const response = await fetchWithAuth('/beta/agent/config');
     return handleResponse(response);
   },
 
   getHistory: async (sessionId: string) => {
-    const response = await fetchWithAuth(`/public-agent/agent/history/${sessionId}`);
+    const response = await fetchWithAuth(`/beta/agent/history/${sessionId}`);
     return handleResponse(response);
   },
 
   reset: async (sessionId: string) => {
-    const response = await fetchWithAuth(`/public-agent/agent/reset/${sessionId}`, {
+    const response = await fetchWithAuth(`/beta/agent/reset/${sessionId}`, {
       method: 'POST',
     });
     return handleResponse(response);
   },
 
   listSessions: async () => {
-    const response = await fetchWithAuth('/public-agent/agent/sessions');
+    const response = await fetchWithAuth('/beta/agent/sessions');
     return handleResponse(response);
   },
 
   renameSession: async (sessionId: string, title: string) => {
-    const response = await fetchWithAuth(`/public-agent/agent/rename/${sessionId}`, {
+    const response = await fetchWithAuth(`/beta/agent/rename/${sessionId}`, {
       method: 'PATCH',
       body: JSON.stringify({ title }),
     });
@@ -934,7 +934,7 @@ export const agentAPI = {
   },
 
   deleteSession: async (sessionId: string) => {
-    const response = await fetchWithAuth(`/public-agent/agent/sessions/${sessionId}`, {
+    const response = await fetchWithAuth(`/beta/agent/sessions/${sessionId}`, {
       method: 'DELETE',
     });
     return handleResponse(response);

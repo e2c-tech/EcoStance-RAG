@@ -8,8 +8,8 @@ import { Badge } from '../components/ui/Badge';
 import { Link } from 'react-router-dom';
 import { DocumentsTable, Document } from '../components/DocumentsTable';
 import { useKnowledgeBase } from '../hooks/useKnowledgeBase';
-import { filesAPI, documentProcessingAPI } from '../services/api';
-import { ProcessingJob } from '../services/api.types';
+import { useJobs } from '../context/JobContext';
+import { filesAPI } from '../services/api';
 
 interface KnowledgeBase {
   id: string;
@@ -53,6 +53,8 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { getKBDetails, deleteFileFromKB } = useKnowledgeBase();
+  const { addJob, jobs } = useJobs();
+  const prevJobsRef = React.useRef(jobs);
 
   const fetchKBData = React.useCallback(async (force = false) => {
     setIsLoading(true);
@@ -141,6 +143,21 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
       setKbName(knowledgeBase.name);
     }
   }, [knowledgeBase]);
+
+  React.useEffect(() => {
+    // Check if any job for this KB transitioned to 'completed'
+    const newlyCompleted = jobs.some(currentJob => {
+      const prevJob = prevJobsRef.current.find(j => j.job_id === currentJob.job_id);
+      return currentJob.collection_name === kbId &&
+        currentJob.status === 'completed' &&
+        (!prevJob || prevJob.status !== 'completed');
+    });
+
+    if (newlyCompleted) {
+      fetchKBData(true);
+    }
+    prevJobsRef.current = jobs;
+  }, [jobs, kbId, fetchKBData]);
 
   if (isLoading) {
     return (
@@ -268,36 +285,14 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
       const res = await filesAPI.upload(file, true, kbId!) as any;
 
       if (res.job_id) {
-        // Start polling the new status endpoint
-        const pollStatus = async () => {
-          try {
-            const status = await documentProcessingAPI.getProcessingStatus(res.job_id) as ProcessingJob;
-            setProgressMessage(status.progress_message || "Processing...");
-
-            if (status.status === 'completed') {
-              setIsUploading(false);
-              setProgressMessage("");
-              fetchKBData(true); // Reload the list
-            } else if (status.status === 'failed') {
-              setUploadError(status.error_message || status.error || "Processing failed");
-              setIsUploading(false);
-              setProgressMessage("");
-            } else {
-              setTimeout(pollStatus, 1000); // Poll every second
-            }
-          } catch (err) {
-            console.error('Polling error:', err);
-            setUploadError("Failed to get processing status");
-            setIsUploading(false);
-            setProgressMessage("");
-          }
-        };
-        pollStatus();
+        addJob(res.job_id, file.name, kbId!);
       } else {
         // Fallback for when job_id is not returned (old backend behavior)
-        setIsUploading(false);
         fetchKBData(true);
       }
+
+      setIsUploading(false);
+      setProgressMessage("");
 
       // Reset file input
       if (fileInputRef.current) {
