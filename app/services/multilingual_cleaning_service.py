@@ -81,9 +81,15 @@ def _clean_segment(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         metadata['normalized_text_hash'] = text_hash
         
         # Language Detection
+        # detect_langs is extremely slow (10ms+ per call). 
+        # Over 19,000 blocks, this takes ~3+ minutes.
         use_cached_lang = False
-        if i > 50 and doc_primary_lang and len(cleaned_text) < 100:
-            use_cached_lang = True
+        
+        # Once we establish the document language (first 20 blocks)
+        # We only double-check the language every 50 blocks to save massive CPU time.
+        if doc_primary_lang and i > 20:
+            if i % 50 != 0:
+                use_cached_lang = True
             
         if use_cached_lang:
             primary_lang = doc_primary_lang
@@ -105,10 +111,12 @@ def _clean_segment(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                         doc_primary_lang = primary_lang
                         doc_lang_distribution = lang_distribution
                 else:
-                    primary_lang, confidence, lang_distribution = 'unknown', 0.0, {}
+                    primary_lang = doc_primary_lang or 'unknown'
+                    confidence, lang_distribution = 0.0, {}
                     is_multilingual, detected_languages = False, []
             except LangDetectException:
-                primary_lang, confidence, lang_distribution = 'unknown', 0.0, {}
+                primary_lang = doc_primary_lang or 'unknown'
+                confidence, lang_distribution = 0.0, {}
                 is_multilingual, detected_languages = False, []
 
         metadata['language'] = primary_lang

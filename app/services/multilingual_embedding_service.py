@@ -163,16 +163,16 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, ten
 
         # 3. Separate chunks into "Cached" vs "Needs Embedding"
         texts_to_embed = []
-        chunks_to_embed = []
+        chunks_to_embed_indices = []
         
-        for text_hash, text, chunk in all_chunk_data:
-            if text_hash in db_cache:
+        for i, (text_hash, text, chunk) in enumerate(all_chunk_data):
+            if text_hash in db_cache and db_cache[text_hash] is not None:
                 # Cache HIT
-                chunk['embedding'] = db_cache[text_hash]
+                chunks[i]['embedding'] = db_cache[text_hash]
             else:
                 # Cache MISS
                 texts_to_embed.append(text)
-                chunks_to_embed.append(chunk)
+                chunks_to_embed_indices.append(i)
 
         all_new_embeddings = []
 
@@ -216,16 +216,16 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, ten
             
             # 4. Attach new embeddings and save to cache
             new_cache_records = []
-            for chunk, embedding in zip(chunks_to_embed, all_new_embeddings):
-                chunk['embedding'] = embedding.tolist() if hasattr(embedding, 'tolist') else embedding
+            for idx, embedding in zip(chunks_to_embed_indices, all_new_embeddings):
+                chunks[idx]['embedding'] = embedding.tolist() if hasattr(embedding, 'tolist') else embedding
                 
                 # Save to DB cache list
-                text_hash = chunk['metadata']['normalized_text_hash']
+                text_hash = chunks[idx]['metadata']['normalized_text_hash']
                 new_cache_records.append(EmbeddingCache(
                     text_hash=text_hash,
                     tenant_id=tenant_id,
                     model_name=BGE_M3_MODEL_NAME,
-                    vector=chunk['embedding']
+                    vector=chunks[idx]['embedding']
                 ))
             
             if new_cache_records:
@@ -244,7 +244,10 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, ten
         for chunk in chunks:
             chunk['metadata']['embedding_model'] = BGE_M3_MODEL_NAME
             chunk['metadata']['embedding_type'] = 'multilingual'
-            chunk['metadata']['embedding_dimension'] = len(chunk['embedding'])
+            if 'embedding' in chunk:
+                chunk['metadata']['embedding_dimension'] = len(chunk['embedding'])
+            else:
+                logger.error(f"FATAL: chunk missing embedding: {chunk['metadata'].get('normalized_text_hash')}")
         
         db.close()
         logger.info(f"✓ Successfully processed multilingual embeddings for {len(chunks)} chunks")

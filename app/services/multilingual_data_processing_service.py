@@ -226,7 +226,7 @@ async def process_and_upload_file_multilingual(
         return {
             "success": True,
             "collection_name": final_collection_name,
-            "chunks_count": len(chunks_with_embeddings),
+            "chunks_count": total_chunks,
             "language_statistics": lang_stats,
             "multilingual_processed": use_multilingual
         }
