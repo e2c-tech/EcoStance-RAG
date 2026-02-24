@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements
 COPY requirements.txt .
 
-# Install Torch with CUDA support first (v2.6.0 required for security, using cu121 index for compatibility)
-RUN pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cu121
+# Install Torch with CUDA 12.1 support (Max supported version for cu121 is 2.5.1)
+RUN pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 
 # Install remaining Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
