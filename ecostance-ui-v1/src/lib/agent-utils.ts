@@ -8,7 +8,7 @@ export const parseAgentResponse = (content: any): any => {
 
     // 1. Remove markers like "### ANALYZE PREVIOUS TOOL RESULTS:" or "### FINAL ANSWER:"
     // If "### FINAL ANSWER:" exists, we usually only care about what follows it.
-    const markers = [
+    const blockMarkers = [
         "### FINAL ANSWER:",
         "### RESPONSE:",
         "### ANSWER:",
@@ -16,7 +16,20 @@ export const parseAgentResponse = (content: any): any => {
         "### SCRATCHPAD:",
         "FINAL ANSWER:",
         "RESPONSE:",
-        "ANSWER:",
+        "ANSWER:"
+    ];
+
+    for (const marker of blockMarkers) {
+        if (content.includes(marker)) {
+            const parts = content.split(marker);
+            const lastPart = parts[parts.length - 1].trim();
+            if (lastPart) {
+                return parseAgentResponse(lastPart); // Recursively parse the extracted part
+            }
+        }
+    }
+
+    const lineMarkers = [
         "Thought:",
         "Reasoning:",
         "Observation:",
@@ -24,12 +37,19 @@ export const parseAgentResponse = (content: any): any => {
         "Action Input:"
     ];
 
-    for (const marker of markers) {
-        if (content.includes(marker)) {
-            const parts = content.split(marker);
-            const lastPart = parts[parts.length - 1].trim();
+    for (const marker of lineMarkers) {
+        // Only strip if the marker appears at the start of the string or immediately after a newline
+        // We do this manually to avoid complex RegExp split behavior which can keep the matched substrings depending on capture groups
+        const index = content.indexOf(`\n${marker}`);
+        if (index !== -1) {
+            const lastPart = content.slice(index + `\n${marker}`.length).trim();
             if (lastPart) {
-                return parseAgentResponse(lastPart); // Recursively parse the extracted part
+                return parseAgentResponse(lastPart);
+            }
+        } else if (content.startsWith(marker)) {
+            const lastPart = content.slice(marker.length).trim();
+            if (lastPart) {
+                return parseAgentResponse(lastPart);
             }
         }
     }
