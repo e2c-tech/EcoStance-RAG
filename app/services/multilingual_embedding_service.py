@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from threading import Lock
 import numpy as np
 import httpx
+import hashlib
 
 from .langsmith_service import trace_embedding
 from app.config import USE_REMOTE_EMBEDDING, EMBEDDING_SERVER_URL
@@ -99,13 +100,14 @@ def unload_multilingual_embedding_model():
                     logger.error(f"Error unloading multilingual embedding model: {e}")
 
 @trace_embedding
-def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None) -> List[Dict[str, Any]]:
+def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, tenant_id: str = None) -> List[Dict[str, Any]]:
     """
-    Generate multilingual embeddings using BGE-M3.
+    Generate multilingual embeddings using BGE-M3 with Cache Deduplication.
     
     Args:
         chunks: List of processed data chunks with language metadata
         model: BGE-M3 model instance (optional, will load if None)
+        tenant_id: Optional string for the tenant cache
         
     Returns:
         Chunks with multilingual embeddings attached
@@ -122,75 +124,130 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None) -> 
         return chunks
     
     try:
-        # Extract texts for embedding
-        texts_to_embed = []
+        from app.db.database import SessionLocal
+        from app.models.embedding_cache import EmbeddingCache
+        from sqlalchemy.exc import IntegrityError
+        
+        db = SessionLocal()
+        
+        # 1. Identify all chunks and their hashes
+        all_chunk_data = [] # List of tuples: (text_hash, text, chunk_ref)
+        hash_list = []
+        
         for chunk in chunks:
             text = chunk.get('text', '')
-            # Truncate if too long
             if len(text) > BGE_M3_MAX_LENGTH:
                 text = text[:BGE_M3_MAX_LENGTH]
-            texts_to_embed.append(text)
-        
-        logger.info(f"Creating multilingual embeddings for {len(texts_to_embed)} chunks")
-
-        all_embeddings = []
-
-        if USE_REMOTE_EMBEDDING:
-            logger.info(f"Using remote embedding server: {EMBEDDING_SERVER_URL}")
-            try:
-                # Process in batches to avoid giant HTTP requests
-                for i in range(0, len(texts_to_embed), BGE_M3_BATCH_SIZE * 2): # Larger batches for HTTP
-                    batch_texts = texts_to_embed[i:i + BGE_M3_BATCH_SIZE * 2]
-                    response = httpx.post(
-                        f"{EMBEDDING_SERVER_URL}/embed", 
-                        json={"text": batch_texts},
-                        timeout=120.0
-                    )
-                    response.raise_for_status()
-                    all_embeddings.extend(response.json()["embeddings"])
-            except Exception as e:
-                logger.error(f"Remote embedding failed: {e}")
-                raise ValueError(f"Remote embedding server error: {str(e)}")
-        else:
-            # Process in batches locally
-            for i in range(0, len(texts_to_embed), BGE_M3_BATCH_SIZE):
-                batch_texts = texts_to_embed[i:i + BGE_M3_BATCH_SIZE]
-                
-                # Generate embeddings (handle both FlagEmbedding and SentenceTransformer)
-                # BGEM3FlagModel accepts max_length, SentenceTransformer does not
-                encode_kwargs = {"batch_size": len(batch_texts)}
-                
-                # Use specific library check to determine if we should pass max_length
-                from sentence_transformers import SentenceTransformer
-                if not isinstance(model, SentenceTransformer):
-                    encode_kwargs["max_length"] = BGE_M3_MAX_LENGTH
-                
-                raw_output = model.encode(batch_texts, **encode_kwargs)
-                
-                # FlagEmbedding returns a dict with 'dense_vecs', SentenceTransformer returns array directly
-                if isinstance(raw_output, dict):
-                    batch_embeddings = raw_output['dense_vecs']
-                else:
-                    batch_embeddings = raw_output
-                
-                # Normalize if requested
-                if BGE_M3_NORMALIZE:
-                    norms = np.linalg.norm(batch_embeddings, axis=1, keepdims=True)
-                    batch_embeddings = batch_embeddings / norms
-                
-                all_embeddings.extend(batch_embeddings)
-        
-        # Attach embeddings to chunks
-        for chunk, embedding in zip(chunks, all_embeddings):
-            chunk['embedding'] = embedding.tolist()
             
-            # Add multilingual metadata
             chunk['metadata'] = chunk.get('metadata', {})
+            text_hash = chunk['metadata'].get('normalized_text_hash')
+            if not text_hash:
+                text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
+                chunk['metadata']['normalized_text_hash'] = text_hash
+                
+            all_chunk_data.append((text_hash, text, chunk))
+            hash_list.append(text_hash)
+            
+        # 2. Bulk query the cache
+        db_cache = {}
+        try:
+            cached_records = db.query(EmbeddingCache).filter(
+                EmbeddingCache.text_hash.in_(hash_list),
+                EmbeddingCache.model_name == BGE_M3_MODEL_NAME,
+                EmbeddingCache.tenant_id == tenant_id
+            ).all()
+            db_cache = {record.text_hash: record.vector for record in cached_records}
+            logger.info(f"Cache hit: Found {len(db_cache)} vectors in cache out of {len(chunks)} chunks.")
+        except Exception as e:
+            logger.warning(f"Failed to query embedding cache: {e}")
+
+        # 3. Separate chunks into "Cached" vs "Needs Embedding"
+        texts_to_embed = []
+        chunks_to_embed = []
+        
+        for text_hash, text, chunk in all_chunk_data:
+            if text_hash in db_cache:
+                # Cache HIT
+                chunk['embedding'] = db_cache[text_hash]
+            else:
+                # Cache MISS
+                texts_to_embed.append(text)
+                chunks_to_embed.append(chunk)
+
+        all_new_embeddings = []
+
+        if texts_to_embed:
+            logger.info(f"Calculating embeddings for {len(texts_to_embed)} new chunks")
+            if USE_REMOTE_EMBEDDING:
+                logger.info(f"Using remote embedding server: {EMBEDDING_SERVER_URL}")
+                try:
+                    for i in range(0, len(texts_to_embed), BGE_M3_BATCH_SIZE * 2):
+                        batch_texts = texts_to_embed[i:i + BGE_M3_BATCH_SIZE * 2]
+                        response = httpx.post(
+                            f"{EMBEDDING_SERVER_URL}/embed", 
+                            json={"text": batch_texts},
+                            timeout=120.0
+                        )
+                        response.raise_for_status()
+                        all_new_embeddings.extend(response.json()["embeddings"])
+                except Exception as e:
+                    logger.error(f"Remote embedding failed: {e}")
+                    raise ValueError(f"Remote embedding server error: {str(e)}")
+            else:
+                for i in range(0, len(texts_to_embed), BGE_M3_BATCH_SIZE):
+                    batch_texts = texts_to_embed[i:i + BGE_M3_BATCH_SIZE]
+                    encode_kwargs = {"batch_size": len(batch_texts)}
+                    
+                    from sentence_transformers import SentenceTransformer
+                    if not isinstance(model, SentenceTransformer):
+                        encode_kwargs["max_length"] = BGE_M3_MAX_LENGTH
+                    
+                    raw_output = model.encode(batch_texts, **encode_kwargs)
+                    if isinstance(raw_output, dict):
+                        batch_embeddings = raw_output['dense_vecs']
+                    else:
+                        batch_embeddings = raw_output
+                    
+                    if BGE_M3_NORMALIZE:
+                        norms = np.linalg.norm(batch_embeddings, axis=1, keepdims=True)
+                        batch_embeddings = batch_embeddings / norms
+                    
+                    all_new_embeddings.extend(batch_embeddings)
+            
+            # 4. Attach new embeddings and save to cache
+            new_cache_records = []
+            for chunk, embedding in zip(chunks_to_embed, all_new_embeddings):
+                chunk['embedding'] = embedding.tolist() if hasattr(embedding, 'tolist') else embedding
+                
+                # Save to DB cache list
+                text_hash = chunk['metadata']['normalized_text_hash']
+                new_cache_records.append(EmbeddingCache(
+                    text_hash=text_hash,
+                    tenant_id=tenant_id,
+                    model_name=BGE_M3_MODEL_NAME,
+                    vector=chunk['embedding']
+                ))
+            
+            if new_cache_records:
+                try:
+                    db.add_all(new_cache_records)
+                    db.commit()
+                except IntegrityError:
+                    # Occurs if multiple workers insert the same exact hash at the same fraction of a second
+                    db.rollback()
+                    logger.warning("Integrity error updating embedding cache (likely race condition), ignoring.")
+                except Exception as e:
+                    db.rollback()
+                    logger.warning(f"Failed to update embedding cache: {e}")
+
+        # 5. Populate metadata for all chunks
+        for chunk in chunks:
             chunk['metadata']['embedding_model'] = BGE_M3_MODEL_NAME
             chunk['metadata']['embedding_type'] = 'multilingual'
-            chunk['metadata']['embedding_dimension'] = len(embedding)
+            chunk['metadata']['embedding_dimension'] = len(chunk['embedding'])
         
-        logger.info(f"✓ Successfully created multilingual embeddings for {len(chunks)} chunks")
+        db.close()
+        logger.info(f"✓ Successfully processed multilingual embeddings for {len(chunks)} chunks")
         return chunks
         
     except Exception as e:
@@ -245,7 +302,7 @@ def create_embeddings_no_fallback(chunks: List[Dict[str, Any]], tenant_id: str =
         Chunks with BGE-M3 multilingual embeddings
     """
     logger.info(f"Using multilingual embeddings (BGE-M3) - handles all languages optimally")
-    return create_multilingual_embeddings(chunks)
+    return create_multilingual_embeddings(chunks, tenant_id=tenant_id)
 
 def create_embeddings_with_fallback(chunks: List[Dict[str, Any]], tenant_id: str = None) -> List[Dict[str, Any]]:
     """
@@ -259,4 +316,4 @@ def create_embeddings_with_fallback(chunks: List[Dict[str, Any]], tenant_id: str
         Chunks with BGE-M3 multilingual embeddings
     """
     logger.info(f"Using BGE-M3 multilingual embeddings only - no fallback")
-    return create_multilingual_embeddings(chunks)
+    return create_multilingual_embeddings(chunks, tenant_id=tenant_id)

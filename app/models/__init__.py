@@ -11,6 +11,7 @@ from .audit_log import AuditLog
 from .custom_crm import CustomCRMEmail
 from .billing import BillingSubscription, BillingTransaction
 from .background_job import BackgroundJob
+from .embedding_cache import EmbeddingCache
 
 __all__ = [
     "Tenant",
@@ -23,5 +24,6 @@ __all__ = [
     "CustomCRMEmail",
     "BillingSubscription",
     "BillingTransaction",
-    "BackgroundJob"
+    "BackgroundJob",
+    "EmbeddingCache"
 ]
