@@ -177,10 +177,12 @@ async def process_and_upload_file_multilingual(
         update_progress(f"Step 5/6: Preparing to embed {total_chunks} chunks. This may take a while depending on server load...")
         # Embed all chunks at once
         final_embedded_chunks = await anyio.to_thread.run_sync(
-            create_embeddings_with_fallback, 
-            final_chunks, 
-            tenant_id,
-            update_progress_callback=update_progress
+            partial(
+                create_embeddings_with_fallback, 
+                final_chunks, 
+                tenant_id,
+                update_progress_callback=update_progress
+            )
         )
         update_progress(f"Step 5/6: Successfully generated {len(final_embedded_chunks)} math embeddings!")
         
