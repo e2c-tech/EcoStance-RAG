@@ -111,16 +111,8 @@ async def process_and_upload_file_multilingual(
         if not final_chunks:
             raise ValueError(f"Chunking phase resulted in 0 chunks for {os.path.basename(file_path)}.")
 
-        # 4. Multilingual Embedding Stage
-        update_progress("Step 4/6: Starting multilingual embedding generation (BGE-M3)...")
-        model_info = get_multilingual_model_info()
-        update_progress(f"Using model: {model_info['model_name']} (dimension: {model_info['dimension']})")
-        
-        chunks_with_embeddings = await anyio.to_thread.run_sync(create_embeddings_with_fallback, final_chunks, tenant_id)
-        update_progress(f"Step 4/6: Embedding complete. All {len(chunks_with_embeddings)} chunks embedded.")
-        
-        # 5. Collection Setup
-        update_progress("Step 5/6: Setting up vector database collection...")
+        # 4. Collection Setup (Must happen BEFORE streaming uploads)
+        update_progress("Step 4/6: Setting up vector database collection...")
         
         # Create collection with appropriate configuration
         if use_multilingual:
@@ -167,36 +159,57 @@ async def process_and_upload_file_multilingual(
         
         add_kb(final_collection_name)
         
-        # 6. Upload Stage
-        update_progress("Step 6/6: Starting upload to vector database...")
+        # 5/6. Streaming Embed & Upload Stage (The "Conveyor Belt")
+        update_progress("Step 5 & 6: Starting Streaming Embed & Upload process...")
+        model_info = get_multilingual_model_info()
+        update_progress(f"Using model: {model_info['model_name']} (dimension: {model_info['dimension']})")
         
-        # Add processing metadata to chunks
         processing_metadata = {
             "multilingual_processed": use_multilingual,
             "language_statistics": lang_stats,
             "embedding_model": model_info['model_name'] if use_multilingual else "all-MiniLM-L6-v2",
             "processing_version": "2.0" if use_multilingual else "1.0"
         }
+
+        # STREAMING LOOP
+        STREAM_BATCH_SIZE = 100
+        total_chunks = len(final_chunks)
+        embedded_and_uploaded = 0
         
-        # Attach processing metadata to each chunk
-        for chunk in chunks_with_embeddings:
-            chunk['metadata'] = chunk.get('metadata', {})
-            chunk['metadata'].update(processing_metadata)
-        
-        await anyio.to_thread.run_sync(
-            upload_to_qdrant,
-            qdrant_client,
-            final_collection_name,
-            chunks_with_embeddings,
-            tenant_id
-        )
-        update_progress(f"Step 6/6: Upload complete to collection: {final_collection_name}")
+        for i in range(0, total_chunks, STREAM_BATCH_SIZE):
+            batch_chunks = final_chunks[i:i + STREAM_BATCH_SIZE]
+            
+            # 5a. Embed the batch
+            batch_embedded = await anyio.to_thread.run_sync(
+                create_embeddings_with_fallback, 
+                batch_chunks, 
+                tenant_id
+            )
+            
+            # Attach processing metadata to each chunk
+            for chunk in batch_embedded:
+                chunk['metadata'] = chunk.get('metadata', {})
+                chunk['metadata'].update(processing_metadata)
+            
+            # 5b. Upload the batch immediately
+            await anyio.to_thread.run_sync(
+                upload_to_qdrant,
+                qdrant_client,
+                final_collection_name,
+                batch_embedded,
+                tenant_id
+            )
+            
+            embedded_and_uploaded += len(batch_embedded)
+            update_progress(f"Streamed {embedded_and_uploaded}/{total_chunks} chunks to Qdrant...")
+            
+        update_progress(f"Step 5 & 6: Streaming complete! All {total_chunks} chunks uploaded to collection: {final_collection_name}")
         
         # Final summary
         summary = f"--- Pipeline completed successfully ---"
         summary += f"\nFile: {os.path.basename(file_path)}"
         summary += f"\nCollection: {final_collection_name}"
-        summary += f"\nChunks processed: {len(chunks_with_embeddings)}"
+        summary += f"\nChunks processed: {total_chunks}"
         summary += f"\nLanguages detected: {list(lang_stats['languages'].keys())}"
         summary += f"\nMultilingual processing: {'Yes' if use_multilingual else 'No'}"
         
@@ -205,7 +218,7 @@ async def process_and_upload_file_multilingual(
         if job_id:
             job_tracker.complete_job(job_id, {
                 "collection_name": final_collection_name,
-                "chunks_count": len(chunks_with_embeddings),
+                "chunks_count": total_chunks,
                 "language_statistics": lang_stats,
                 "multilingual_processed": use_multilingual
             })
