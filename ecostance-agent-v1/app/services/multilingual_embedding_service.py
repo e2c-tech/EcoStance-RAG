@@ -19,22 +19,16 @@ logger = logging.getLogger(__name__)
 # Global multilingual embedding model instance (singleton pattern)
 _multilingual_embedding_model: Optional[Any] = None
 _multilingual_embedding_model_lock = Lock()
-
 # Configuration
-MULTILINGUAL_ENABLED = False  # Will be set from config
+MULTILINGUAL_ENABLED = True
 BGE_M3_MODEL_NAME = "BAAI/bge-m3"
 BGE_M3_BATCH_SIZE = 128
 BGE_M3_MAX_LENGTH = 8192
 BGE_M3_NORMALIZE = True
 
 def set_multilingual_config(enabled: bool, model_name: str = None, batch_size: int = None):
-    """Set multilingual configuration from app config."""
-    global MULTILINGUAL_ENABLED, BGE_M3_MODEL_NAME, BGE_M3_BATCH_SIZE
-    MULTILINGUAL_ENABLED = enabled
-    if model_name:
-        BGE_M3_MODEL_NAME = model_name
-    if batch_size:
-        BGE_M3_BATCH_SIZE = batch_size
+    """Set multilingual configuration from app config (deprecated/no-op)."""
+    pass
 
 @trace_embedding
 def load_multilingual_embedding_model():
@@ -149,19 +143,27 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, ten
                     batch_size = BGE_M3_BATCH_SIZE * 2
                     for i in range(0, total_chunks, batch_size):
                         batch_texts = texts_to_embed[i:i + batch_size]
+                        endpoint_url = f"{EMBEDDING_SERVER_URL}/embed"
+                        
                         progress_msg = f"Embedding Engine: Sending batch {i} to {min(i + batch_size, total_chunks)} out of {total_chunks} chunks to external GPU Server..."
                         logger.info(progress_msg)
+                        
+                        logger.info(f"API CALL -> POST {endpoint_url}")
+                        logger.info(f"API PAYLOAD -> Sending JSON array of {len(batch_texts)} text strings.")
                         
                         # Use callback to push to UI if available
                         if "update_progress_callback" in kwargs and callable(kwargs["update_progress_callback"]):
                             kwargs["update_progress_callback"](progress_msg)
+                            kwargs["update_progress_callback"](f"API CALL -> POST {endpoint_url} (Batch of {len(batch_texts)})")
                             
                         response = httpx.post(
-                            f"{EMBEDDING_SERVER_URL}/embed", 
+                            endpoint_url, 
                             json={"text": batch_texts},
                             timeout=120.0
                         )
                         response.raise_for_status()
+                        
+                        logger.info(f"API RESPONSE <- HTTP {response.status_code} received successfully.")
                         all_new_embeddings.extend(response.json()["embeddings"])
                         
                     progress_msg = f"Embedding Engine: Finished receiving all {total_chunks} embeddings from GPU Server!"
