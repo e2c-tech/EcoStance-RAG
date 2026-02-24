@@ -159,10 +159,11 @@ async def process_and_upload_file_multilingual(
         
         add_kb(final_collection_name)
         
-        # 5/6. Streaming Embed & Upload Stage (The "Conveyor Belt")
-        update_progress("Step 5 & 6: Starting Streaming Embed & Upload process...")
+        # 5. Embedding Stage
+        update_progress("Step 5/6: Starting Embedding process...")
         model_info = get_multilingual_model_info()
-        update_progress(f"Using model: {model_info['model_name']} (dimension: {model_info['dimension']})")
+        update_progress(f"Configuring Embedding Model: {model_info['model_name']} (Dimensions: {model_info['dimension']})")
+        update_progress(f"Remote Server Mode: {'ENABLED' if model_info.get('remote_embedding', False) else 'DISABLED (Processing Locally)'}")
         
         processing_metadata = {
             "multilingual_processed": use_multilingual,
@@ -171,39 +172,34 @@ async def process_and_upload_file_multilingual(
             "processing_version": "2.0" if use_multilingual else "1.0"
         }
 
-        # STREAMING LOOP
-        STREAM_BATCH_SIZE = 100
         total_chunks = len(final_chunks)
-        embedded_and_uploaded = 0
         
-        for i in range(0, total_chunks, STREAM_BATCH_SIZE):
-            batch_chunks = final_chunks[i:i + STREAM_BATCH_SIZE]
-            
-            # 5a. Embed the batch
-            batch_embedded = await anyio.to_thread.run_sync(
-                create_embeddings_with_fallback, 
-                batch_chunks, 
-                tenant_id
-            )
-            
-            # Attach processing metadata to each chunk
-            for chunk in batch_embedded:
-                chunk['metadata'] = chunk.get('metadata', {})
-                chunk['metadata'].update(processing_metadata)
-            
-            # 5b. Upload the batch immediately
-            await anyio.to_thread.run_sync(
-                upload_to_qdrant,
-                qdrant_client,
-                final_collection_name,
-                batch_embedded,
-                tenant_id
-            )
-            
-            embedded_and_uploaded += len(batch_embedded)
-            update_progress(f"Streamed {embedded_and_uploaded}/{total_chunks} chunks to Qdrant...")
-            
-        update_progress(f"Step 5 & 6: Streaming complete! All {total_chunks} chunks uploaded to collection: {final_collection_name}")
+        update_progress(f"Step 5/6: Preparing to embed {total_chunks} chunks. This may take a while depending on server load...")
+        # Embed all chunks at once
+        final_embedded_chunks = await anyio.to_thread.run_sync(
+            create_embeddings_with_fallback, 
+            final_chunks, 
+            tenant_id,
+            update_progress_callback=update_progress
+        )
+        update_progress(f"Step 5/6: Successfully generated {len(final_embedded_chunks)} math embeddings!")
+        
+        # Attach processing metadata to each chunk
+        for chunk in final_embedded_chunks:
+            chunk['metadata'] = chunk.get('metadata', {})
+            chunk['metadata'].update(processing_metadata)
+
+        update_progress("Step 6: Starting upload to vector database...")
+        # Upload all chunks at once
+        await anyio.to_thread.run_sync(
+            upload_to_qdrant,
+            qdrant_client,
+            final_collection_name,
+            final_embedded_chunks,
+            tenant_id
+        )
+        
+        update_progress(f"Step 6: Upload complete! All {total_chunks} chunks uploaded to collection: {final_collection_name}")
         
         # Final summary
         summary = f"--- Pipeline completed successfully ---"

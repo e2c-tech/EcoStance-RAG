@@ -100,7 +100,7 @@ def unload_multilingual_embedding_model():
                     logger.error(f"Error unloading multilingual embedding model: {e}")
 
 @trace_embedding
-def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, tenant_id: str = None) -> List[Dict[str, Any]]:
+def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, tenant_id: str = None, **kwargs) -> List[Dict[str, Any]]:
     """
     Generate multilingual embeddings using BGE-M3 with Cache Deduplication.
     
@@ -124,16 +124,7 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, ten
         return chunks
     
     try:
-        from app.db.database import SessionLocal
-        from app.models.embedding_cache import EmbeddingCache
-        from sqlalchemy.exc import IntegrityError
-        
-        db = SessionLocal()
-        
-        # 1. Identify all chunks and their hashes
-        all_chunk_data = [] # List of tuples: (text_hash, text, chunk_ref)
-        hash_list = []
-        
+        texts_to_embed = []
         for chunk in chunks:
             text = chunk.get('text', '')
             if len(text) > BGE_M3_MAX_LENGTH:
@@ -145,44 +136,26 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, ten
                 text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
                 chunk['metadata']['normalized_text_hash'] = text_hash
                 
-            all_chunk_data.append((text_hash, text, chunk))
-            hash_list.append(text_hash)
-            
-        # 2. Bulk query the cache
-        db_cache = {}
-        try:
-            cached_records = db.query(EmbeddingCache).filter(
-                EmbeddingCache.text_hash.in_(hash_list),
-                EmbeddingCache.model_name == BGE_M3_MODEL_NAME,
-                EmbeddingCache.tenant_id == tenant_id
-            ).all()
-            db_cache = {record.text_hash: record.vector for record in cached_records}
-            logger.info(f"Cache hit: Found {len(db_cache)} vectors in cache out of {len(chunks)} chunks.")
-        except Exception as e:
-            logger.warning(f"Failed to query embedding cache: {e}")
-
-        # 3. Separate chunks into "Cached" vs "Needs Embedding"
-        texts_to_embed = []
-        chunks_to_embed_indices = []
-        
-        for i, (text_hash, text, chunk) in enumerate(all_chunk_data):
-            if text_hash in db_cache and db_cache[text_hash] is not None:
-                # Cache HIT
-                chunks[i]['embedding'] = db_cache[text_hash]
-            else:
-                # Cache MISS
-                texts_to_embed.append(text)
-                chunks_to_embed_indices.append(i)
+            texts_to_embed.append(text)
 
         all_new_embeddings = []
 
         if texts_to_embed:
-            logger.info(f"Calculating embeddings for {len(texts_to_embed)} new chunks")
+            logger.info(f"Calculating embeddings for {len(texts_to_embed)} chunks")
             if USE_REMOTE_EMBEDDING:
                 logger.info(f"Using remote embedding server: {EMBEDDING_SERVER_URL}")
                 try:
-                    for i in range(0, len(texts_to_embed), BGE_M3_BATCH_SIZE * 2):
-                        batch_texts = texts_to_embed[i:i + BGE_M3_BATCH_SIZE * 2]
+                    total_chunks = len(texts_to_embed)
+                    batch_size = BGE_M3_BATCH_SIZE * 2
+                    for i in range(0, total_chunks, batch_size):
+                        batch_texts = texts_to_embed[i:i + batch_size]
+                        progress_msg = f"Embedding Engine: Sending batch {i} to {min(i + batch_size, total_chunks)} out of {total_chunks} chunks to external GPU Server..."
+                        logger.info(progress_msg)
+                        
+                        # Use callback to push to UI if available
+                        if "update_progress_callback" in kwargs and callable(kwargs["update_progress_callback"]):
+                            kwargs["update_progress_callback"](progress_msg)
+                            
                         response = httpx.post(
                             f"{EMBEDDING_SERVER_URL}/embed", 
                             json={"text": batch_texts},
@@ -190,6 +163,12 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, ten
                         )
                         response.raise_for_status()
                         all_new_embeddings.extend(response.json()["embeddings"])
+                        
+                    progress_msg = f"Embedding Engine: Finished receiving all {total_chunks} embeddings from GPU Server!"
+                    logger.info(progress_msg)
+                    if "update_progress_callback" in kwargs and callable(kwargs["update_progress_callback"]):
+                        kwargs["update_progress_callback"](progress_msg)
+                        
                 except Exception as e:
                     logger.error(f"Remote embedding failed: {e}")
                     raise ValueError(f"Remote embedding server error: {str(e)}")
@@ -214,33 +193,11 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, ten
                     
                     all_new_embeddings.extend(batch_embeddings)
             
-            # 4. Attach new embeddings and save to cache
-            new_cache_records = []
-            for idx, embedding in zip(chunks_to_embed_indices, all_new_embeddings):
+            # Attach embeddings back to all chunks
+            for idx, embedding in enumerate(all_new_embeddings):
                 chunks[idx]['embedding'] = embedding.tolist() if hasattr(embedding, 'tolist') else embedding
-                
-                # Save to DB cache list
-                text_hash = chunks[idx]['metadata']['normalized_text_hash']
-                new_cache_records.append(EmbeddingCache(
-                    text_hash=text_hash,
-                    tenant_id=tenant_id,
-                    model_name=BGE_M3_MODEL_NAME,
-                    vector=chunks[idx]['embedding']
-                ))
-            
-            if new_cache_records:
-                try:
-                    db.add_all(new_cache_records)
-                    db.commit()
-                except IntegrityError:
-                    # Occurs if multiple workers insert the same exact hash at the same fraction of a second
-                    db.rollback()
-                    logger.warning("Integrity error updating embedding cache (likely race condition), ignoring.")
-                except Exception as e:
-                    db.rollback()
-                    logger.warning(f"Failed to update embedding cache: {e}")
 
-        # 5. Populate metadata for all chunks
+        # Populate metadata for all chunks
         for chunk in chunks:
             chunk['metadata']['embedding_model'] = BGE_M3_MODEL_NAME
             chunk['metadata']['embedding_type'] = 'multilingual'
@@ -249,7 +206,6 @@ def create_multilingual_embeddings(chunks: List[Dict[str, Any]], model=None, ten
             else:
                 logger.error(f"FATAL: chunk missing embedding: {chunk['metadata'].get('normalized_text_hash')}")
         
-        db.close()
         logger.info(f"✓ Successfully processed multilingual embeddings for {len(chunks)} chunks")
         return chunks
         
@@ -276,7 +232,8 @@ def get_multilingual_model_info() -> Dict[str, Any]:
         "max_length": BGE_M3_MAX_LENGTH,
         "batch_size": BGE_M3_BATCH_SIZE,
         "normalize": BGE_M3_NORMALIZE,
-        "device": "cuda" if torch.cuda.is_available() else "cpu"
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "remote_embedding": USE_REMOTE_EMBEDDING
     }
 
 # Compatibility functions for existing code
@@ -307,7 +264,7 @@ def create_embeddings_no_fallback(chunks: List[Dict[str, Any]], tenant_id: str =
     logger.info(f"Using multilingual embeddings (BGE-M3) - handles all languages optimally")
     return create_multilingual_embeddings(chunks, tenant_id=tenant_id)
 
-def create_embeddings_with_fallback(chunks: List[Dict[str, Any]], tenant_id: str = None) -> List[Dict[str, Any]]:
+def create_embeddings_with_fallback(chunks: List[Dict[str, Any]], tenant_id: str = None, **kwargs) -> List[Dict[str, Any]]:
     """
     Create embeddings using BGE-M3 multilingual model only - no fallback.
     
@@ -319,4 +276,4 @@ def create_embeddings_with_fallback(chunks: List[Dict[str, Any]], tenant_id: str
         Chunks with BGE-M3 multilingual embeddings
     """
     logger.info(f"Using BGE-M3 multilingual embeddings only - no fallback")
-    return create_multilingual_embeddings(chunks, tenant_id=tenant_id)
+    return create_multilingual_embeddings(chunks, tenant_id=tenant_id, **kwargs)
