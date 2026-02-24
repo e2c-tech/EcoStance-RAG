@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Multilingual Feature Flags ---
-MULTILINGUAL_ENABLED = os.getenv("MULTILINGUAL_ENABLED", "false").lower() == "true"
+MULTILINGUAL_ENABLED = os.getenv("MULTILINGUAL_ENABLED", "true").lower() == "true"
 EMBEDDING_MODEL_TYPE = os.getenv("EMBEDDING_MODEL_TYPE", "huggingface")  # huggingface or bge-m3
 FALLBACK_TO_LEGACY = os.getenv("FALLBACK_TO_LEGACY", "true").lower() == "true"
 
