@@ -152,16 +152,18 @@ def upload_to_qdrant(
         logger.warning(f"No points to upload for collection '{collection_name}'")
         return
 
-    # Use upload_collection instead of upsert to automatically handle batching
-    # and prevent "JSON payload is larger than allowed" errors from Qdrant
+    # Chunk the points into batches to prevent "JSON payload is larger than allowed"
+    # errors from Qdrant when uploading massive files
+    batch_size = 100
     try:
-        client.upload_collection(
-            collection_name=collection_name,
-            points=points_to_upload,
-            batch_size=100, # safe batch size to avoid payload limits
-            wait=True
-        )
-        logger.info(f"Successfully uploaded {len(points_to_upload)} points in batches to '{collection_name}'")
+        for i in range(0, len(points_to_upload), batch_size):
+            batch = points_to_upload[i:i + batch_size]
+            client.upsert(
+                collection_name=collection_name,
+                points=batch,
+                wait=True
+            )
+        logger.info(f"Successfully uploaded {len(points_to_upload)} points in batches of {batch_size} to '{collection_name}'")
     except Exception as e:
         logger.error(f"Failed to upload points to Qdrant: {e}")
         raise

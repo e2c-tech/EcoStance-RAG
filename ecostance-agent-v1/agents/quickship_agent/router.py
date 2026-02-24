@@ -104,8 +104,8 @@ async def chat_with_agent(
         
         # Format history for the agent service
         # Agent services expect list of {"role": "user/assistant", "content": "..."}
+        formatted_history = []
         if db_history:
-            formatted_history = []
             for msg in db_history:
                 formatted_history.append({"role": msg.role, "content": msg.content})
             
