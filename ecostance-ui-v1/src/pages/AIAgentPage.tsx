@@ -193,7 +193,7 @@ export default function AIAgentPage() {
         return {
           id: msg.id || `hist-${index}-${Date.now()}`,
           type: role === 'user' || role === 'human' ? 'user' : 'assistant',
-          content: content,
+          content: role === 'user' || role === 'human' ? content : parseAgentResponse(content),
           timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
           agent_type: msg.agent_type || msg.metadata?.agent_type,
           source: msg.source || msg.metadata?.source,
@@ -328,7 +328,7 @@ export default function AIAgentPage() {
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: response.content || (response as any).response, // Fallback for transition
+        content: parseAgentResponse(response.content || (response as any).response), // Fallback for transition
         timestamp: new Date(response.timestamp),
         agent_type: response.agent_type || agentConfig?.agent_type,
       };

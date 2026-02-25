@@ -6,119 +6,105 @@
 export const parseAgentResponse = (content: any): any => {
     if (typeof content !== 'string') return content;
 
-    // 1. Remove markers like "### ANALYZE PREVIOUS TOOL RESULTS:" or "### FINAL ANSWER:"
-    // If "### FINAL ANSWER:" exists, we usually only care about what follows it.
-    const blockMarkers = [
-        "### FINAL ANSWER:",
-        "### RESPONSE:",
-        "### ANSWER:",
-        "### ANALYZE PREVIOUS TOOL RESULTS:",
-        "### SCRATCHPAD:",
-        "FINAL ANSWER:",
-        "RESPONSE:",
-        "ANSWER:"
+    let text = content.trim();
+
+    // 1. Handle markers case-insensitively
+    const markers = [
+        "### FINAL ANSWER:", "### RESPONSE:", "### ANSWER:",
+        "FINAL ANSWER:", "RESPONSE:", "ANSWER:",
+        "Thought:", "Reasoning:", "Action:", "Observation:"
     ];
 
-    for (const marker of blockMarkers) {
-        if (content.includes(marker)) {
-            const parts = content.split(marker);
-            const lastPart = parts[parts.length - 1].trim();
-            if (lastPart) {
-                return parseAgentResponse(lastPart); // Recursively parse the extracted part
+    for (const marker of markers) {
+        const markerLower = marker.toLowerCase();
+        const textLower = text.toLowerCase();
+
+        // Find index of marker, maybe preceded by newline or at start
+        if (textLower.includes(markerLower)) {
+            // Find the last occurrence of this marker to get the final answer
+            const index = textLower.lastIndexOf(markerLower);
+            const sub = text.substring(index + marker.length).trim();
+
+            // Clean up leading punctuation often added by LLMs like ":", "*", " "
+            const cleaned = sub.replace(/^[:\*\s\-]+/, '').trim();
+            if (cleaned) {
+                // Return recursive call to handle nested JSON in the extracted block
+                return parseAgentResponse(cleaned);
             }
         }
     }
 
-    const lineMarkers = [
-        "Thought:",
-        "Reasoning:",
-        "Observation:",
-        "Action:",
-        "Action Input:"
-    ];
+    // 2. Extract and check for JSON blocks
+    // This regex finds content between curly braces, handling nested objects 
+    // to a shallow degree (enough for most agent responses).
+    // We search for all potential JSON blocks and try to parse them.
+    const potentialJsonBlocks: string[] = [];
+    let braceCount = 0;
+    let startPos = -1;
 
-    for (const marker of lineMarkers) {
-        // Only strip if the marker appears at the start of the string or immediately after a newline
-        // We do this manually to avoid complex RegExp split behavior which can keep the matched substrings depending on capture groups
-        const index = content.indexOf(`\n${marker}`);
-        if (index !== -1) {
-            const lastPart = content.slice(index + `\n${marker}`.length).trim();
-            if (lastPart) {
-                return parseAgentResponse(lastPart);
-            }
-        } else if (content.startsWith(marker)) {
-            const lastPart = content.slice(marker.length).trim();
-            if (lastPart) {
-                return parseAgentResponse(lastPart);
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === '{') {
+            if (braceCount === 0) startPos = i;
+            braceCount++;
+        } else if (text[i] === '}') {
+            braceCount--;
+            if (braceCount === 0 && startPos !== -1) {
+                potentialJsonBlocks.push(text.substring(startPos, i + 1));
             }
         }
     }
 
-    // 2. Try to extract JSON from markdown blocks
-    const jsonMarkdownRegex = /```json\n([\s\S]*?)\n```/;
-    const match = content.match(jsonMarkdownRegex);
+    // Iterate backwards to find the last valid JSON block (usually the final answer)
+    for (let i = potentialJsonBlocks.length - 1; i >= 0; i--) {
+        try {
+            const block = potentialJsonBlocks[i];
+            const parsed = JSON.parse(block);
+
+            // If it's a valid object, process it
+            if (parsed && typeof parsed === 'object') {
+                // If it looks like a meaningful response, return it
+                // We check for common tool/response keys
+                if (parsed.tool === 'none' || parsed.response || parsed.answer || parsed.content || parsed.type) {
+                    return processParsedObject(parsed);
+                }
+
+                // If it's the last block and looks like JSON, we'll take it 
+                // but keep looking for a specifically 'response' oriented block
+                if (i === potentialJsonBlocks.length - 1) {
+                    const result = processParsedObject(parsed);
+                    if (result !== parsed) return result;
+                }
+            }
+        } catch (e) {
+            // Not valid JSON, continue to next block
+        }
+    }
+
+    // 3. Fallback: Check if there's any JSON markdown
+    const jsonMarkdownRegex = /```json\n?([\s\S]*?)\n?```/i;
+    const match = text.match(jsonMarkdownRegex);
     if (match) {
         try {
             const parsed = JSON.parse(match[1].trim());
             return processParsedObject(parsed);
-        } catch (e) {
-            // If parsing fails, fall back to the raw content
-        }
-    }
-
-    // 3. Try to parse as raw JSON if it looks like an object or array
-    const trimmed = content.trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        try {
-            const parsed = JSON.parse(trimmed);
-            return processParsedObject(parsed);
-        } catch (e) {
-            // If it looks like JSON but failed to parse (e.g. multiple blocks), 
-            // try to extract the first/last valid JSON object
-            const firstBrace = content.indexOf('{');
-            const lastBrace = content.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-                try {
-                    const candidate = content.substring(firstBrace, lastBrace + 1);
-                    const parsed = JSON.parse(candidate);
-                    return processParsedObject(parsed);
-                } catch (e2) { }
-            }
-        }
-    }
-
-    // 4. Handle cases where JSON is embedded in text (e.g. "Here is the data: { ... }")
-    if (content.includes('{') && content.includes('}')) {
-        try {
-            const firstBrace = content.indexOf('{');
-            const lastBrace = content.lastIndexOf('}');
-            const candidate = content.substring(firstBrace, lastBrace + 1);
-            const parsed = JSON.parse(candidate);
-
-            // If the parsed object looks like a meaningful response, use its field
-            // but maybe keep the surrounding text if it's brief?
-            // Actually, usually we just want the parsed object if it's a rich component
-            if (parsed && (parsed.type || parsed.component || parsed.response || parsed.answer)) {
-                return processParsedObject(parsed);
-            }
         } catch (e) { }
     }
 
-    // 5. Clean up conversational filler/reasoning prefixes
+    // 4. Conversational filler cleaning
     const reasoningPrefixes = [
-        /^Based on the (search results|database|information provided),?\s*/i,
+        /^Based on the (search results|database|information provided|data analysis),?\s*/i,
         /^I've analyzed the (query|data|logs),?\s*/i,
         /^I found the following (information|results|details):?\s*/i,
         /^Here is the (information|answer) you requested:?\s*/i,
-        /^Sure, I can help with that\.?\s*/i
+        /^Sure, I can help with that\.?\s*/i,
+        /^According to the (database|KB|logs),?\s*/i
     ];
 
-    let cleaned = content;
+    let cleaned = text;
     for (const prefix of reasoningPrefixes) {
         cleaned = cleaned.replace(prefix, '');
     }
 
-    // 6. Return as is if no structured format was identified
     return cleaned.trim();
 };
 
