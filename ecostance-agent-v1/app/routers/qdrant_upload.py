@@ -56,8 +56,16 @@ async def upload_to_qdrant(
     # Check permission
     rbac = RBACService(db)
     rbac.require_permission(tenant_id, user_id, Permission.KB_UPLOAD)
+    
+    # Check if the file path is just a filename, and construct correct tenant upload path
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found at the specified path.")
+        from ..services.file_access_service import get_file_access_service
+        file_service = get_file_access_service()
+        resolved_path = file_service.get_safe_file_path(tenant_id, os.path.basename(file_path))
+        if os.path.exists(resolved_path):
+            file_path = resolved_path
+        else:
+            raise HTTPException(status_code=404, detail="File not found at the specified path.")
 
     # Generate tenant-specific collection name
     qdrant_client = get_qdrant_client()

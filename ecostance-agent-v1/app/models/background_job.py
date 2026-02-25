@@ -22,6 +22,7 @@ class BackgroundJob(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     error_message = Column(String(1024), nullable=True)
     progress_message = Column(String(1024), nullable=True)
+    logs = Column(JSON, nullable=True, default=list)
     result_data = Column(JSON, nullable=True)
 
     def to_dict(self):
@@ -36,5 +37,6 @@ class BackgroundJob(Base):
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "error_message": self.error_message,
             "progress_message": self.progress_message,
+            "logs": self.logs if self.logs is not None else [],
             "result_data": self.result_data
         }
