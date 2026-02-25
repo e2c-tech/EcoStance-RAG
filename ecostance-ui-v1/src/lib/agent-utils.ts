@@ -131,11 +131,17 @@ const processParsedObject = (parsed: any): any => {
     }
 
     // If it's a known rich component type, keep the whole object
-    if (parsed.type || parsed.component) {
+    // But exclude 'text' type as that should be extracted
+    if ((parsed.type || parsed.component) && parsed.type !== 'text' && parsed.type !== 'message') {
         return parsed;
     }
 
-    // Handle tool-based agent "final answer" format: { tool: "none", args: { response: "..." } }
+    // Handle tool-based agent "final answer" format: { tool: "none", response: "..." }
+    if (parsed.tool === 'none' && parsed.response) {
+        return parsed.response;
+    }
+
+    // Handle tool-based agent "final answer" format with args: { tool: "none", args: { response: "..." } }
     if (parsed.tool === 'none' && parsed.args?.response) {
         return parsed.args.response;
     }

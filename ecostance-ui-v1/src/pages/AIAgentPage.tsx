@@ -3,13 +3,14 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Database, FileText, Send, Loader2, AlertCircle, X, RefreshCw, Shield, Truck, ShoppingCart, Leaf, Sparkles, MessageSquare, Plus, Trash2, Archive, Clock, PanelLeftClose, PanelLeftOpen, Edit2, Check } from 'lucide-react';
-import type { AgentSession } from '../services/api.types';
+import { agentAPI } from '../services/api';
+import type { AgentChatResponse, AgentSession } from '../services/api.types';
 import { useAuth } from '../context/AuthContext.v2';
 import { useKnowledgeBases } from '../context/KnowledgeBaseContext';
 import { useDatabase } from '../context/DatabaseContext';
 import { cn } from '../lib/utils';
 import { parseAgentResponse } from '../lib/agent-utils';
-import { useAgent } from '../context/AgentContext';
+
 
 const PERSONA_CONFIG: Record<string, { label: string; icon: any; description: string }> = {
   security_analyst: {
@@ -45,33 +46,37 @@ import {
   UrlAction
 } from '../components/chat/components';
 
+interface Message {
+  id: string;
+  type: 'user' | 'assistant' | 'system';
+  content: any; // Changed from string to any
+  timestamp: Date;
+  source?: 'database' | 'knowledge-base';
+  isError?: boolean;
+  metadata?: {
+    sql?: string;
+    results?: any[];
+    sources?: Array<{
+      filename: string;
+      chunk_index: number;
+      relevance_score: number;
+    }>;
+  };
+  agent_type?: string;
+}
+
+
 
 export default function AIAgentPage() {
   const { user } = useAuth();
-
-  const {
-    messages,
-    sessions,
-    input,
-    setInput,
-    loading,
-    sessionId,
-    setSessionId,
-    isSessionsLoading,
-    selectedKB,
-    setSelectedKB,
-    selectedPersona,
-    setSelectedPersona,
-    agentConfig,
-    loadSessionHistory,
-    handleSend: contextHandleSend,
-    handleDeleteSession: contextHandleDeleteSession,
-    handleRenameSession,
-    handleNewChat
-  } = useAgent();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   const {
     connections: dbConnections,
+    fetchConnections: loadDatabaseConnections,
     isConnected: isDatabaseConnected,
     selectedConnection: selectedDBConnection,
     connect: handleConnect,
@@ -86,11 +91,58 @@ export default function AIAgentPage() {
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [connectingDB, setConnectingDB] = useState<string | null>(null);
+  const [agentConfig, setAgentConfig] = useState<{ agent_type: string; is_customized: boolean } | null>(null);
   const { knowledgeBases, fetchKnowledgeBases, isLoading: isKBLoading } = useKnowledgeBases();
+  const [selectedKB, setSelectedKB] = useState<string>('');
+  const [selectedPersona, setSelectedPersona] = useState<string>('generic');
+
+  // Session history state
+  const [sessions, setSessions] = useState<AgentSession[]>([]);
+  const [isSessionsLoading, setIsSessionsLoading] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    // Clear state when tenant changes
+    // setSelectedKB(''); // Actually maybe we want to KEEP it?
+    // setSelectedDBConnection('');
+    // setIsDatabaseConnected(false);
+    setMessages([]);
+    setAgentConfig(null);
+    setSessionId(null);
+
+    // Load fresh data for the current tenant
+    if (user?.tenantId) {
+      fetchKnowledgeBases();
+      loadDatabaseConnections();
+      fetchAgentConfig();
+      loadSessions();
+
+      // Restore session if exists
+      const savedSessionId = localStorage.getItem(`ai_agent_session_${user.tenantId}`);
+      if (savedSessionId) {
+        console.log('AI Agent: Found saved session:', savedSessionId);
+        setSessionId(savedSessionId);
+        loadSessionHistory(savedSessionId);
+      }
+    }
+  }, [user?.tenantId]); // Reload when tenant changes
+
+  const loadSessions = async () => {
+    try {
+      setIsSessionsLoading(true);
+      const response = await agentAPI.listSessions() as any;
+      // Handle both direct array and { sessions: [] } wrapper
+      const sessionsData = Array.isArray(response) ? response : (response?.sessions || []);
+      setSessions(sessionsData);
+    } catch (err) {
+      console.error('AI Agent: Failed to load sessions:', err);
+    } finally {
+      setIsSessionsLoading(false);
+    }
+  };
 
   const categorizeSessions = (sessions: AgentSession[]) => {
     if (!Array.isArray(sessions)) return { active: [], archived: [] };
@@ -121,47 +173,57 @@ export default function AIAgentPage() {
     return { active, archived };
   };
 
-  const handleSelectKB = (kbName: string) => {
-    setSelectedKB(kbName);
-    setShowKBModal(false);
-  };
-
-
-  const handleConnectSavedDB = async (connectionName: string) => {
-    setConnectionLoading(true);
-    setConnectingDB(connectionName);
+  const loadSessionHistory = async (sid: string) => {
     try {
-      await handleConnect(connectionName);
-      setShowDBModal(false);
-      // Removed local message injection to prevent desync
-    } catch (err: any) {
-      console.error("Connection error: ", err);
+      setLoading(true);
+      const response = await agentAPI.getHistory(sid) as any;
+
+      // Handle both { messages: [] } and direct array responses
+      const rawMessages = Array.isArray(response)
+        ? response
+        : (response?.messages || response?.data?.messages || []);
+
+      console.log('AI Agent: Loaded history:', rawMessages.length, 'messages');
+
+      const mappedMessages: Message[] = rawMessages.map((msg: any, index: number) => {
+        // Handle inconsistent field names between live chat and history
+        const content = msg.content || msg.response || msg.message || '';
+        const role = msg.role || msg.type || 'assistant';
+
+        return {
+          id: msg.id || `hist-${index}-${Date.now()}`,
+          type: role === 'user' || role === 'human' ? 'user' : 'assistant',
+          content: content,
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+          agent_type: msg.agent_type || msg.metadata?.agent_type,
+          source: msg.source || msg.metadata?.source,
+          metadata: msg.metadata || {}
+        };
+      });
+
+      setMessages(mappedMessages);
+    } catch (err) {
+      console.error('AI Agent: Failed to load session history:', err);
+      // If session is invalid, clear it
+      if (user?.tenantId) {
+        localStorage.removeItem(`ai_agent_session_${user.tenantId}`);
+      }
+      setSessionId(null);
     } finally {
-      setConnectionLoading(false);
-      setConnectingDB(null);
+      setLoading(false);
     }
   };
 
-  const handleSend = async () => {
-    await contextHandleSend(input, selectedDBConnection || undefined);
-  };
-
-  const handleDeleteSession = async (e: React.MouseEvent, sid: string) => {
-    e.stopPropagation();
-    if (window.confirm('Delete this conversation?')) {
-      await contextHandleDeleteSession(sid);
+  const fetchAgentConfig = async () => {
+    try {
+      const config = await agentAPI.getConfig() as any;
+      setAgentConfig(config);
+      if (config?.agent_type) {
+        setSelectedPersona(config.agent_type);
+      }
+    } catch (err) {
+      console.error('Failed to fetch agent config:', err);
     }
-  };
-
-  const handleRenameWrapper = async (e: React.FormEvent, sid: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!editingTitle.trim()) {
-      setEditingSessionId(null);
-      return;
-    }
-    await handleRenameSession(sid, editingTitle.trim());
-    setEditingSessionId(null);
   };
 
   useEffect(() => {
@@ -178,6 +240,156 @@ export default function AIAgentPage() {
       await fetchKnowledgeBases(true);
     } catch (err) {
       console.error('AI Agent: Failed to refresh knowledge bases:', err);
+    }
+  };
+
+  const handleSelectKB = (kbName: string) => {
+    setSelectedKB(kbName);
+    setShowKBModal(false);
+
+    const successMsg: Message = {
+      id: Date.now().toString(),
+      type: 'system',
+      content: `✅ Selected knowledge base: ${kbName}`,
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, successMsg]);
+  };
+
+
+  const handleConnectSavedDB = async (connectionName: string) => {
+    setConnectionLoading(true);
+    setConnectingDB(connectionName);
+    try {
+      await handleConnect(connectionName);
+      setShowDBModal(false);
+
+      const successMsg: Message = {
+        id: Date.now().toString(),
+        type: 'system',
+        content: `✅ Connected to database: ${connectionName}`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, successMsg]);
+    } catch (err: any) {
+      const errorMsg: Message = {
+        id: Date.now().toString(),
+        type: 'system',
+        content: `❌ Failed to connect: ${err.message}`,
+        timestamp: new Date(),
+        isError: true,
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setConnectionLoading(false);
+      setConnectingDB(null);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || loading) return;
+
+    const questionText = input.trim();
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: questionText,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setLoading(true);
+
+    console.log('AI Agent: Processing query:', questionText);
+    console.log('AI Agent: Session ID:', sessionId);
+
+    try {
+      // Use the new AI Agent Beta API with KB and DB connection
+      const response = await agentAPI.chat(
+        questionText,
+        sessionId || undefined,
+        selectedKB || undefined,
+        selectedDBConnection || undefined,
+        selectedPersona
+      ) as AgentChatResponse;
+
+      // Update session ID if new
+      if (response.session_id && response.session_id !== sessionId) {
+        setSessionId(response.session_id);
+        console.log('AI Agent: New session ID:', response.session_id);
+        if (user?.tenantId) {
+          localStorage.setItem(`ai_agent_session_${user.tenantId}`, response.session_id);
+        }
+        loadSessions(); // Refresh session list
+      }
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: response.content || (response as any).response, // Fallback for transition
+        timestamp: new Date(response.timestamp),
+        agent_type: response.agent_type || agentConfig?.agent_type,
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (err: any) {
+      console.error('AI Agent: Error processing query:', err);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'system',
+        content: err.message || 'Failed to process query',
+        timestamp: new Date(),
+        isError: true,
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSession = async (e: React.MouseEvent, sid: string) => {
+    e.stopPropagation();
+    if (window.confirm('Delete this conversation?')) {
+      try {
+        await agentAPI.deleteSession(sid);
+        if (sid === sessionId) {
+          setMessages([]);
+          setSessionId(null);
+          if (user?.tenantId) {
+            localStorage.removeItem(`ai_agent_session_${user.tenantId}`);
+          }
+        }
+        loadSessions();
+      } catch (err) {
+        console.error('Failed to delete session:', err);
+      }
+    }
+  };
+
+  const handleRenameSession = async (e: React.FormEvent, sid: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!editingTitle.trim()) {
+      setEditingSessionId(null);
+      return;
+    }
+    try {
+      await agentAPI.renameSession(sid, editingTitle.trim());
+      loadSessions();
+    } catch (err) {
+      console.error('AI Agent: Failed to rename session:', err);
+    } finally {
+      setEditingSessionId(null);
+    }
+  };
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setSessionId(null);
+    if (user?.tenantId) {
+      localStorage.removeItem(`ai_agent_session_${user.tenantId}`);
     }
   };
 
@@ -252,7 +464,7 @@ export default function AIAgentPage() {
                 <div className="flex-1 min-w-0 pr-6">
                   {editingSessionId === s.session_id ? (
                     <form
-                      onSubmit={(e) => handleRenameWrapper(e, s.session_id)}
+                      onSubmit={(e) => handleRenameSession(e, s.session_id)}
                       onClick={(e) => e.stopPropagation()}
                       className="flex items-center gap-1"
                     >
@@ -443,6 +655,13 @@ export default function AIAgentPage() {
                       onClick={() => {
                         setSelectedPersona(key);
                         setShowPersonaModal(false);
+                        const msg: Message = {
+                          id: Date.now().toString(),
+                          type: 'system',
+                          content: `🎭 Persona switched to: ${config.label}`,
+                          timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, msg]);
                       }}
                       className={`w-full p-4 border rounded-xl text-left transition-all flex items-start gap-4 ${selectedPersona === key
                         ? 'bg-primary/10 border-primary/30 shadow-sm'
@@ -763,6 +982,9 @@ export default function AIAgentPage() {
                                   />
                                 </div>
                               );
+                            case 'text':
+                            case 'message':
+                              return content.response || content.content || content.answer || JSON.stringify(content);
                             case 'url_action':
                               return (
                                 <div className="my-4">
