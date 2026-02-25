@@ -33,7 +33,7 @@ export const JobProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // We use a temporary setJobs call to get the most recent state without a closure stale-mate
             let activeJobs: ProcessingJob[] = [];
             setJobs(current => {
-                activeJobs = current.filter(j => j.status === 'pending' || j.status === 'in_progress');
+                activeJobs = current.filter(j => j.status === 'pending' || j.status === 'in_progress' || j.status === 'processing');
                 return current;
             });
 
@@ -94,7 +94,7 @@ const JobTracker = () => {
 
     // Auto-expand when a new job starts processing, and optionally auto-dismiss
     useEffect(() => {
-        const inProgress = jobs.filter(j => j.status === 'pending' || j.status === 'in_progress');
+        const inProgress = jobs.filter(j => j.status === 'pending' || j.status === 'in_progress' || j.status === 'processing');
         if (inProgress.length > 0 && !isExpanded) {
             // Keeping it collapsed by default might be less intrusive based on user request.
         }
@@ -104,7 +104,7 @@ const JobTracker = () => {
 
     if (jobs.length === 0) return null;
 
-    const inProgress = jobs.filter(j => j.status === 'pending' || j.status === 'in_progress');
+    const inProgress = jobs.filter(j => j.status === 'pending' || j.status === 'in_progress' || j.status === 'processing');
     const hasActive = inProgress.length > 0;
 
     return (
@@ -128,7 +128,7 @@ const JobTracker = () => {
                                     <span className="font-medium truncate pr-2 flex-1 text-xs" title={job.file_path}>
                                         {job.file_path?.split('/').pop() || job.file_path}
                                     </span>
-                                    {job.status === 'pending' || job.status === 'in_progress' ? (
+                                    {job.status === 'pending' || job.status === 'in_progress' || job.status === 'processing' ? (
                                         <Icons.Spinner className="w-3.5 h-3.5 text-primary animate-spin shrink-0 mt-0.5" />
                                     ) : job.status === 'completed' ? (
                                         <CheckCircle className="w-3.5 h-3.5 text-success shrink-0 mt-0.5" />
