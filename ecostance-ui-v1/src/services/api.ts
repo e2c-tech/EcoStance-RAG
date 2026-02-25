@@ -136,14 +136,14 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
         // Refresh failed, clear tokens and redirect to login
         clearTokens();
         // Redirect to appropriate login page
-        const isSuperAdminPath = window.location.pathname.startsWith('/admin');
-        window.location.href = isSuperAdminPath ? '/admin/login' : '/login';
+        const isSuperAdminPath = window.location.pathname.includes('/admin');
+        window.location.href = isSuperAdminPath ? '/ecostance-ui/admin/login' : '/ecostance-ui/login';
         throw new Error('Session expired');
       }
     } catch (error) {
       clearTokens();
-      const isSuperAdminPath = window.location.pathname.startsWith('/admin');
-      window.location.href = isSuperAdminPath ? '/admin/login' : '/login';
+      const isSuperAdminPath = window.location.pathname.includes('/admin');
+      window.location.href = isSuperAdminPath ? '/ecostance-ui/admin/login' : '/ecostance-ui/login';
       throw error;
     }
   }

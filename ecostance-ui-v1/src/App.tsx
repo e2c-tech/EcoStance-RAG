@@ -88,7 +88,7 @@ function App() {
             <IntegrationProvider>
               <KnowledgeBaseProvider>
                 <JobProvider>
-                  <Router>
+                  <Router basename="/ecostance-ui">
                     <Routes>
                       {/* Public Routes */}
                       <Route path="/login" element={<LoginPage />} />

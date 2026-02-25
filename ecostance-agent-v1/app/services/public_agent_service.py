@@ -204,6 +204,15 @@ class PublicAgentService:
             query = query.filter(PublicAgentSession.tenant_id == tenant_id)
         return query.first()
 
+    def delete_session(self, session_id: str, tenant_id: str) -> bool:
+        """Delete a session and its associated messages/feedback by ID with tenant verification."""
+        session = self.get_session(session_id, tenant_id)
+        if session:
+            self.db.delete(session)
+            self.db.commit()
+            return True
+        return False
+
     def is_session_expired(self, session_id: str, tenant_id: str, hours: int = 24) -> bool:
         """Check if session has expired, scoped to tenant."""
         session = self.get_session(session_id, tenant_id)

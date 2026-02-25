@@ -21,6 +21,7 @@ interface DatabaseSchema {
 }
 
 interface DatabaseContextType {
+    connectionStep: string | null;
     connections: Connection[];
     selectedConnection: string;
     isConnected: boolean;
@@ -44,6 +45,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const [isConnected, setIsConnected] = useState(false);
     const [schema, setSchema] = useState<DatabaseSchema | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [connectionStep, setConnectionStep] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [hasLoaded, setHasLoaded] = useState(false);
     const { user } = useAuth();
@@ -56,6 +58,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setSchema(null);
         setHasLoaded(false);
         setError(null);
+        setConnectionStep(null);
     }, [user?.tenantId]);
 
     const fetchConnections = useCallback(async (force = false) => {
@@ -83,6 +86,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         try {
             setIsLoading(true);
             setError(null);
+            setConnectionStep('Loading connection details...');
             const conn = await databaseAPI.loadConnection(connectionName) as any;
 
             let dbUri: string;
@@ -94,14 +98,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 dbUri = `${conn.type}://${conn.username}:${conn.password}@${conn.host}:${conn.port}/${conn.database}`;
             }
 
+            setConnectionStep(`Connecting to ${conn.type} database...`);
             await databaseAPI.connect(dbUri);
             setIsConnected(true);
             setSelectedConnection(connectionName);
 
             // Try to load schema
             try {
+                setConnectionStep('Loading database schema...');
                 const schemaData = await databaseAPI.getSchema() as any;
                 setSchema(schemaData);
+                setConnectionStep('Finalizing connection...');
+                // Adding a small delay just so the user can see the finalizing step briefly
+                await new Promise(resolve => setTimeout(resolve, 300));
             } catch (schemaErr) {
                 console.warn('Failed to load schema during connect:', schemaErr);
             }
@@ -110,6 +119,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             throw err;
         } finally {
             setIsLoading(false);
+            setConnectionStep(null);
         }
     }, []);
 
@@ -130,6 +140,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return (
         <DatabaseContext.Provider value={{
+            connectionStep,
             connections,
             selectedConnection,
             isConnected,

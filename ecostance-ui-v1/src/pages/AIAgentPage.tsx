@@ -79,7 +79,8 @@ export default function AIAgentPage() {
     fetchConnections: loadDatabaseConnections,
     isConnected: isDatabaseConnected,
     selectedConnection: selectedDBConnection,
-    connect: handleConnect
+    connect: handleConnect,
+    connectionStep,
   } = useDatabase();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -89,6 +90,7 @@ export default function AIAgentPage() {
   const [showKBModal, setShowKBModal] = useState(false);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [connectionLoading, setConnectionLoading] = useState(false);
+  const [connectingDB, setConnectingDB] = useState<string | null>(null);
   const [agentConfig, setAgentConfig] = useState<{ agent_type: string; is_customized: boolean } | null>(null);
   const { knowledgeBases, fetchKnowledgeBases, isLoading: isKBLoading } = useKnowledgeBases();
   const [selectedKB, setSelectedKB] = useState<string>('');
@@ -257,6 +259,7 @@ export default function AIAgentPage() {
 
   const handleConnectSavedDB = async (connectionName: string) => {
     setConnectionLoading(true);
+    setConnectingDB(connectionName);
     try {
       await handleConnect(connectionName);
       setShowDBModal(false);
@@ -279,6 +282,7 @@ export default function AIAgentPage() {
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setConnectionLoading(false);
+      setConnectingDB(null);
     }
   };
 
@@ -600,10 +604,18 @@ export default function AIAgentPage() {
                       key={conn.name}
                       onClick={() => handleConnectSavedDB(conn.name)}
                       disabled={connectionLoading}
-                      className="w-full p-3 bg-background border border-border rounded-lg text-left hover:bg-surface-hover transition-colors disabled:opacity-50"
+                      className="w-full p-3 bg-background border border-border rounded-lg text-left hover:bg-surface-hover transition-colors disabled:opacity-50 flex items-center justify-between"
                     >
-                      <div className="font-medium text-text">{conn.name}</div>
-                      <div className="text-xs text-text-secondary">{conn.type} - {conn.database}</div>
+                      <div>
+                        <div className="font-medium text-text">{conn.name}</div>
+                        <div className="text-xs text-text-secondary">{conn.type} - {conn.database}</div>
+                        {connectingDB === conn.name && connectionStep && (
+                          <div className="text-[10px] text-primary mt-1 font-medium animate-pulse">
+                            {connectionStep}
+                          </div>
+                        )}
+                      </div>
+                      {connectingDB === conn.name && <Loader2 className="w-5 h-5 text-primary animate-spin" />}
                     </button>
                   ))}
                 </div>
@@ -811,7 +823,11 @@ export default function AIAgentPage() {
                   : 'bg-background border-border hover:bg-surface-hover'
                   }`}
               >
-                <Database className={`w-4 h-4 ${isDatabaseConnected ? 'text-primary' : ''}`} />
+                {connectionLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                ) : (
+                  <Database className={`w-4 h-4 ${isDatabaseConnected ? 'text-primary' : ''}`} />
+                )}
                 {selectedDBConnection || (isDatabaseConnected
                   ? 'Connected'
                   : (dbConnections.length > 0 ? 'Select' : 'None'))}

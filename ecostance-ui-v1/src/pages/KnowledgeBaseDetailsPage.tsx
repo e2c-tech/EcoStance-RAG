@@ -6,10 +6,11 @@ import { Card } from '../components/ui/Card';
 import { Icons } from '../components/icons';
 import { Badge } from '../components/ui/Badge';
 import { Link } from 'react-router-dom';
+import { AlertCircle, CheckCircle, X } from 'lucide-react';
 import { DocumentsTable, Document } from '../components/DocumentsTable';
 import { useKnowledgeBase } from '../hooks/useKnowledgeBase';
 import { useJobs } from '../context/JobContext';
-import { filesAPI } from '../services/api';
+import { filesAPI, documentProcessingAPI } from '../services/api';
 
 interface KnowledgeBase {
   id: string;
@@ -53,7 +54,7 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { getKBDetails, deleteFileFromKB } = useKnowledgeBase();
-  const { addJob, jobs } = useJobs();
+  const { addJob, removeJob, jobs } = useJobs();
   const prevJobsRef = React.useRef(jobs);
 
   const fetchKBData = React.useCallback(async (force = false) => {
@@ -154,15 +155,10 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
     });
 
     if (newlyCompleted) {
-      setTimeout(() => fetchKBData(true), 1500); // Wait 1.5s for Qdrant consistency before refresh
+      fetchKBData(true);
     }
     prevJobsRef.current = jobs;
   }, [jobs, kbId, fetchKBData]);
-
-  // Derive if the KB is currently processing any jobs from the context
-  const activeJobsForKB = jobs.filter(j => j.collection_name === kbId && (j.status === 'pending' || j.status === 'in_progress' || j.status === 'processing'));
-  const isProcessingKB = activeJobsForKB.length > 0;
-  const currentProgressMessage = isProcessingKB ? (activeJobsForKB[0].progress_message || "Processing in background...") : "";
 
   if (isLoading) {
     return (
@@ -283,19 +279,28 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
 
     setIsUploading(true);
     setUploadError(null);
-    setProgressMessage("Uploading file...");
+    setProgressMessage(`Uploading ${file.name} to server...`);
 
     try {
-      // Unified call - upload and trigger processing immediately
-      const res = await filesAPI.upload(file, true, kbId!) as any;
+      // 1. Upload the file without triggering processing yet
+      const uploadRes = await filesAPI.upload(file, false, kbId!) as any;
 
-      if (res.job_id) {
-        addJob(res.job_id, file.name, kbId!);
+      setProgressMessage(`Starting background processing for ${file.name}...`);
+
+      // 2. Trigger processing as a background job
+      const processRes = await documentProcessingAPI.processToKnowledgeBase(file.name, kbId!) as any;
+
+      if (processRes && processRes.job_id) {
+        addJob(processRes.job_id, file.name, kbId!);
+      } else if (uploadRes && uploadRes.job_id) {
+        // Fallback if backend still returns it from the upload endpoint
+        addJob(uploadRes.job_id, file.name, kbId!);
       } else {
-        // Fallback for when job_id is not returned (old backend behavior)
+        // Fallback for old backend behavior
         fetchKBData(true);
       }
 
+      // Hide the initial banner - the JobContext will take over polling the status
       setIsUploading(false);
       setProgressMessage("");
 
@@ -386,27 +391,70 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
       </div>
 
       {uploadError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4" role="alert">
-          <span className="block sm:inline">{uploadError}</span>
-        </div>
-      )}
-
-      {(isUploading || isProcessingKB) && (
-        <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4" role="alert">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4 mt-8" role="alert">
           <div className="flex items-center">
-            <Icons.Spinner className="h-4 w-4 animate-spin mr-2" />
-            <span>{currentProgressMessage || progressMessage || "Uploading and processing document..."}</span>
+            <AlertCircle className="h-4 w-4 mr-2 shrink-0" />
+            <span className="block sm:inline">{uploadError}</span>
           </div>
         </div>
       )}
 
+      {isUploading && (
+        <div className="bg-primary/5 border border-primary/20 text-primary px-4 py-3 rounded-lg mb-4 mt-8 flex items-center shadow-sm">
+          <Icons.Spinner className="h-4 w-4 animate-spin mr-3 shrink-0" />
+          <span className="font-medium text-sm">{progressMessage || "Uploading and processing document... "}</span>
+        </div>
+      )}
+
+      {/* Show active and completed jobs from backend polling */}
+      {jobs.filter(j => j.collection_name === kbId).map(job => (
+        <div
+          key={job.job_id}
+          className={`border px-4 py-3 xl:py-4 rounded-lg mb-4 shadow-sm flex items-center justify-between ${job.status === 'failed' ? 'bg-error/10 border-error/20 text-error' :
+              job.status === 'completed' ? 'bg-success/10 border-success/20 text-success' :
+                'bg-primary/5 border-primary/20 text-primary'
+            }`}
+          role="alert"
+        >
+          <div className="flex items-center flex-1 pr-4">
+            {job.status === 'failed' ? (
+              <AlertCircle className="h-5 w-5 mr-3 shrink-0" />
+            ) : job.status === 'completed' ? (
+              <CheckCircle className="h-5 w-5 mr-3 shrink-0" />
+            ) : (
+              <Icons.Spinner className="h-5 w-5 animate-spin mr-3 shrink-0" />
+            )}
+            <div className="flex flex-col flex-1">
+              <span className="font-bold text-sm mb-0.5">{job.file_path}</span>
+              <span className="text-xs opacity-80">
+                {job.status === 'failed'
+                  ? (job.error_message || job.error || 'Processing failed')
+                  : job.status === 'completed'
+                    ? 'Processing finished successfully'
+                    : (job.progress_message || 'Processing...')}
+              </span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => removeJob(job.job_id)}
+            className="p-1.5 hover:bg-black/10 rounded-md transition-colors shrink-0"
+            title="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+
+
+
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold text-text">Documents</h2>
-        <Button onClick={handleUpload} disabled={isUploading || isProcessingKB}>
-          {(isUploading || isProcessingKB) ? (
+        <Button onClick={handleUpload} disabled={isUploading}>
+          {isUploading ? (
             <>
               <Icons.Spinner className="h-4 w-4 mr-2 animate-spin" />
-              Processing...
+              Uploading...
             </>
           ) : (
             <>
