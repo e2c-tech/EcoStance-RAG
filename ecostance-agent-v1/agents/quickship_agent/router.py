@@ -18,6 +18,120 @@ from fastapi.concurrency import run_in_threadpool
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_agent_content(raw: str) -> str:
+    """
+    THE GATEKEEPER: Extract only the clean, human-readable final answer.
+    Strips all intermediate tool calls, JSON artifacts, database schemas,
+    and scratchpad text. Only the answer passes through.
+    """
+    import json
+    import re
+    
+    if not raw or not isinstance(raw, str):
+        return raw or ""
+    
+    text = raw.strip()
+    
+    # --- Step 1: Try to extract response from JSON blocks ---
+    # Use bracket counting to find all top-level JSON objects
+    blocks = []
+    brace_count = 0
+    start_pos = -1
+    for i, ch in enumerate(text):
+        if ch == '{':
+            if brace_count == 0:
+                start_pos = i
+            brace_count += 1
+        elif ch == '}':
+            brace_count -= 1
+            if brace_count == 0 and start_pos != -1:
+                blocks.append(text[start_pos:i+1])
+    
+    final_answer = None
+    has_tool_call = False
+    
+    # Check blocks in reverse (last block is usually the final answer)
+    for block in reversed(blocks):
+        parsed = None
+        
+        # Try parsing
+        try:
+            parsed = json.loads(block)
+        except json.JSONDecodeError:
+            # LLM put literal newlines in string values — try sanitizing
+            try:
+                sanitized = block.replace('\n', '\\n').replace('\r', '\\r')
+                parsed = json.loads(sanitized)
+            except:
+                pass
+            
+            # Regex fallback: extract "response" field directly
+            if not parsed and '"response"' in block:
+                resp_match = re.search(r'"response"\s*:\s*"([\s\S]*?)"\s*[,\n}]', block)
+                if resp_match:
+                    candidate = resp_match.group(1).replace('\\n', '\n').strip()
+                    if candidate:
+                        final_answer = candidate
+                        break
+        
+        if parsed and isinstance(parsed, dict):
+            tool = parsed.get('tool', '')
+            
+            # Final answer: tool is "none" 
+            if tool == 'none' and parsed.get('response'):
+                final_answer = parsed['response']
+                break
+            
+            # Intermediate tool call: skip it
+            if tool and tool != 'none':
+                has_tool_call = True
+                continue
+            
+            # Object with a response/answer field
+            if parsed.get('response'):
+                final_answer = parsed['response']
+                break
+            if parsed.get('answer'):
+                final_answer = parsed['answer']
+                break
+    
+    if final_answer:
+        return final_answer.strip()
+    
+    # --- Step 2: No JSON answer found. If there were tool calls, strip all artifacts ---
+    if has_tool_call or blocks:
+        cleaned = text
+        # Remove all JSON blocks
+        for block in blocks:
+            cleaned = cleaned.replace(block, '')
+        
+        # Remove scratchpad artifacts
+        scratchpad_patterns = [
+            r'\*\*Database Schema:\*\*[\s\S]*?(?=\n\n|\*\*|$)',
+            r'\*\*Database Tables:\*\*[\s\S]*?(?=\n\n|\*\*|$)',
+            r'\*\*Database Columns:\*\*[\s\S]*?(?=\n\n|\*\*|$)',
+            r'\*\*Database Query Results:\*\*[\s\S]*?(?=\n\n|\*\*|$)',
+            r'\*\*Database Results:\*\*[\s\S]*?(?=\n\n|\*\*|$)',
+            r'TOOL_RESULT\s*\([^)]*\):\s*[\s\S]*?(?=\n\n|$)',
+            r'list_database_tables',
+            r'Final Answer:\*?\s*',
+            r'```json\s*[\s\S]*?```',
+            r'```\s*[\s\S]*?```',
+        ]
+        for pattern in scratchpad_patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+        
+        cleaned = cleaned.strip()
+        if len(cleaned) > 20:
+            return cleaned
+    
+    # --- Step 3: Plain text — just return as is ---
+    # Remove code fences if present
+    text = re.sub(r'```json\s*', '', text)
+    text = re.sub(r'```\s*', '', text)
+    return text.strip()
+
 # --- Schemas ---
 
 class ChatRequest(BaseModel):
@@ -126,8 +240,10 @@ async def chat_with_agent(
             chat_history=formatted_history
         )
         
-        # Add assistant response to DB
-        content = result.get("content", result.get("response", ""))
+        # Sanitize: extract only the clean final answer, strip all thinking/JSON/scratchpad
+        raw_content = result.get("content", result.get("response", ""))
+        content = _sanitize_agent_content(raw_content)
+        
         tool_used = result.get("tool_used")
         persistence_service.add_message(session_id, tenant_id, "assistant", content, tool_used=tool_used)
         
@@ -135,17 +251,15 @@ async def chat_with_agent(
         persistence_service.update_session_activity(session_id, tenant_id, is_query=True)
         
         from datetime import datetime
-        # Ensure 'content' key exists for ChatResponse Pydantic validation
-        final_response = {**result}
-        if "content" not in final_response and "response" in final_response:
-            final_response["content"] = final_response.pop("response")
-        elif "content" not in final_response:
-            final_response["content"] = content
-            
+        
         return ChatResponse(
             agent_type=agent_type, 
             timestamp=datetime.utcnow().isoformat(),
-            **final_response
+            content=content,
+            session_id=session_id,
+            success=result.get("success", True),
+            tool_used=tool_used,
+            error=result.get("error"),
         )
         
     except Exception as e:

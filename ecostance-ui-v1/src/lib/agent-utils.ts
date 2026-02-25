@@ -63,32 +63,21 @@ export const parseAgentResponse = (content: any): any => {
     }
 
     // Iterate backwards to find the last valid JSON block (usually the final answer)
+    let hasIntermediateToolCall = false;
+
     for (let i = potentialJsonBlocks.length - 1; i >= 0; i--) {
         const block = potentialJsonBlocks[i];
+        let parsed: any = null;
 
         // Try strict JSON.parse first
         try {
-            const parsed = JSON.parse(block);
-
-            // If it's a valid object, process it
-            if (parsed && typeof parsed === 'object') {
-                if (parsed.tool === 'none' || parsed.response || parsed.answer || parsed.content || parsed.type) {
-                    return processParsedObject(parsed);
-                }
-
-                if (i === potentialJsonBlocks.length - 1) {
-                    const result = processParsedObject(parsed);
-                    if (result !== parsed) return result;
-                }
-            }
+            parsed = JSON.parse(block);
         } catch (e) {
             // JSON.parse failed — likely because the LLM put literal newlines inside
             // string values (e.g. a numbered list). Use regex to extract "response" directly.
 
             // Check if block looks like a tool response: contains "tool" and "none" and "response"
             if (block.includes('"tool"') && block.includes('"none"') && block.includes('"response"')) {
-                // Extract the response value using regex: find "response": " then capture
-                // everything until the last quote before a comma+newline or closing brace
                 const responseMatch = block.match(/"response"\s*:\s*"([\s\S]*?)"\s*[,\n}]/);
                 if (responseMatch) {
                     return responseMatch[1].replace(/\\n/g, '\n').trim();
@@ -97,21 +86,68 @@ export const parseAgentResponse = (content: any): any => {
 
             // Also try: sanitize the JSON by escaping newlines inside strings, then re-parse
             try {
-                // Replace literal newlines that appear between quotes with \n
                 const sanitized = block.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
-                const parsed = JSON.parse(sanitized);
-                if (parsed && typeof parsed === 'object') {
-                    if (parsed.tool === 'none' || parsed.response || parsed.answer || parsed.content) {
-                        return processParsedObject(parsed);
-                    }
-                }
+                parsed = JSON.parse(sanitized);
             } catch (e2) {
-                // Still failed, continue to next block
+                // Check if it's an intermediate tool call we should skip
+                if (block.includes('"tool"') && !block.includes('"none"')) {
+                    hasIntermediateToolCall = true;
+                }
+                continue;
+            }
+        }
+
+        if (parsed && typeof parsed === 'object') {
+            // FINAL ANSWER: tool is "none" — extract the response
+            if (parsed.tool === 'none' || parsed.response || parsed.answer) {
+                return processParsedObject(parsed);
+            }
+
+            // INTERMEDIATE TOOL CALL: tool is "query_database", "search_knowledge_base", etc.
+            // This is internal thinking — mark it and skip
+            if (parsed.tool && parsed.tool !== 'none') {
+                hasIntermediateToolCall = true;
+                continue;
+            }
+
+            // Generic object with content/type
+            if (parsed.content || parsed.type) {
+                return processParsedObject(parsed);
             }
         }
     }
 
-    // 3. Fallback: Check if there's any JSON markdown
+    // 3. If we found intermediate tool calls but no final answer,
+    // the backend leaked its thinking process. Strip all JSON blocks and scratchpad artifacts.
+    if (hasIntermediateToolCall) {
+        // Remove all JSON blocks from the text
+        let strippedText = text;
+        for (const block of potentialJsonBlocks) {
+            strippedText = strippedText.replace(block, '');
+        }
+
+        // Remove common scratchpad artifacts
+        strippedText = strippedText
+            .replace(/\*\*Database Schema:\*\*[\s\S]*?(?=\n\n|\*\*|$)/gi, '')
+            .replace(/\*\*Database Tables:\*\*[\s\S]*?(?=\n\n|\*\*|$)/gi, '')
+            .replace(/\*\*Database Columns:\*\*[\s\S]*?(?=\n\n|\*\*|$)/gi, '')
+            .replace(/\*\*Database Query Results:\*\*[\s\S]*?(?=\n\n|\*\*|$)/gi, '')
+            .replace(/\*\*Database Results:\*\*[\s\S]*?(?=\n\n|\*\*|$)/gi, '')
+            .replace(/TOOL_RESULT\s*\([^)]*\):\s*/gi, '')
+            .replace(/list_database_tables/gi, '')
+            .replace(/Final Answer:\*?\s*/gi, '')
+            .trim();
+
+        // If there's meaningful text left after stripping, return it
+        if (strippedText.length > 20) {
+            return strippedText;
+        }
+
+        // Otherwise return a user-friendly fallback
+        return "I'm analyzing your request using the connected database. Please try again in a moment.";
+    }
+
+    // 4. Fallback: Check if there's any JSON markdown
     const jsonMarkdownRegex = /```json\n?([\s\S]*?)\n?```/i;
     const match = text.match(jsonMarkdownRegex);
     if (match) {
@@ -121,7 +157,7 @@ export const parseAgentResponse = (content: any): any => {
         } catch (e) { }
     }
 
-    // 4. Conversational filler cleaning
+    // 5. Conversational filler cleaning
     const reasoningPrefixes = [
         /^Based on the (search results|database|information provided|data analysis),?\s*/i,
         /^I've analyzed the (query|data|logs),?\s*/i,

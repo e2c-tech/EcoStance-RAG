@@ -178,6 +178,15 @@ DO NOT include any text outside the JSON.
 DO NOT simulate tool results or "TOOL_RESULT" blocks.
 DO NOT provide multiple JSON blocks.
 
+### CRITICAL JSON FORMATTING RULE:
+Your response MUST be valid JSON that can be parsed by json.loads().
+- ALL string values MUST be on a SINGLE LINE. 
+- Use \\n for newlines within strings, NEVER use actual line breaks inside a JSON string value.
+- CORRECT: "response": "Top companies:\\n1. Apple\\n2. Google\\n3. Microsoft"
+- WRONG:   "response": "Top companies:
+1. Apple
+2. Google"
+
 1. ANALYZE PREVIOUS TOOL RESULTS:
    - If a tool result contains an error like "No such column" or "Invalid column", you MUST call `list_database_tables` immediately to find the correct schema.
    - If the previous tool result contains the answer, output the final answer using the 'none' tool immediately.
@@ -199,7 +208,7 @@ DO NOT provide multiple JSON blocks.
    - If you have the answer OR if the search failed multiple times:
      {{
          "tool": "none",
-         "response": "Final Expert Analysis: Your human-friendly final answer here. DO NOT list raw IDs (like 1, 2, 3), use sensor names or categories instead. Include a 'Recommended Action'.",
+         "response": "Final Expert Analysis: Your human-friendly final answer here. DO NOT list raw IDs (like 1, 2, 3), use sensor names or categories instead. Include a 'Recommended Action'. Use \\n for line breaks, NOT actual newlines.",
          "type": "text"
      }}
 
