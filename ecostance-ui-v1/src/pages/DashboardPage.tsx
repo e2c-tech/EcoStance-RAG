@@ -370,13 +370,15 @@ const DashboardPage: React.FC = () => {
           </div>
         </section>
 
-        {/* Quick Actions */}
+        {/* Quick Actions section hidden per user request */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-left mb-4 text-primary">Quick Actions</h2>
+          {/* <h2 className="text-xl font-semibold text-left mb-4 text-primary">Quick Actions</h2> */}
           <div className="flex flex-wrap justify-center lg:justify-start gap-4">
+            {/* 
             <QuickAction icon={Icons.Upload} label="Upload Document" onClick={handleUploadDocument} />
             <QuickAction icon={Icons.BookOpen} label="Create Knowledge Base" onClick={handleCreateKnowledgeBase} />
             <QuickAction icon={Icons.Database} label="Connect Database" onClick={handleConnectDatabase} />
+            */}
             <div className="flex-1 min-w-[200px]">
               <Input
                 type="search"

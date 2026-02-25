@@ -38,7 +38,14 @@ export const JobProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     activeJobs.forEach(async (job) => {
                         try {
                             const status = await documentProcessingAPI.getProcessingStatus(job.job_id) as ProcessingJob;
-                            setJobs(prev => prev.map(j => j.job_id === job.job_id ? { ...j, ...status } : j));
+
+                            // Prevent backend nulls from wiping out the localized context details (like collection_name which drives UI filtering)
+                            setJobs(prev => prev.map(j => j.job_id === job.job_id ? {
+                                ...j,
+                                ...status,
+                                collection_name: status.collection_name || j.collection_name,
+                                file_path: status.file_path || j.file_path
+                            } : j));
                         } catch (error) {
                             console.error(`Failed to poll job ${job.job_id}`, error);
                         }

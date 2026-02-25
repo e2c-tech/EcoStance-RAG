@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
 import { Icons } from '../components/icons';
 import { useAuth } from '../context/AuthContext.v2';
-import { debugAuth } from '../utils/debugAuth';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -13,37 +12,18 @@ const LoginPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string>('');
   const navigate = useNavigate();
   const { login } = useAuth();
-
-  // Test backend connection on component mount
-  useEffect(() => {
-    const testConnection = async () => {
-      const isConnected = await debugAuth.testBackendConnection();
-      if (!isConnected) {
-        setDebugInfo('⚠️ Backend server may not be running on http://localhost:8000');
-      }
-    };
-    testConnection();
-  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
-    setDebugInfo('');
-    
+
     try {
       console.log('🔐 Starting login process...');
-      
-      // First test the login endpoint directly for debugging
-      const debugResult = await debugAuth.testLoginEndpoint(email, password);
-      if (!debugResult.success) {
-        setDebugInfo(`Debug: ${JSON.stringify(debugResult.error)}`);
-      }
-      
-      // Then try the actual login through AuthContext
+
+      // Try the actual login through AuthContext
       await login(email, password);
       console.log('✅ Login successful, navigating to dashboard...');
       navigate('/');
@@ -51,11 +31,7 @@ const LoginPage: React.FC = () => {
       console.error("❌ Login failed:", error);
       const errorMessage = error instanceof Error ? error.message : 'Login failed. Please check your credentials.';
       setError(errorMessage);
-      
-      // Add debug information
-      if (error instanceof Error) {
-        setDebugInfo(`Error details: ${error.message}`);
-      }
+
     } finally {
       setIsLoading(false);
     }
@@ -75,12 +51,6 @@ const LoginPage: React.FC = () => {
             </div>
           )}
 
-          {debugInfo && (
-            <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded relative text-sm" role="alert">
-              <strong>Debug Info:</strong> {debugInfo}
-            </div>
-          )}
-          
           <div>
             <Label htmlFor="email">Email Address</Label>
             <Input
@@ -93,7 +63,7 @@ const LoginPage: React.FC = () => {
               disabled={isLoading}
             />
           </div>
-          
+
           <div>
             <Label htmlFor="password">Password</Label>
             <div className="relative">
@@ -120,7 +90,7 @@ const LoginPage: React.FC = () => {
               </button>
             </div>
           </div>
-          
+
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? (
               <>
@@ -131,38 +101,20 @@ const LoginPage: React.FC = () => {
               'Log In'
             )}
           </Button>
-
-          {/* Development helper */}
-          {import.meta.env.DEV && (
-            <div className="pt-2 border-t border-gray-200">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full text-xs"
-                onClick={async () => {
-                  const connected = await debugAuth.testBackendConnection();
-                  setDebugInfo(connected ? '✅ Backend is reachable' : '❌ Backend connection failed');
-                }}
-              >
-                🔧 Test Backend Connection
-              </Button>
-            </div>
-          )}
         </form>
         <div className="text-center text-sm text-text-secondary">
           Don't have an account?{' '}
-          <button 
+          <button
             type="button"
-            onClick={() => navigate('/register')} 
+            onClick={() => navigate('/register')}
             className="text-primary hover:underline font-medium"
           >
             Sign Up
           </button>
         </div>
-        
+
         <div className="pt-4 border-t border-border">
-          <Button 
+          <Button
             type="button"
             variant="outline"
             className="w-full"
