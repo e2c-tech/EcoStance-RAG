@@ -32,7 +32,7 @@ export const JobProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const pollJobs = async () => {
             // Find all active jobs directly from context state
             setJobs(currentJobs => {
-                const activeJobs = currentJobs.filter(j => j.status === 'pending' || j.status === 'in_progress');
+                const activeJobs = currentJobs.filter(j => j.status === 'pending' || j.status === 'in_progress' || j.status === 'processing');
 
                 if (activeJobs.length > 0) {
                     activeJobs.forEach(async (job) => {
@@ -63,7 +63,7 @@ export const JobProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 job_id: jobId,
                 file_path: filename,
                 collection_name: kbName,
-                status: 'in_progress',
+                status: 'processing',
                 progress_message: 'Initializing...',
                 created_at: new Date().toISOString()
             }];
@@ -88,10 +88,10 @@ const JobTracker = () => {
 
     // Auto-expand when a new job starts processing, and optionally auto-dismiss
     useEffect(() => {
-        const inProgress = jobs.filter(j => j.status === 'pending' || j.status === 'in_progress');
+        const inProgress = jobs.filter(j => j.status === 'pending' || j.status === 'in_progress' || j.status === 'processing');
         if (inProgress.length > 0 && !isExpanded) {
-            // Optional: Auto-expand on new job: setIsExpanded(true); 
-            // Keeping it collapsed by default might be less intrusive based on user request.
+            // Auto-expand on new job so the user immediately sees the background progress
+            setIsExpanded(true);
         }
 
         // Auto-dismiss completed/failed after 10 seconds
@@ -107,7 +107,7 @@ const JobTracker = () => {
 
     if (jobs.length === 0) return null;
 
-    const inProgress = jobs.filter(j => j.status === 'pending' || j.status === 'in_progress');
+    const inProgress = jobs.filter(j => j.status === 'pending' || j.status === 'in_progress' || j.status === 'processing');
     const hasActive = inProgress.length > 0;
 
     return (
@@ -131,7 +131,7 @@ const JobTracker = () => {
                                     <span className="font-medium truncate pr-2 flex-1 text-xs" title={job.file_path}>
                                         {job.file_path?.split('/').pop() || job.file_path}
                                     </span>
-                                    {job.status === 'pending' || job.status === 'in_progress' ? (
+                                    {job.status === 'pending' || job.status === 'in_progress' || job.status === 'processing' ? (
                                         <Icons.Spinner className="w-3.5 h-3.5 text-primary animate-spin shrink-0 mt-0.5" />
                                     ) : job.status === 'completed' ? (
                                         <CheckCircle className="w-3.5 h-3.5 text-success shrink-0 mt-0.5" />

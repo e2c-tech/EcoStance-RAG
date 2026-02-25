@@ -154,10 +154,15 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
     });
 
     if (newlyCompleted) {
-      fetchKBData(true);
+      setTimeout(() => fetchKBData(true), 1500); // Wait 1.5s for Qdrant consistency before refresh
     }
     prevJobsRef.current = jobs;
   }, [jobs, kbId, fetchKBData]);
+
+  // Derive if the KB is currently processing any jobs from the context
+  const activeJobsForKB = jobs.filter(j => j.collection_name === kbId && (j.status === 'pending' || j.status === 'in_progress' || j.status === 'processing'));
+  const isProcessingKB = activeJobsForKB.length > 0;
+  const currentProgressMessage = isProcessingKB ? (activeJobsForKB[0].progress_message || "Processing in background...") : "";
 
   if (isLoading) {
     return (
@@ -386,22 +391,22 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
         </div>
       )}
 
-      {isUploading && (
+      {(isUploading || isProcessingKB) && (
         <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4" role="alert">
           <div className="flex items-center">
             <Icons.Spinner className="h-4 w-4 animate-spin mr-2" />
-            <span>{progressMessage || "Uploading and processing document..."}</span>
+            <span>{currentProgressMessage || progressMessage || "Uploading and processing document..."}</span>
           </div>
         </div>
       )}
 
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold text-text">Documents</h2>
-        <Button onClick={handleUpload} disabled={isUploading}>
-          {isUploading ? (
+        <Button onClick={handleUpload} disabled={isUploading || isProcessingKB}>
+          {(isUploading || isProcessingKB) ? (
             <>
               <Icons.Spinner className="h-4 w-4 mr-2 animate-spin" />
-              Uploading...
+              Processing...
             </>
           ) : (
             <>

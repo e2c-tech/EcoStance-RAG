@@ -102,7 +102,7 @@ export interface ProcessingJob {
   job_id: string;
   file_path: string;
   collection_name: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  status: 'pending' | 'in_progress' | 'processing' | 'completed' | 'failed';
   progress_message: string;
   created_at: string;
   started_at?: string | null;

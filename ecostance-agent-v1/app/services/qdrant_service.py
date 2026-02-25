@@ -161,7 +161,7 @@ def upload_to_qdrant(
             client.upsert(
                 collection_name=collection_name,
                 points=batch,
-                wait=False # Crucial for speed: do not block IO waiting for Qdrant to index every chunk
+                wait=True # Wait until Qdrant confirms the chunks are indexed and searchable
             )
         logger.info(f"Successfully uploaded {len(points_to_upload)} points in batches of {batch_size} to '{collection_name}'")
     except Exception as e:
