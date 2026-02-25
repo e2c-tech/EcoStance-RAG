@@ -9,6 +9,8 @@ export const parseAgentResponse = (content: any): any => {
     let text = content.trim();
 
     // 1. Handle markers case-insensitively
+    // We require markers to either be at the start of the string or follow a newline
+    // to avoid matching things like "Recommended Action:" inside a final response.
     const markers = [
         "### FINAL ANSWER:", "### RESPONSE:", "### ANSWER:",
         "FINAL ANSWER:", "RESPONSE:", "ANSWER:",
@@ -19,17 +21,23 @@ export const parseAgentResponse = (content: any): any => {
         const markerLower = marker.toLowerCase();
         const textLower = text.toLowerCase();
 
-        // Find index of marker, maybe preceded by newline or at start
-        if (textLower.includes(markerLower)) {
-            // Find the last occurrence of this marker to get the final answer
-            const index = textLower.lastIndexOf(markerLower);
-            const sub = text.substring(index + marker.length).trim();
+        const index = textLower.lastIndexOf(markerLower);
+        if (index !== -1) {
+            // Check if it's at the start or follows a newline
+            const isAtStart = index === 0;
+            const isFollowsNewline = index > 0 && text[index - 1] === '\n';
 
-            // Clean up leading punctuation often added by LLMs like ":", "*", " "
-            const cleaned = sub.replace(/^[:\*\s\-]+/, '').trim();
-            if (cleaned) {
-                // Return recursive call to handle nested JSON in the extracted block
-                return parseAgentResponse(cleaned);
+            // Special case: don't treat "Action:" as a strip marker if it's preceded by "Recommended"
+            const isRecommendedAction = markerLower === 'action:' &&
+                index >= 12 &&
+                textLower.substring(index - 12, index).includes('recommended');
+
+            if ((isAtStart || isFollowsNewline) && !isRecommendedAction) {
+                const sub = text.substring(index + marker.length).trim();
+                const cleaned = sub.replace(/^[:\*\s\-]+/, '').trim();
+                if (cleaned) {
+                    return parseAgentResponse(cleaned);
+                }
             }
         }
     }
