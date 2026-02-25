@@ -127,7 +127,7 @@ async def chat_with_agent(
         )
         
         # Add assistant response to DB
-        content = result.get("content", "")
+        content = result.get("content", result.get("response", ""))
         tool_used = result.get("tool_used")
         persistence_service.add_message(session_id, tenant_id, "assistant", content, tool_used=tool_used)
         
@@ -135,10 +135,17 @@ async def chat_with_agent(
         persistence_service.update_session_activity(session_id, tenant_id, is_query=True)
         
         from datetime import datetime
+        # Ensure 'content' key exists for ChatResponse Pydantic validation
+        final_response = {**result}
+        if "content" not in final_response and "response" in final_response:
+            final_response["content"] = final_response.pop("response")
+        elif "content" not in final_response:
+            final_response["content"] = content
+            
         return ChatResponse(
             agent_type=agent_type, 
             timestamp=datetime.utcnow().isoformat(),
-            **result
+            **final_response
         )
         
     except Exception as e:
