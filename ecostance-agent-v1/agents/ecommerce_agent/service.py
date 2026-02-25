@@ -246,9 +246,8 @@ OR (if finished):
                             except: pass
 
                 if not decision:
-                    final_msg = {"type": "text", "message": text, "data": None}
                     self.conversations[session_id].append({"role": "assistant", "content": text})
-                    return {"content": text, "session_id": session_id, "success": True}
+                    return {"response": text, "session_id": session_id, "success": True}
 
                 tool_name = decision.get('tool')
                 
@@ -261,7 +260,7 @@ OR (if finished):
                         
                     self.conversations[session_id].append({"role": "assistant", "content": content})
                     return {
-                        "content": content,
+                        "response": content,
                         "session_id": session_id,
                         "language": preferred_lang,
                         "success": True
@@ -294,10 +293,15 @@ OR (if finished):
                     })
 
             # Save assistant response
-            self.conversations[session_id].append({"role": "assistant", "content": json.dumps(final_response)})
+            if isinstance(final_response, dict):
+                content = final_response.get('message', str(final_response))
+            else:
+                content = str(final_response)
+                
+            self.conversations[session_id].append({"role": "assistant", "content": content})
             
             return {
-                "response": final_response,
+                "response": content,
                 "session_id": session_id,
                 "language": preferred_lang,
                 "success": True
@@ -306,7 +310,7 @@ OR (if finished):
         except Exception as e:
             logger.error(f"Ecommerce Agent Error: {e}", exc_info=True)
             return {
-                "response": {"type": "text", "message": "An error occurred.", "data": None},
+                "response": "An error occurred while processing your e-commerce request.",
                 "session_id": session_id,
                 "success": False,
                 "error": str(e)

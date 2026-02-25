@@ -212,37 +212,48 @@ DO NOT provide multiple JSON blocks.
                 text = result.content
                 logger.info(f"LLM Response received ({len(text)} chars)")
                 
-                # Robust JSON extraction: look for the first '{' and corresponding '}' or just the first JSON-like block
+                # Robust JSON extraction
                 import re
-                match = re.search(r'\{.*\}', text, re.DOTALL)
                 
+                # Find all JSON-like blocks
+                blocks = re.findall(r'\{.*?\}', text, re.DOTALL)
                 decision = None
-                if match:
-                    json_str = match.group(0)
-                    # Handle cases where LLM might include multiple JSON blocks or trailing text
+                
+                for block in reversed(blocks): # Check most recent/deepest block first
                     try:
-                        decision = json.loads(json_str)
-                    except json.JSONDecodeError:
-                        # Try to find the FIRST JSON object if the greedy one fails
-                        first_match = re.search(r'\{.*?\}', text, re.DOTALL)
-                        if first_match:
-                            try:
-                                decision = json.loads(first_match.group(0))
-                            except:
-                                pass
+                        candidate = json.loads(block)
+                        # If we find a 'none' tool or any valid tool structure, use it
+                        if candidate.get('tool') == 'none' or 'tool' in candidate:
+                            decision = candidate
+                            break
+                    except:
+                        continue
+                
+                if not decision:
+                    # Greedy fallback if individual blocks failed
+                    match = re.search(r'\{.*\}', text, re.DOTALL)
+                    if match:
+                        try:
+                            decision = json.loads(match.group(0))
+                        except:
+                            pass
 
                 if not decision:
                     # Non-JSON response or parsing failed: treating as final if it looks like a message
                     final_text = text
+                    # Try to clean up JSON artifacts if accidentally returned
+                    final_text = re.sub(r'```json\s*', '', final_text)
+                    final_text = re.sub(r'```\s*', '', final_text).strip()
+                    
                     self.conversations[session_id].append({"role": "assistant", "content": final_text})
-                    return {"content": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
+                    return {"response": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
 
                 tool_name = decision.get('tool')
                 
                 if tool_name == 'none' or not tool_name or is_last_turn:
                     final_text = decision.get('response', decision.get('reasoning', text))
                     self.conversations[session_id].append({"role": "assistant", "content": final_text})
-                    return {"content": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
+                    return {"response": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
                 
                 if tool_name in self.tool_map:
                     args = decision.get('args', {})
@@ -300,11 +311,11 @@ DO NOT provide multiple JSON blocks.
             # Exhausted iterations
             final_text = "I've analyzed the available sources but could not find a definitive answer. Please provide more clues or try a different query."
             self.conversations[session_id].append({"role": "assistant", "content": final_text})
-            return {"content": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
+            return {"response": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
             
         except Exception as e:
             logger.error(f"Security Analyst Error: {e}")
-            return {"content": "An internal error occurred during analysis.", "session_id": session_id, "success": False}
+            return {"response": "An internal error occurred during analysis.", "session_id": session_id, "success": False}
 
     def get_conversation_history(self, session_id: str) -> List[Dict]:
         return self.conversations.get(session_id, [])

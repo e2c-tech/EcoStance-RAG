@@ -397,7 +397,7 @@ Format for tool call:
             self.conversations[session_id].append({"role": "assistant", "content": content})
             
             return {
-                "content": content,
+                "response": content,
                 "session_id": session_id,
                 "language": preferred_lang,
                 "success": True
@@ -406,7 +406,7 @@ Format for tool call:
         except Exception as e:
             logger.error(f"EcoStance Agent Error: {e}", exc_info=True)
             return {
-                "content": "I'm having a bit of trouble connecting to my service, please try again.",
+                "response": "I'm having a bit of trouble connecting to my service, please try again.",
                 "session_id": session_id,
                 "success": False,
                 "error": str(e)

@@ -30,30 +30,29 @@ export const JobProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         let timeoutId: ReturnType<typeof setTimeout>;
 
         const pollJobs = async () => {
-            // Find all active jobs directly from context state
-            setJobs(currentJobs => {
-                const activeJobs = currentJobs.filter(j => j.status === 'pending' || j.status === 'in_progress');
-
-                if (activeJobs.length > 0) {
-                    activeJobs.forEach(async (job) => {
-                        try {
-                            const status = await documentProcessingAPI.getProcessingStatus(job.job_id) as ProcessingJob;
-
-                            // Prevent backend nulls from wiping out the localized context details (like collection_name which drives UI filtering)
-                            setJobs(prev => prev.map(j => j.job_id === job.job_id ? {
-                                ...j,
-                                ...status,
-                                collection_name: status.collection_name || j.collection_name,
-                                file_path: status.file_path || j.file_path
-                            } : j));
-                        } catch (error) {
-                            console.error(`Failed to poll job ${job.job_id}`, error);
-                        }
-                    });
-                }
-
-                return currentJobs;
+            // We use a temporary setJobs call to get the most recent state without a closure stale-mate
+            let activeJobs: ProcessingJob[] = [];
+            setJobs(current => {
+                activeJobs = current.filter(j => j.status === 'pending' || j.status === 'in_progress');
+                return current;
             });
+
+            if (activeJobs.length > 0) {
+                await Promise.all(activeJobs.map(async (job) => {
+                    try {
+                        const status = await documentProcessingAPI.getProcessingStatus(job.job_id) as ProcessingJob;
+
+                        setJobs(prev => prev.map(j => j.job_id === job.job_id ? {
+                            ...j,
+                            ...status,
+                            collection_name: j.collection_name, // Lock in the UI filter context
+                            file_path: j.file_path
+                        } : j));
+                    } catch (error) {
+                        console.error(`Failed to poll job ${job.job_id}`, error);
+                    }
+                }));
+            }
 
             timeoutId = setTimeout(pollJobs, 2000);
         };
@@ -97,11 +96,10 @@ const JobTracker = () => {
     useEffect(() => {
         const inProgress = jobs.filter(j => j.status === 'pending' || j.status === 'in_progress');
         if (inProgress.length > 0 && !isExpanded) {
-            // Optional: Auto-expand on new job: setIsExpanded(true); 
             // Keeping it collapsed by default might be less intrusive based on user request.
         }
 
-        // Removed auto-dismissing to continuously show job status. User can manually dismiss them.
+        // Auto-dismiss logic removed as per user request to keep the status visible. 
     }, [jobs, isExpanded, removeJob]);
 
     if (jobs.length === 0) return null;

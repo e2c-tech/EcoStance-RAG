@@ -57,8 +57,8 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
   const { addJob, removeJob, jobs } = useJobs();
   const prevJobsRef = React.useRef(jobs);
 
-  const fetchKBData = React.useCallback(async (force = false) => {
-    setIsLoading(true);
+  const fetchKBData = React.useCallback(async (force = false, silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const data = await getKBDetails(kbId!, force);
       console.log('KB Details API Response:', data);
@@ -136,7 +136,7 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
   }, [kbId, getKBDetails]);
 
   React.useEffect(() => {
-    fetchKBData();
+    fetchKBData(false, false);
   }, [fetchKBData]);
 
   React.useEffect(() => {
@@ -155,7 +155,7 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
     });
 
     if (newlyCompleted) {
-      fetchKBData(true);
+      fetchKBData(true, true); // Use silent refresh to avoid full page flicker
     }
     prevJobsRef.current = jobs;
   }, [jobs, kbId, fetchKBData]);
@@ -407,12 +407,15 @@ const KnowledgeBaseDetailsPage: React.FC = () => {
       )}
 
       {/* Show active and completed jobs from backend polling */}
-      {jobs.filter(j => j.collection_name === kbId).map(job => (
+      {jobs.filter(j =>
+        j.collection_name?.toLowerCase() === kbId?.toLowerCase() ||
+        j.collection_name === knowledgeBase?.name
+      ).map(job => (
         <div
           key={job.job_id}
           className={`border px-4 py-3 xl:py-4 rounded-lg mb-4 shadow-sm flex items-center justify-between ${job.status === 'failed' ? 'bg-error/10 border-error/20 text-error' :
-              job.status === 'completed' ? 'bg-success/10 border-success/20 text-success' :
-                'bg-primary/5 border-primary/20 text-primary'
+            job.status === 'completed' ? 'bg-success/10 border-success/20 text-success' :
+              'bg-primary/5 border-primary/20 text-primary'
             }`}
           role="alert"
         >

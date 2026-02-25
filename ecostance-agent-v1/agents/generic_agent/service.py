@@ -224,8 +224,13 @@ OR (if finished):
                             except: pass
 
                 if not decision:
-                    self.conversations[session_id].append({"role": "assistant", "content": text})
-                    return {"content": text, "session_id": session_id, "language": preferred_lang, "success": True}
+                    # Clean up any raw JSON strings or artifacts if parsing failed
+                    output_text = text
+                    output_text = re.sub(r'```json\s*', '', output_text)
+                    output_text = re.sub(r'```\s*', '', output_text).strip()
+                    
+                    self.conversations[session_id].append({"role": "assistant", "content": output_text})
+                    return {"response": output_text, "session_id": session_id, "language": preferred_lang, "success": True}
 
                 tool_name = decision.get('tool')
                 
@@ -233,7 +238,7 @@ OR (if finished):
                     res_text = decision.get('response', decision.get('reasoning', text))
                     self.conversations[session_id].append({"role": "assistant", "content": res_text})
                     return {
-                        "content": res_text, 
+                        "response": res_text, 
                         "session_id": session_id, 
                         "language": preferred_lang,
                         "success": True
@@ -283,7 +288,7 @@ OR (if finished):
                     })
 
             return {
-                "content": "I tried to process your request but reached the maximum number of steps. Please try being more specific.", 
+                "response": "I tried to process your request but reached the maximum number of steps. Please try being more specific.", 
                 "session_id": session_id, 
                 "language": preferred_lang,
                 "success": True
@@ -291,7 +296,7 @@ OR (if finished):
             
         except Exception as e:
             logger.error(f"Generic Agent Error: {e}")
-            return {"content": "Sorry, an error occurred.", "session_id": session_id, "success": False, "error": str(e)}
+            return {"response": "Sorry, an error occurred.", "session_id": session_id, "language": preferred_lang, "success": False, "error": str(e)}
 
     def get_conversation_history(self, session_id: str) -> List[Dict]:
         return self.conversations.get(session_id, [])
