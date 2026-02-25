@@ -64,27 +64,50 @@ export const parseAgentResponse = (content: any): any => {
 
     // Iterate backwards to find the last valid JSON block (usually the final answer)
     for (let i = potentialJsonBlocks.length - 1; i >= 0; i--) {
+        const block = potentialJsonBlocks[i];
+
+        // Try strict JSON.parse first
         try {
-            const block = potentialJsonBlocks[i];
             const parsed = JSON.parse(block);
 
             // If it's a valid object, process it
             if (parsed && typeof parsed === 'object') {
-                // If it looks like a meaningful response, return it
-                // We check for common tool/response keys
                 if (parsed.tool === 'none' || parsed.response || parsed.answer || parsed.content || parsed.type) {
                     return processParsedObject(parsed);
                 }
 
-                // If it's the last block and looks like JSON, we'll take it 
-                // but keep looking for a specifically 'response' oriented block
                 if (i === potentialJsonBlocks.length - 1) {
                     const result = processParsedObject(parsed);
                     if (result !== parsed) return result;
                 }
             }
         } catch (e) {
-            // Not valid JSON, continue to next block
+            // JSON.parse failed — likely because the LLM put literal newlines inside
+            // string values (e.g. a numbered list). Use regex to extract "response" directly.
+
+            // Check if block looks like a tool response: contains "tool" and "none" and "response"
+            if (block.includes('"tool"') && block.includes('"none"') && block.includes('"response"')) {
+                // Extract the response value using regex: find "response": " then capture
+                // everything until the last quote before a comma+newline or closing brace
+                const responseMatch = block.match(/"response"\s*:\s*"([\s\S]*?)"\s*[,\n}]/);
+                if (responseMatch) {
+                    return responseMatch[1].replace(/\\n/g, '\n').trim();
+                }
+            }
+
+            // Also try: sanitize the JSON by escaping newlines inside strings, then re-parse
+            try {
+                // Replace literal newlines that appear between quotes with \n
+                const sanitized = block.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+                const parsed = JSON.parse(sanitized);
+                if (parsed && typeof parsed === 'object') {
+                    if (parsed.tool === 'none' || parsed.response || parsed.answer || parsed.content) {
+                        return processParsedObject(parsed);
+                    }
+                }
+            } catch (e2) {
+                // Still failed, continue to next block
+            }
         }
     }
 

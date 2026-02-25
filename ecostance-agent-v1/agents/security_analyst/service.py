@@ -215,8 +215,20 @@ DO NOT provide multiple JSON blocks.
                 # Robust JSON extraction
                 import re
                 
-                # Find all JSON-like blocks
-                blocks = re.findall(r'\{.*?\}', text, re.DOTALL)
+                # Find all JSON-like blocks using bracket counting (handles nested objects)
+                blocks = []
+                brace_count = 0
+                start_pos = -1
+                for ci, ch in enumerate(text):
+                    if ch == '{':
+                        if brace_count == 0:
+                            start_pos = ci
+                        brace_count += 1
+                    elif ch == '}':
+                        brace_count -= 1
+                        if brace_count == 0 and start_pos != -1:
+                            blocks.append(text[start_pos:ci+1])
+                
                 decision = None
                 
                 for block in reversed(blocks): # Check most recent/deepest block first
@@ -226,17 +238,25 @@ DO NOT provide multiple JSON blocks.
                         if candidate.get('tool') == 'none' or 'tool' in candidate:
                             decision = candidate
                             break
-                    except:
-                        continue
-                
-                if not decision:
-                    # Greedy fallback if individual blocks failed
-                    match = re.search(r'\{.*\}', text, re.DOTALL)
-                    if match:
+                    except json.JSONDecodeError:
+                        # json.loads failed — likely because LLM put literal newlines in string values
+                        # Try sanitizing: escape newlines then re-parse
                         try:
-                            decision = json.loads(match.group(0))
+                            sanitized = block.replace('\n', '\\n').replace('\r', '\\r')
+                            candidate = json.loads(sanitized)
+                            if candidate.get('tool') == 'none' or 'tool' in candidate:
+                                decision = candidate
+                                break
                         except:
                             pass
+                        
+                        # Last resort: regex extraction of "response" field
+                        if '"tool"' in block and '"none"' in block and '"response"' in block:
+                            resp_match = re.search(r'"response"\s*:\s*"([\s\S]*?)"\s*[,\n}]', block)
+                            if resp_match:
+                                decision = {"tool": "none", "response": resp_match.group(1)}
+                                break
+                        continue
 
                 if not decision:
                     # Non-JSON response or parsing failed: treating as final if it looks like a message
