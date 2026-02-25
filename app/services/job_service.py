@@ -101,6 +101,17 @@ class JobTracker:
             job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
             if job:
                 job.progress_message = message
+                
+                # Append to logs array 
+                current_logs = job.logs if job.logs is not None else []
+                # Make a new list since SQLAlchemy needs to detect a change to the JSON column
+                new_logs = list(current_logs)
+                new_logs.append({
+                    "timestamp": datetime.now().isoformat(),
+                    "message": message
+                })
+                job.logs = new_logs
+                
                 db.commit()
                 return True
             return False

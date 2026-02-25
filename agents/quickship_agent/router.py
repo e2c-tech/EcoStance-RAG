@@ -104,8 +104,8 @@ async def chat_with_agent(
         
         # Format history for the agent service
         # Agent services expect list of {"role": "user/assistant", "content": "..."}
+        formatted_history = []
         if db_history:
-            formatted_history = []
             for msg in db_history:
                 formatted_history.append({"role": msg.role, "content": msg.content})
             
@@ -251,6 +251,30 @@ async def get_agent_sessions(
     ).order_by(PublicAgentSession.last_activity.desc()).all()
     
     return [s.to_dict() for s in sessions]
+
+@router.delete("/agent/sessions/{session_id}")
+async def delete_agent_session(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete an agent chat session and all its messages."""
+    try:
+        tenant_id = current_user.get("tenant_id")
+        from app.services.public_agent_service import PublicAgentService
+        service = PublicAgentService(db)
+        
+        success = service.delete_session(session_id, tenant_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found or unauthorized")
+            
+        return {"message": "Session deleted successfully", "success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting session: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/agent/summary")
 async def get_agent_summary(
