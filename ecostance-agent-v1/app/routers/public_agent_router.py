@@ -299,14 +299,13 @@ async def chat_with_public_agent(
 )
 async def get_public_agent_config(
     request: Request,
-    current_user: dict = Depends(get_current_user), # Use auth to get tenant
     db: Session = Depends(get_db)
 ):
     """
     Get the current public agent configuration for rendering the UI.
     """
     try:
-        tenant_id = current_user.get("tenant_id")
+        tenant_id = get_tenant_id_from_request(request)
         service = PublicAgentService(db)
         
         config = service.get_config(tenant_id)

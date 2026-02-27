@@ -23,21 +23,26 @@ class SIEMClient:
         """Authenticate and get JWT token from SIEM API."""
         try:
             logger.info(f"Attempting SIEM login for user: {SIEM_USERNAME} at {SIEM_API_URL}")
-            # Try sending both 'username' and 'email' as some APIs expect one or the other
+            # Align with OAuth2PasswordRequestForm (form-data)
             payload = {
                 "username": SIEM_USERNAME,
-                "email": SIEM_USERNAME, 
-                "password": SIEM_PASSWORD
+                "password": SIEM_PASSWORD,
+                "grant_type": "password"
             }
-            response = self.client.post("auth/login", json=payload)
+            response = self.client.post("auth/login", data=payload)
             
+            if response.status_code != 200:
+                # Fallback to JSON if form-data fails (some dev environments use JSON)
+                logger.warning(f"SIEM Login form-data failed ({response.status_code}), trying JSON...")
+                response = self.client.post("auth/login", json=payload)
+
             if response.status_code != 200:
                 logger.error(f"SIEM Login Failed! Status: {response.status_code} | Response: {response.text}")
                 return False
                 
             data = response.json()
             # Handle different token structures
-            token_obj = data.get("token")
+            token_obj = data.get("token") or data.get("access_token")
             if isinstance(token_obj, dict):
                 self.token = token_obj.get("access_token")
             else:
@@ -123,4 +128,77 @@ def get_log_volume_stats(
         "interval": interval
     }
     result = siem_client.request("GET", "discover/log-counts-over-time", params=params)
+    return json.dumps(result, indent=2)
+
+@tool
+def get_unique_field_values(
+    index_pattern: str,
+    fields: List[str]
+) -> str:
+    """Find unique values for specific fields (e.g., 'hostname', 'dest_ip') to discover active entities."""
+    params = {
+        "index_pattern": index_pattern,
+        "fields": fields
+    }
+    result = siem_client.request("GET", "discover/unique-values", params=params)
+    return json.dumps(result, indent=2)
+
+@tool
+def list_siem_indices() -> str:
+    """List all available SIEM indices and their sizes to understand data sources."""
+    result = siem_client.request("GET", "indices/")
+    return json.dumps(result, indent=2)
+
+@tool
+def list_security_alerts(
+    status: Optional[str] = None,
+    severity: Optional[str] = None
+) -> str:
+    """List active security alerts from the SIEM threat detection engine."""
+    params = {}
+    if status: params["status"] = status
+    if severity: params["severity"] = severity
+    result = siem_client.request("GET", "security-analytics/alerts", params=params)
+    return json.dumps(result, indent=2)
+
+@tool
+def list_security_findings(
+    detector_id: Optional[str] = None,
+    severity: Optional[str] = None
+) -> str:
+    """List raw security findings (rule matches) that haven't necessarily triggered alerts yet."""
+    params = {}
+    if detector_id: params["detector_id"] = detector_id
+    if severity: params["severity"] = severity
+    result = siem_client.request("GET", "security-analytics/findings", params=params)
+    return json.dumps(result, indent=2)
+
+@tool
+def get_security_correlations(
+    finding_id: str
+) -> str:
+    """Find correlated security events across different log sources for a specific finding."""
+    result = siem_client.request("GET", f"security-analytics/correlations/findings", params={"finding_id": finding_id})
+    return json.dumps(result, indent=2)
+
+@tool
+def acknowledge_siem_alerts(
+    alert_ids: List[str]
+) -> str:
+    """Acknowledge security alerts to mark them as addressed or investigated."""
+    payload = {"alertIds": alert_ids}
+    result = siem_client.request("POST", "security-analytics/alerts/_acknowledge", json=payload)
+    return json.dumps(result, indent=2)
+
+@tool
+def update_ip_whitelist(
+    ip: str,
+    action: str = "add"
+) -> str:
+    """Add or remove an IP from the SIEM whitelist (Firewall/IPS rules). action: 'add' or 'remove'."""
+    if action.lower() == "add":
+        payload = {"ip": ip, "description": "Added by Security AI Analyst"}
+        result = siem_client.request("POST", "ips/whitelist", json=payload)
+    else:
+        result = siem_client.request("DELETE", f"ips/whitelist/{ip}")
     return json.dumps(result, indent=2)

@@ -12,6 +12,7 @@ from .custom_crm import CustomCRMEmail
 from .billing import BillingSubscription, BillingTransaction
 from .background_job import BackgroundJob
 from .embedding_cache import EmbeddingCache
+from .investigation_journal import InvestigationJournal
 
 __all__ = [
     "Tenant",
@@ -25,5 +26,6 @@ __all__ = [
     "BillingSubscription",
     "BillingTransaction",
     "BackgroundJob",
-    "EmbeddingCache"
+    "EmbeddingCache",
+    "InvestigationJournal"
 ]

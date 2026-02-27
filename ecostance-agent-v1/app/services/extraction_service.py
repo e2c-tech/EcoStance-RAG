@@ -211,41 +211,68 @@ def _extract_docx(file_path: str) -> Tuple[List[Dict[str, Any]], str]:
     return blocks, "docx"
 
 # --- Spreadsheet Extraction Service ---
+def _process_dataframe(df: pd.DataFrame, file_path: str, sheet_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Helper to process a dataframe into grouped chunks with header injection.
+    Groups 20 rows per chunk to maintain context for RAG while including column names.
+    """
+    blocks = []
+    headers = ", ".join(df.columns.astype(str).tolist())
+    rows_per_chunk = 20
+    
+    # Replace pandas NaN with None for consistent handling
+    df = df.where(pd.notna(df), None)
+    
+    num_rows = len(df)
+    for i in range(0, num_rows, rows_per_chunk):
+        chunk_df = df.iloc[i : i + rows_per_chunk]
+        row_strings = []
+        
+        for idx, row in chunk_df.iterrows():
+            # Create string representation, skipping None values
+            row_items = [f"{col}: {val}" for col, val in row.items() if val is not None]
+            if row_items:
+                # Store the 1-based row index (Header is row 1, so data starts at 2)
+                row_strings.append(f"Row {idx + 2}: " + ", ".join(row_items))
+        
+        if row_strings:
+            # Inject headers at the top of every chunk
+            combined_text = f"Table Columns: {headers}\n---\n" + "\n".join(row_strings)
+            
+            metadata = {
+                "source_filename": os.path.basename(file_path),
+                "row_range": f"{i + 2}-{min(i + rows_per_chunk + 1, num_rows + 1)}",
+                "extraction_method": "pandas_grouped_with_headers"
+            }
+            if sheet_name:
+                metadata["sheet_name"] = sheet_name
+                
+            blocks.append({
+                "text": combined_text,
+                "metadata": metadata
+            })
+    return blocks
+
 def _extract_spreadsheet(file_path: str, file_type: str) -> Tuple[List[Dict[str, Any]], str]:
     """
-    Extracts data from spreadsheet files (XLSX, CSV), treating each row as a separate record.
-    Filters out NaN values to prevent downstream errors.
-
+    Extracts data from spreadsheet files (XLSX, CSV), grouping rows and injecting headers.
+    
     Args:
         file_path (str): The path to the spreadsheet file.
         file_type (str): The type of spreadsheet ('xlsx' or 'csv').
 
     Returns:
-        A list of blocks, where each block is a row formatted as a key-value string.
+        A list of blocks, where each block contains a group of rows with header context.
     """
-    blocks = []
+    all_blocks = []
     try:
         if file_type == 'xlsx':
             xls = pd.ExcelFile(file_path)
             for sheet_name in xls.sheet_names:
                 df = pd.read_excel(xls, sheet_name=sheet_name).dropna(how='all')
-                # Replace pandas NaN with None for consistent handling
-                df = df.where(pd.notna(df), None)
-                
-                for index, row in df.iterrows():
-                    # Create string representation, skipping None values
-                    row_text = ", ".join([f'{col}: {val}' for col, val in row.items() if val is not None])
-                    if not row_text:  # Skip rows that are entirely empty
-                        continue
-                    blocks.append({
-                        "text": row_text,
-                        "metadata": {
-                            "source_filename": os.path.basename(file_path),
-                            "sheet_name": sheet_name,
-                            "row_number": index + 2,  # +2 for 1-based index and header
-                            "extraction_method": "pandas"
-                        }
-                    })
+                if not df.empty:
+                    sheet_blocks = _process_dataframe(df, file_path, sheet_name)
+                    all_blocks.extend(sheet_blocks)
         else:  # For CSV
             # Attempt to read CSV with different encodings
             encodings = ['utf-8', 'cp1252', 'latin-1']
@@ -265,24 +292,15 @@ def _extract_spreadsheet(file_path: str, file_type: str) -> Tuple[List[Dict[str,
             if df is None:
                 raise ValueError(f"Could not read CSV file {file_path} with any of the supported encodings ({encodings})")
 
-            df = df.where(pd.notna(df), None)  # Replace NaN with None
-
-            for index, row in df.iterrows():
-                row_text = ", ".join([f'{col}: {val}' for col, val in row.items() if val is not None])
-                if not row_text:
-                    continue
-                blocks.append({
-                    "text": row_text,
-                    "metadata": {
-                        "source_filename": os.path.basename(file_path),
-                        "row_number": index + 2,
-                        "extraction_method": "pandas"
-                    }
-                })
+            if not df.empty:
+                csv_blocks = _process_dataframe(df, file_path)
+                all_blocks.extend(csv_blocks)
+                
     except Exception as e:
-        print(f"Error processing spreadsheet {file_path}: {e}")
+        logger.error(f"Error processing spreadsheet {file_path}: {str(e)}")
         return [], f"{file_type}-error"
-    return blocks, file_type
+        
+    return all_blocks, file_type
 
 # --- SQL Dump Extraction Service (Handles both INSERT and COPY) ---
 def _extract_sql(file_path: str) -> Tuple[List[Dict[str, Any]], str]:

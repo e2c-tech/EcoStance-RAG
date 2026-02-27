@@ -15,7 +15,8 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, Tool
 from .config import (
     AGENT_MODEL, GOOGLE_API_KEY, GROQ_API_KEY, 
     LLM_PROVIDER, AGENT_TEMPERATURE,
-    SECURITY_MISSION_STATEMENT, SECURITY_OPERATIONAL_DIRECTIVES
+    SECURITY_MISSION_STATEMENT, SECURITY_OPERATIONAL_DIRECTIVES,
+    ENABLE_SIEM_TOOLS
 )
 
 # Reuse existing generic tools
@@ -25,12 +26,21 @@ from agents.generic_agent.tools.kb_tools import (
 )
 from agents.generic_agent.tools.db_tools import create_db_query_tool, create_list_db_tables_tool
 
-# Use SIEM Discovery tools
+# Use SIEM Discovery & Response tools
 from .tools.siem_tools import (
-    search_siem_logs, get_log_volume_stats
+    search_siem_logs, 
+    get_log_volume_stats,
+    get_unique_field_values,
+    list_siem_indices,
+    list_security_alerts,
+    list_security_findings,
+    get_security_correlations,
+    acknowledge_siem_alerts,
+    update_ip_whitelist
 )
 
 from app.services.multilingual_utils import MultilingualAgentMixin
+from app.services.investigation_journal_service import log_investigation_step
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +69,25 @@ class SecurityAnalystService(MultilingualAgentMixin):
         self.tools = [
             create_search_knowledge_base_tool(tenant_id),
             create_list_knowledge_bases_tool(tenant_id),
-            search_siem_logs,
-            get_log_volume_stats,
             create_db_query_tool(db_conn, tenant_id=tenant_id),
             create_list_db_tables_tool(db_conn, tenant_id=tenant_id)
         ]
+
+        if ENABLE_SIEM_TOOLS:
+            logger.info("SIEM Tools are ENABLED for Security Analyst")
+            self.tools.extend([
+                search_siem_logs,
+                get_log_volume_stats,
+                get_unique_field_values,
+                list_siem_indices,
+                list_security_alerts,
+                list_security_findings,
+                get_security_correlations,
+                acknowledge_siem_alerts,
+                update_ip_whitelist
+            ])
+        else:
+            logger.info("SIEM Tools are currently DISABLED (config toggle)")
             
         self.tool_map = {tool.name: tool for tool in self.tools}
         self.conversations: Dict[str, List[Dict]] = {}
@@ -185,13 +209,24 @@ class SecurityAnalystService(MultilingualAgentMixin):
                             logger.error(f"Tool error: {te}")
                             tool_result = f"Error executing {tool_name}: {str(te)}"
                     
-                    # Store tool result in history
                     self.conversations[session_id].append({
                         "role": "tool",
                         "content": tool_result,
                         "tool_call_id": tool_id
                     })
                     lc_messages.append(ToolMessage(content=tool_result, tool_call_id=tool_id))
+
+                    # Journal Logging (Phase 3 objective)
+                    log_investigation_step(
+                        session_id=session_id,
+                        agent_type="security_analyst",
+                        tenant_id=self.tenant_id,
+                        thought=response.content,
+                        tool_name=tool_name,
+                        tool_args=tool_args,
+                        tool_result=tool_result,
+                        step_number=iteration
+                    )
                 
                 import time
                 time.sleep(1) # Respect rate limits

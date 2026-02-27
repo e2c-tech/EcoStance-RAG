@@ -1,0 +1,3309 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "SC-SIEM-Corvette API",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/api/v1/auth/login": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Login For Access Token",
+                "operationId": "login_for_access_token_api_v1_auth_login_post",
+                "requestBody": {
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Body_login_for_access_token_api_v1_auth_login_post"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LoginResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/refresh": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Refresh Access Token",
+                "operationId": "refresh_access_token_api_v1_auth_refresh_post",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Token"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/auth/validate-token": {
+            "get": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Validate Token",
+                "operationId": "validate_token_api_v1_auth_validate_token_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/auth/request-password-reset": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Request Password Reset",
+                "operationId": "request_password_reset_api_v1_auth_request_password_reset_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordResetRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/reset-password": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Reset Password",
+                "operationId": "reset_password_api_v1_auth_reset_password_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordReset"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/": {
+            "get": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Get Users",
+                "description": "Retrieves a list of all users. Requires 'manage_users' permission.",
+                "operationId": "get_users_api_v1_users__get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/UserResponse"
+                                    },
+                                    "type": "array",
+                                    "title": "Response Get Users Api V1 Users  Get"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Create User",
+                "description": "Creates a new user in the database. Requires 'manage_users' permission.",
+                "operationId": "create_user_api_v1_users__post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UserCreate"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/users/{user_id}": {
+            "put": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Update User",
+                "description": "Updates a user's details. Requires 'manage_users' permission.",
+                "operationId": "update_user_api_v1_users__user_id__put",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "User Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UserUpdate"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/roles/permissions": {
+            "get": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Get All Permissions",
+                "description": "Returns a list of all available permission strings in the system.\nUseful for frontends that need to display permission options.",
+                "operationId": "get_all_permissions_api_v1_roles_permissions_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "type": "array",
+                                    "title": "Response Get All Permissions Api V1 Roles Permissions Get"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/roles/": {
+            "get": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Get Roles",
+                "description": "Retrieves a list of all roles from the database.",
+                "operationId": "get_roles_api_v1_roles__get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/RoleResponse"
+                                    },
+                                    "type": "array",
+                                    "title": "Response Get Roles Api V1 Roles  Get"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Create Role",
+                "description": "Creates a new role. Requires 'manage_roles' permission.\nPermissions are provided as a list of strings.",
+                "operationId": "create_role_api_v1_roles__post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RoleCreate"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RoleResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/roles/{role_id}": {
+            "get": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Get Role",
+                "description": "Retrieves a specific role by its ID.",
+                "operationId": "get_role_api_v1_roles__role_id__get",
+                "parameters": [
+                    {
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "Role Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RoleResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Update Role",
+                "description": "Updates an existing role. Requires 'manage_roles' permission.",
+                "operationId": "update_role_api_v1_roles__role_id__put",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "Role Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RoleUpdate"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RoleResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Delete Role",
+                "description": "Deletes a role. Requires 'manage_roles' permission.",
+                "operationId": "delete_role_api_v1_roles__role_id__delete",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "Role Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Successful Response"
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/discover/": {
+            "post": {
+                "tags": [
+                    "Discover"
+                ],
+                "summary": "Discover Logs",
+                "description": "Fetches raw logs from OpenSearch based on the provided index pattern and filters.\nPermissions are enforced based on the user's role and client_id.",
+                "operationId": "discover_logs_api_v1_discover__post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DiscoverRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DiscoverResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/discover/log-counts-over-time": {
+            "get": {
+                "tags": [
+                    "Discover"
+                ],
+                "summary": "Get Log Counts",
+                "description": "Retrieves log counts over a specified time period, respecting user permissions.",
+                "operationId": "get_log_counts_api_v1_discover_log_counts_over_time_get",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "index_pattern",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "description": "The index pattern to search in (e.g., 'syslog_logs-*').",
+                            "title": "Index Pattern"
+                        },
+                        "description": "The index pattern to search in (e.g., 'syslog_logs-*')."
+                    },
+                    {
+                        "name": "time_period_minutes",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "description": "The time period in minutes to look back.",
+                            "default": 60,
+                            "title": "Time Period Minutes"
+                        },
+                        "description": "The time period in minutes to look back."
+                    },
+                    {
+                        "name": "interval",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "description": "The interval for the histogram (e.g., 'h' for hour, 'm' for minute).",
+                            "default": "h",
+                            "title": "Interval"
+                        },
+                        "description": "The interval for the histogram (e.g., 'h' for hour, 'm' for minute)."
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/LogCount"
+                                    },
+                                    "title": "Response Get Log Counts Api V1 Discover Log Counts Over Time Get"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/discover/unique-values": {
+            "get": {
+                "tags": [
+                    "Discover"
+                ],
+                "summary": "Get Unique Values",
+                "description": "Retrieves unique values for a given set of fields from a specified index pattern,\nrespecting user permissions.",
+                "operationId": "get_unique_values_api_v1_discover_unique_values_get",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "index_pattern",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "description": "The index pattern to search in (e.g., 'syslog_logs-*').",
+                            "title": "Index Pattern"
+                        },
+                        "description": "The index pattern to search in (e.g., 'syslog_logs-*')."
+                    },
+                    {
+                        "name": "fields",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "A list of fields to get unique values for (e.g., ['service', 'application', 'ip']).",
+                            "title": "Fields"
+                        },
+                        "description": "A list of fields to get unique values for (e.g., ['service', 'application', 'ip'])."
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "title": "Response Get Unique Values Api V1 Discover Unique Values Get"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/discover/field-values": {
+            "get": {
+                "tags": [
+                    "Discover"
+                ],
+                "summary": "Get Field Values Workaround",
+                "description": "WORKAROUND: Fetches unique values for fields by scanning recent documents.\nThis is a fallback for when OpenSearch mappings do not support proper aggregations.\nIt may be slow and the results may be incomplete.",
+                "operationId": "get_field_values_workaround_api_v1_discover_field_values_get",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "index_pattern",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "description": "The index pattern to search in (e.g., 'syslog_logs-*').",
+                            "title": "Index Pattern"
+                        },
+                        "description": "The index pattern to search in (e.g., 'syslog_logs-*')."
+                    },
+                    {
+                        "name": "fields",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "A list of fields to get unique values for (e.g., ['hostname', 'program']).",
+                            "title": "Fields"
+                        },
+                        "description": "A list of fields to get unique values for (e.g., ['hostname', 'program'])."
+                    },
+                    {
+                        "name": "size",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "description": "The number of recent documents to scan.",
+                            "default": 10000,
+                            "title": "Size"
+                        },
+                        "description": "The number of recent documents to scan."
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "title": "Response Get Field Values Workaround Api V1 Discover Field Values Get"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/templates/{name}": {
+            "post": {
+                "tags": [
+                    "Templates"
+                ],
+                "summary": "Create Template",
+                "description": "Creates or updates an index template. Requires 'manage_indices' permission.",
+                "operationId": "create_template_api_v1_templates__name__post",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Name"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "title": "Template"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "get": {
+                "tags": [
+                    "Templates"
+                ],
+                "summary": "Get Template",
+                "description": "Gets an index template. Requires 'manage_indices' permission.",
+                "operationId": "get_template_api_v1_templates__name__get",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Name"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Templates"
+                ],
+                "summary": "Delete Template",
+                "description": "Deletes an index template. Requires 'manage_indices' permission.",
+                "operationId": "delete_template_api_v1_templates__name__delete",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Name"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Successful Response"
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "head": {
+                "tags": [
+                    "Templates"
+                ],
+                "summary": "Template Exists",
+                "description": "Checks if an index template exists. Requires 'manage_indices' permission.",
+                "operationId": "template_exists_api_v1_templates__name__head",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Name"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/indices/": {
+            "get": {
+                "tags": [
+                    "Indices"
+                ],
+                "summary": "Get All Indices",
+                "description": "Retrieves all indices from OpenSearch.",
+                "operationId": "get_all_indices_api_v1_indices__get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": true,
+                                    "type": "object",
+                                    "title": "Response Get All Indices Api V1 Indices  Get"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Indices"
+                ],
+                "summary": "Create Index",
+                "description": "Creates a new OpenSearch index.\nIf a template_name is provided, the index will be created without any specific settings or mappings,\nand OpenSearch will apply a matching template.",
+                "operationId": "create_index_api_v1_indices__post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IndexSchema"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/indices/{index_name}": {
+            "get": {
+                "tags": [
+                    "Indices"
+                ],
+                "summary": "Get Index",
+                "description": "Retrieves a specific OpenSearch index.",
+                "operationId": "get_index_api_v1_indices__index_name__get",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "index_name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Index Name"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": true,
+                                    "title": "Response Get Index Api V1 Indices  Index Name  Get"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Indices"
+                ],
+                "summary": "Delete Index",
+                "description": "Deletes a specific OpenSearch index.",
+                "operationId": "delete_index_api_v1_indices__index_name__delete",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "index_name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Index Name"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alerts/": {
+            "get": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Get All Alerts",
+                "description": "Get all alerts. This endpoint automatically filters out 'DELETED' alerts\n(ghost alerts from removed monitors) to keep the dashboard clean.",
+                "operationId": "get_all_alerts_api_v1_alerts__get",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "monitor_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Monitor Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alerts/acknowledge/{monitor_id}": {
+            "post": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Acknowledge Single Alert",
+                "description": "Acknowledge an alert. \nNOTE: If the monitor has been deleted, this will fail with a 404.",
+                "operationId": "acknowledge_single_alert_api_v1_alerts_acknowledge__monitor_id__post",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "monitor_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Monitor Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "title": "Body"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alerts/monitors": {
+            "get": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Get All Monitors Route",
+                "description": "Get all monitors.",
+                "operationId": "get_all_monitors_route_api_v1_alerts_monitors_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Create New Monitor",
+                "description": "Create a new monitor.\nThe request body should contain the monitor definition.\nTo create a monitor for a specific message, service, application, or ip,\ninclude 'message', 'service', 'application', or 'ip' fields in the request body.\nThese will be used to construct the monitor's query if a full 'inputs' query is not provided.",
+                "operationId": "create_new_monitor_api_v1_alerts_monitors_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "additionalProperties": true,
+                                "type": "object",
+                                "title": "Monitor Details"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/alerts/monitors/{monitor_id}": {
+            "get": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Get Single Monitor",
+                "description": "Get a single monitor by its ID.",
+                "operationId": "get_single_monitor_api_v1_alerts_monitors__monitor_id__get",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "monitor_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Monitor Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Update Existing Monitor",
+                "description": "Update an existing monitor.",
+                "operationId": "update_existing_monitor_api_v1_alerts_monitors__monitor_id__put",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "monitor_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Monitor Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "title": "Monitor"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Delete Existing Monitor",
+                "description": "Delete a monitor.\nSafety Check: Prevents deletion if there are active (unacknowledged) alerts.",
+                "operationId": "delete_existing_monitor_api_v1_alerts_monitors__monitor_id__delete",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "monitor_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Monitor Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alerts/monitors/{monitor_id}/enable": {
+            "put": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Enable Monitor",
+                "description": "Enable a monitor.",
+                "operationId": "enable_monitor_api_v1_alerts_monitors__monitor_id__enable_put",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "monitor_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Monitor Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alerts/monitors/{monitor_id}/disable": {
+            "put": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Disable Monitor",
+                "description": "Disable a monitor.",
+                "operationId": "disable_monitor_api_v1_alerts_monitors__monitor_id__disable_put",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "monitor_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Monitor Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alerts/channels": {
+            "get": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Get All Notification Channels",
+                "description": "Get all notification channels.",
+                "operationId": "get_all_notification_channels_api_v1_alerts_channels_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Create New Channel",
+                "description": "Create a new notification channel.",
+                "operationId": "create_new_channel_api_v1_alerts_channels_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "additionalProperties": true,
+                                "type": "object",
+                                "title": "Channel"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/alerts/channels/{channel_id}": {
+            "get": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Get Single Channel",
+                "description": "Get a single notification channel by its ID.",
+                "operationId": "get_single_channel_api_v1_alerts_channels__channel_id__get",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "channel_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Channel Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Update Existing Channel",
+                "description": "Update an existing notification channel.",
+                "operationId": "update_existing_channel_api_v1_alerts_channels__channel_id__put",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "channel_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Channel Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "title": "Channel"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Alerts"
+                ],
+                "summary": "Delete Existing Channel",
+                "description": "Delete a notification channel.",
+                "operationId": "delete_existing_channel_api_v1_alerts_channels__channel_id__delete",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "channel_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Channel Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/diagnostics/logs": {
+            "get": {
+                "tags": [
+                    "Diagnostics"
+                ],
+                "summary": "Get Logs",
+                "description": "Retrieves the last N lines from the nohup.out log file.\nThis endpoint is public.",
+                "operationId": "get_logs_api_v1_diagnostics_logs_get",
+                "parameters": [
+                    {
+                        "name": "n",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 50,
+                            "title": "N"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "title": "Response Get Logs Api V1 Diagnostics Logs Get"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ips/whitelist": {
+            "get": {
+                "tags": [
+                    "IP Whitelisting"
+                ],
+                "summary": "List all whitelisted IPs and subnets",
+                "operationId": "list_whitelisted_ips_api_v1_ips_whitelist_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/WhitelistedIPResponse"
+                                    },
+                                    "type": "array",
+                                    "title": "Response List Whitelisted Ips Api V1 Ips Whitelist Get"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "IP Whitelisting"
+                ],
+                "summary": "Add an IP or subnet to the whitelist",
+                "operationId": "add_whitelisted_ip_api_v1_ips_whitelist_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IPWhitelistRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ips/whitelist/{id}": {
+            "put": {
+                "tags": [
+                    "IP Whitelisting"
+                ],
+                "summary": "Edit a whitelisted IP or subnet",
+                "operationId": "edit_whitelisted_ip_api_v1_ips_whitelist__id__put",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IPWhitelistEditRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ips/whitelist/{address}": {
+            "delete": {
+                "tags": [
+                    "IP Whitelisting"
+                ],
+                "summary": "Remove an IP or subnet from the whitelist",
+                "operationId": "delete_whitelisted_ip_api_v1_ips_whitelist__address__delete",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "address",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Address"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ism/policies": {
+            "get": {
+                "tags": [
+                    "ISM"
+                ],
+                "summary": "Get All Policies",
+                "description": "List all available ISM policies.",
+                "operationId": "get_all_policies_api_v1_ism_policies_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "ISM"
+                ],
+                "summary": "Create New Policy",
+                "description": "Create a new ISM policy.",
+                "operationId": "create_new_policy_api_v1_ism_policies_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ISMPolicyCreate"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ism/policies/{policy_id}": {
+            "put": {
+                "tags": [
+                    "ISM"
+                ],
+                "summary": "Update Existing Policy",
+                "description": "Update an existing ISM policy.",
+                "operationId": "update_existing_policy_api_v1_ism_policies__policy_id__put",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "policy_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Policy Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ISMPolicyUpdate"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "ISM"
+                ],
+                "summary": "Delete Policy",
+                "description": "Delete an ISM policy.",
+                "operationId": "delete_policy_api_v1_ism_policies__policy_id__delete",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "policy_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Policy Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ism/policies/attach": {
+            "post": {
+                "tags": [
+                    "ISM"
+                ],
+                "summary": "Attach Policy To Indices",
+                "description": "Apply a policy to one or more indices.",
+                "operationId": "attach_policy_to_indices_api_v1_ism_policies_attach_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ISMPolicyAttach"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ism/policies/index/{index_name}": {
+            "get": {
+                "tags": [
+                    "ISM"
+                ],
+                "summary": "Get Policy For Index",
+                "description": "Show which policy is attached to a specific index.",
+                "operationId": "get_policy_for_index_api_v1_ism_policies_index__index_name__get",
+                "security": [
+                    {
+                        "OAuth2PasswordBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "index_name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Index Name"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/health": {
+            "get": {
+                "summary": "Health Check",
+                "operationId": "health_check_api_health_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Body_login_for_access_token_api_v1_auth_login_post": {
+                "properties": {
+                    "grant_type": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "pattern": "^password$"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Grant Type"
+                    },
+                    "username": {
+                        "type": "string",
+                        "title": "Username"
+                    },
+                    "password": {
+                        "type": "string",
+                        "format": "password",
+                        "title": "Password"
+                    },
+                    "scope": {
+                        "type": "string",
+                        "title": "Scope",
+                        "default": ""
+                    },
+                    "client_id": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Client Id"
+                    },
+                    "client_secret": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "format": "password",
+                        "title": "Client Secret"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "username",
+                    "password"
+                ],
+                "title": "Body_login_for_access_token_api_v1_auth_login_post"
+            },
+            "DiscoverRequest": {
+                "properties": {
+                    "index_pattern": {
+                        "type": "string",
+                        "title": "Index Pattern"
+                    },
+                    "client_id": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Client Id"
+                    },
+                    "size": {
+                        "type": "integer",
+                        "title": "Size",
+                        "default": 100
+                    },
+                    "from": {
+                        "type": "integer",
+                        "title": "From",
+                        "default": 0
+                    },
+                    "time_range": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/TimeRange"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "query": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Query"
+                    },
+                    "filters": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "$ref": "#/components/schemas/DynamicFilter"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Filters"
+                    },
+                    "sort": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "$ref": "#/components/schemas/SortOption"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Sort"
+                    },
+                    "aggs": {
+                        "anyOf": [
+                            {
+                                "additionalProperties": true,
+                                "type": "object"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Aggs"
+                    },
+                    "highlight": {
+                        "anyOf": [
+                            {
+                                "additionalProperties": true,
+                                "type": "object"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Highlight"
+                    },
+                    "fields": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "type": "string"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Fields",
+                        "description": "List of fields to return from _source"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "index_pattern"
+                ],
+                "title": "DiscoverRequest"
+            },
+            "DiscoverResponse": {
+                "properties": {
+                    "hits": {
+                        "items": {
+                            "$ref": "#/components/schemas/Hit"
+                        },
+                        "type": "array",
+                        "title": "Hits"
+                    },
+                    "total": {
+                        "type": "integer",
+                        "title": "Total"
+                    },
+                    "aggregations": {
+                        "anyOf": [
+                            {
+                                "additionalProperties": true,
+                                "type": "object"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Aggregations",
+                        "default": {}
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "hits",
+                    "total"
+                ],
+                "title": "DiscoverResponse"
+            },
+            "DynamicFilter": {
+                "properties": {
+                    "field": {
+                        "type": "string",
+                        "title": "Field"
+                    },
+                    "value": {
+                        "title": "Value"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Type",
+                        "description": "Filter type (e.g., 'term', 'match', 'range')",
+                        "default": "term"
+                    },
+                    "operator": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Operator",
+                        "description": "For range filters (e.g., 'gte', 'lte')"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "field",
+                    "value"
+                ],
+                "title": "DynamicFilter"
+            },
+            "HTTPValidationError": {
+                "properties": {
+                    "detail": {
+                        "items": {
+                            "$ref": "#/components/schemas/ValidationError"
+                        },
+                        "type": "array",
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "title": "HTTPValidationError"
+            },
+            "Hit": {
+                "properties": {
+                    "index": {
+                        "type": "string",
+                        "title": "Index"
+                    },
+                    "source": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Source"
+                    },
+                    "highlight": {
+                        "anyOf": [
+                            {
+                                "additionalProperties": {
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "type": "array"
+                                },
+                                "type": "object"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Highlight"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "index",
+                    "source"
+                ],
+                "title": "Hit",
+                "description": "Represents a single search hit, with field names safe for Pydantic."
+            },
+            "IPWhitelistEditRequest": {
+                "properties": {
+                    "new_address": {
+                        "type": "string",
+                        "title": "New Address"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "new_address"
+                ],
+                "title": "IPWhitelistEditRequest"
+            },
+            "IPWhitelistRequest": {
+                "properties": {
+                    "ip": {
+                        "type": "string",
+                        "title": "Ip"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "ip"
+                ],
+                "title": "IPWhitelistRequest"
+            },
+            "ISMPolicyAttach": {
+                "properties": {
+                    "policy_id": {
+                        "type": "string",
+                        "title": "Policy Id"
+                    },
+                    "indices": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "title": "Indices"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "policy_id",
+                    "indices"
+                ],
+                "title": "ISMPolicyAttach"
+            },
+            "ISMPolicyCreate": {
+                "properties": {
+                    "policy_id": {
+                        "type": "string",
+                        "title": "Policy Id"
+                    },
+                    "policy": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Policy"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "policy_id",
+                    "policy"
+                ],
+                "title": "ISMPolicyCreate"
+            },
+            "ISMPolicyUpdate": {
+                "properties": {
+                    "policy": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Policy"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "policy"
+                ],
+                "title": "ISMPolicyUpdate"
+            },
+            "IndexSchema": {
+                "properties": {
+                    "index_name": {
+                        "type": "string",
+                        "title": "Index Name",
+                        "description": "Name of the OpenSearch index."
+                    },
+                    "template_name": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Template Name",
+                        "description": "Optional name of the index template to use."
+                    },
+                    "settings": {
+                        "anyOf": [
+                            {
+                                "additionalProperties": true,
+                                "type": "object"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Settings",
+                        "description": "Optional index settings."
+                    },
+                    "mappings": {
+                        "anyOf": [
+                            {
+                                "additionalProperties": true,
+                                "type": "object"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Mappings",
+                        "description": "Optional index mappings."
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "index_name"
+                ],
+                "title": "IndexSchema"
+            },
+            "LogCount": {
+                "properties": {
+                    "hour": {
+                        "type": "integer",
+                        "title": "Hour"
+                    },
+                    "logs": {
+                        "type": "integer",
+                        "title": "Logs"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "hour",
+                    "logs"
+                ],
+                "title": "LogCount",
+                "description": "Represents a single data point for log counts over time."
+            },
+            "LoginResponse": {
+                "properties": {
+                    "token": {
+                        "$ref": "#/components/schemas/Token"
+                    },
+                    "user": {
+                        "$ref": "#/components/schemas/UserLoginDetails"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "token",
+                    "user"
+                ],
+                "title": "LoginResponse",
+                "description": "Schema for the combined login response, including tokens and user details."
+            },
+            "PasswordReset": {
+                "properties": {
+                    "token": {
+                        "type": "string",
+                        "title": "Token"
+                    },
+                    "new_password": {
+                        "type": "string",
+                        "title": "New Password"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "token",
+                    "new_password"
+                ],
+                "title": "PasswordReset"
+            },
+            "PasswordResetRequest": {
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "title": "Email"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "email"
+                ],
+                "title": "PasswordResetRequest"
+            },
+            "Permissions": {
+                "type": "string",
+                "enum": [
+                    "view_dashboard",
+                    "view_logs",
+                    "view_alerts",
+                    "manage_alerts",
+                    "view_threats",
+                    "manage_threats",
+                    "view_compliance",
+                    "manage_compliance",
+                    "view_network",
+                    "manage_network",
+                    "view_reports",
+                    "generate_reports",
+                    "manage_users",
+                    "system_config",
+                    "manage_roles",
+                    "manage_indices",
+                    "view_whitelisting",
+                    "manage_whitelisting",
+                    "view_monitor"
+                ],
+                "title": "Permissions",
+                "description": "Enumeration of all available permissions in the system.\nThis is the single source of truth for what permissions are available."
+            },
+            "RoleCreate": {
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "title": "Name",
+                        "description": "Unique name for the role"
+                    },
+                    "description": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Description",
+                        "description": "Description of the role's purpose"
+                    },
+                    "permissions": {
+                        "items": {
+                            "$ref": "#/components/schemas/Permissions"
+                        },
+                        "type": "array",
+                        "title": "Permissions",
+                        "description": "A list of permission strings assigned to the role."
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "name"
+                ],
+                "title": "RoleCreate",
+                "description": "Schema for creating a new role.\nPermissions are now provided as a list of strings."
+            },
+            "RoleResponse": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "title": "Id"
+                    },
+                    "name": {
+                        "type": "string",
+                        "title": "Name"
+                    },
+                    "description": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Description"
+                    },
+                    "permissions": {
+                        "items": {
+                            "$ref": "#/components/schemas/Permissions"
+                        },
+                        "type": "array",
+                        "title": "Permissions",
+                        "description": "List of permission strings assigned to this role."
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "id",
+                    "name"
+                ],
+                "title": "RoleResponse",
+                "description": "Schema for returning role data in responses.\nPermissions are returned as a list of strings."
+            },
+            "RoleUpdate": {
+                "properties": {
+                    "name": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name",
+                        "description": "Updated unique name for the role"
+                    },
+                    "description": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Description",
+                        "description": "Updated description of the role"
+                    },
+                    "permissions": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "$ref": "#/components/schemas/Permissions"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Permissions",
+                        "description": "A new list of permission strings to replace the existing ones."
+                    }
+                },
+                "type": "object",
+                "title": "RoleUpdate",
+                "description": "Schema for updating an existing role."
+            },
+            "SortOption": {
+                "properties": {
+                    "field": {
+                        "type": "string",
+                        "title": "Field"
+                    },
+                    "order": {
+                        "type": "string",
+                        "title": "Order",
+                        "description": "Sort order: 'asc' or 'desc'",
+                        "default": "desc"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "field"
+                ],
+                "title": "SortOption"
+            },
+            "TimeRange": {
+                "properties": {
+                    "from": {
+                        "type": "string",
+                        "title": "From",
+                        "description": "Start of the time range. Format: YYYY-MM-DDTHH:MM:SS.sssZ"
+                    },
+                    "to": {
+                        "type": "string",
+                        "title": "To",
+                        "description": "End of the time range. Format: YYYY-MM-DDTHH:MM:SS.sssZ"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "from",
+                    "to"
+                ],
+                "title": "TimeRange"
+            },
+            "Token": {
+                "properties": {
+                    "access_token": {
+                        "type": "string",
+                        "title": "Access Token"
+                    },
+                    "refresh_token": {
+                        "type": "string",
+                        "title": "Refresh Token"
+                    },
+                    "token_type": {
+                        "type": "string",
+                        "title": "Token Type"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "access_token",
+                    "refresh_token",
+                    "token_type"
+                ],
+                "title": "Token",
+                "description": "Schema for the JWT access and refresh token response."
+            },
+            "UserCreate": {
+                "properties": {
+                    "username": {
+                        "type": "string",
+                        "title": "Username"
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "title": "Email"
+                    },
+                    "password": {
+                        "type": "string",
+                        "title": "Password"
+                    },
+                    "role": {
+                        "type": "string",
+                        "title": "Role"
+                    },
+                    "department": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Department"
+                    },
+                    "client_id": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Client Id",
+                        "description": "Assign a client_id for multi-tenant access control."
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "username",
+                    "email",
+                    "password",
+                    "role"
+                ],
+                "title": "UserCreate",
+                "description": "Schema for creating a new user."
+            },
+            "UserLoginDetails": {
+                "properties": {
+                    "username": {
+                        "type": "string",
+                        "title": "Username"
+                    },
+                    "role": {
+                        "type": "string",
+                        "title": "Role"
+                    },
+                    "permissions": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "title": "Permissions"
+                    },
+                    "department": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Department"
+                    },
+                    "last_login": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Last Login"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "username",
+                    "role",
+                    "permissions"
+                ],
+                "title": "UserLoginDetails",
+                "description": "Schema for the user details returned on login."
+            },
+            "UserResponse": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "title": "Id"
+                    },
+                    "username": {
+                        "type": "string",
+                        "title": "Username"
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "title": "Email"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "title": "Is Active"
+                    },
+                    "role_id": {
+                        "type": "integer",
+                        "title": "Role Id"
+                    },
+                    "client_id": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Client Id"
+                    },
+                    "role": {
+                        "$ref": "#/components/schemas/RoleResponse"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "id",
+                    "username",
+                    "email",
+                    "is_active",
+                    "role_id",
+                    "role"
+                ],
+                "title": "UserResponse",
+                "description": "Schema for returning user data in responses, including role details."
+            },
+            "UserUpdate": {
+                "properties": {
+                    "username": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Username"
+                    },
+                    "email": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "email"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Email"
+                    },
+                    "is_active": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Is Active"
+                    },
+                    "role_id": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Role Id"
+                    },
+                    "department": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Department"
+                    },
+                    "client_id": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Client Id"
+                    }
+                },
+                "type": "object",
+                "title": "UserUpdate",
+                "description": "Schema for updating an existing user."
+            },
+            "ValidationError": {
+                "properties": {
+                    "loc": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                }
+                            ]
+                        },
+                        "type": "array",
+                        "title": "Location"
+                    },
+                    "msg": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Error Type"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "loc",
+                    "msg",
+                    "type"
+                ],
+                "title": "ValidationError"
+            },
+            "WhitelistedIPResponse": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "title": "Id"
+                    },
+                    "ip": {
+                        "type": "string",
+                        "title": "Ip"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "title": "Created At"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "id",
+                    "ip",
+                    "created_at"
+                ],
+                "title": "WhitelistedIPResponse"
+            }
+        },
+        "securitySchemes": {
+            "OAuth2PasswordBearer": {
+                "type": "oauth2",
+                "flows": {
+                    "password": {
+                        "scopes": {},
+                        "tokenUrl": "/api/v1/auth/login"
+                    }
+                }
+            }
+        }
+    }
+}
