@@ -28,7 +28,7 @@ class PublicAgentChatRequest(BaseModel):
     session_id: str = Field(..., min_length=1, max_length=100, description="Unique session identifier")
     message: str = Field(..., min_length=1, max_length=2000, description="User message")
     conversation_history: Optional[List[ConversationMessage]] = Field(default=[], description="Previous conversation")
-    agent_type: Optional[str] = Field(None, description="Optional agent type override (quickship, ecommerce, etc.)")
+    agent_type: Optional[str] = Field(None, description="Optional agent type override (generic, security_analyst, etc.)")
     user_language: Optional[str] = Field(None, description="Optional user language preference (en, es, fr, etc.)")
     knowledge_base: Optional[str] = Field(None, description="Optional selected knowledge base name")
     database_connection: Optional[str] = Field(None, description="Optional selected database connection ID")
@@ -92,7 +92,7 @@ class PublicAgentConfigResponse(BaseModel):
     branding: BrandingConfig
     rate_limit: RateLimitConfig
     features: FeaturesConfig
-    agent_type: str = Field("quickship", description="Type of agent (e.g., quickship, ecommerce)")
+    agent_type: str = Field("generic", description="Type of agent (e.g., generic, security_analyst)")
 
 
 class PublicAgentConfigDisabledResponse(BaseModel):
@@ -140,7 +140,7 @@ class AdminPublicAgentConfigResponse(BaseModel):
     branding: BrandingConfig
     rate_limit: RateLimitConfig
     features: FeaturesConfig
-    agent_type: str = Field("quickship", description="Type of agent (e.g., quickship, ecommerce)")
+    agent_type: str = Field("generic", description="Type of agent (e.g., generic, security_analyst)")
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     updated_by: Optional[str] = None
@@ -157,11 +157,11 @@ class AdminPublicAgentConfigUpdate(BaseModel):
     branding: Optional[BrandingConfig] = None
     rate_limit: Optional[RateLimitConfig] = None
     features: Optional[FeaturesConfig] = None
-    agent_type: Optional[str] = Field(None, description="Type of agent (e.g., quickship, ecommerce)")
+    agent_type: Optional[str] = Field(None, description="Type of agent (e.g., generic, security_analyst)")
 
     @validator('agent_type')
     def validate_agent_type(cls, v):
-        valid_agents = ['quickship', 'ecommerce', 'ecostance', 'realestate', 'generic', 'security_analyst']
+        valid_agents = ['generic', 'security_analyst', 'realestate']
         if v not in valid_agents:
             raise ValueError(f"Invalid agent type: {v}. Must be one of: {', '.join(valid_agents)}")
         return v

@@ -1,5 +1,5 @@
 """
-FastAPI Router for QuickShip AI Agent
+FastAPI Router for Beta AI Agent (Authenticated)
 Provides REST API endpoints for the agent
 """
 
@@ -165,20 +165,11 @@ class ConversationHistory(BaseModel):
 def get_agent_service(tenant_id: str, db: Session, database_connection: str = None):
     """Factory to create the assigned agent service for a tenant"""
     config = db.query(PublicAgentConfig).filter(PublicAgentConfig.tenant_id == tenant_id).first()
-    agent_type = config.agent_type if config else "quickship"
+    agent_type = config.agent_type if config else "generic"
     
     logger.debug(f"Tenant {tenant_id} initializing agent type: {agent_type}")
     
-    if agent_type == "quickship":
-        from .multilingual_agent_service import MultilingualAgentService
-        return MultilingualAgentService(tenant_id=tenant_id, db_session=db)
-    elif agent_type == "ecommerce":
-        from agents.ecommerce_agent.service import EcommerceAgentService
-        return EcommerceAgentService(tenant_id=tenant_id)
-    elif agent_type == "ecostance":
-        from agents.ecostance_agent.service import EcoStanceAgentService
-        return EcoStanceAgentService(tenant_id=tenant_id)
-    elif agent_type == "security_analyst":
+    if agent_type == "security_analyst":
         from agents.security_analyst.service import SecurityAnalystService
         return SecurityAnalystService(tenant_id=tenant_id, database_connection=database_connection)
     else:
@@ -203,7 +194,7 @@ async def chat_with_agent(
         
         # Determine agent type
         config = db.query(PublicAgentConfig).filter(PublicAgentConfig.tenant_id == tenant_id).first()
-        agent_type = config.agent_type if config else "quickship"
+        agent_type = config.agent_type if config else "generic"
         
         # Get service
         agent_service = get_agent_service(tenant_id, db, request.database_connection)
@@ -350,7 +341,7 @@ async def get_agent_config(
     """Get the current tenant's assigned agent configuration"""
     tenant_id = current_user.get("tenant_id")
     config = db.query(PublicAgentConfig).filter(PublicAgentConfig.tenant_id == tenant_id).first()
-    agent_type = config.agent_type if config else "quickship"
+    agent_type = config.agent_type if config else "generic"
     
     return {
         "tenant_id": tenant_id,

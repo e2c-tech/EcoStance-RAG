@@ -274,7 +274,7 @@ async def get_public_chat_config(
                 suggested_questions=[],
                 branding=BrandingConfig(
                     primary_color="#0066CC",
-                    company_name="QuickShip"
+                    company_name="Assistant"
                 ),
                 rate_limit=RateLimitConfig(
                     queries_per_minute=10,

@@ -183,18 +183,12 @@ async def chat_with_public_agent(
             )
         
         # Use the agent service to process the message
-        from agents.quickship_agent.public_agent_service import PublicAgentService as QuickShipAgent
-        from agents.ecommerce_agent.service import EcommerceAgentService
         from agents.generic_agent.service import GenericAgentService
-        from agents.ecostance_agent.service import EcoStanceAgentService
         from agents.security_analyst.service import SecurityAnalystService
         
         # Mapping of agent types to service classes
         AGENT_MAPPING = {
-            "quickship": QuickShipAgent,
-            "ecommerce": EcommerceAgentService,
             "generic": GenericAgentService,
-            "ecostance": EcoStanceAgentService,
             "security_analyst": SecurityAnalystService,
         }
         
@@ -323,7 +317,7 @@ async def get_public_agent_config(
                 suggested_questions=[],
                 branding=BrandingConfig(
                     primary_color="#0066CC",
-                    company_name="QuickShip"
+                    company_name="Assistant"
                 ),
                 rate_limit=RateLimitConfig(
                     queries_per_minute=10,
@@ -347,7 +341,7 @@ async def get_public_agent_config(
             branding=BrandingConfig(**config_dict["branding"]),
             rate_limit=RateLimitConfig(**config_dict["rate_limit"]),
             features=FeaturesConfig(**config_dict["features"]),
-            agent_type=config_dict.get("agent_type", "quickship")
+            agent_type=config_dict.get("agent_type", "generic")
         )
         
     except Exception as e:
@@ -509,8 +503,8 @@ async def reset_agent_conversation(
     """Reset conversation for a session."""
     try:
         tenant_id = current_user.get("tenant_id")
-        # Reuse existing QuickShip agent logic for resetting
-        from agents.quickship_agent.router import get_agent_service
+        # Use new Beta agent router for resetting
+        from .beta_agent_router import get_agent_service
         agent_service = get_agent_service(tenant_id, db)
         success = agent_service.reset_conversation(session_id)
         
@@ -561,7 +555,7 @@ async def get_admin_config(
             branding=BrandingConfig(**config_dict["branding"]),
             rate_limit=RateLimitConfig(**config_dict["rate_limit"]),
             features=FeaturesConfig(**config_dict["features"]),
-            agent_type=config_dict.get("agent_type", "quickship"),
+            agent_type=config_dict.get("agent_type", "generic"),
             created_at=config_dict.get("created_at"),
             updated_at=config_dict.get("updated_at"),
             updated_by=config_dict.get("updated_by")
@@ -614,7 +608,7 @@ async def update_admin_config(
                 branding=BrandingConfig(**config_dict["branding"]),
                 rate_limit=RateLimitConfig(**config_dict["rate_limit"]),
                 features=FeaturesConfig(**config_dict["features"]),
-                agent_type=config_dict.get("agent_type", "quickship"),
+                agent_type=config_dict.get("agent_type", "generic"),
                 created_at=config_dict.get("created_at"),
                 updated_at=config_dict.get("updated_at"),
                 updated_by=config_dict.get("updated_by")
@@ -677,7 +671,7 @@ async def superadmin_get_config(
             branding=BrandingConfig(**config_dict["branding"]),
             rate_limit=RateLimitConfig(**config_dict["rate_limit"]),
             features=FeaturesConfig(**config_dict["features"]),
-            agent_type=config_dict.get("agent_type", "quickship"),
+            agent_type=config_dict.get("agent_type", "generic"),
             created_at=config_dict.get("created_at"),
             updated_at=config_dict.get("updated_at"),
             updated_by=config_dict.get("updated_by")
@@ -742,7 +736,7 @@ async def superadmin_update_config(
                 branding=BrandingConfig(**config_dict["branding"]),
                 rate_limit=RateLimitConfig(**config_dict["rate_limit"]),
                 features=FeaturesConfig(**config_dict["features"]),
-                agent_type=config_dict.get("agent_type", "quickship"),
+                agent_type=config_dict.get("agent_type", "generic"),
                 created_at=config_dict.get("created_at"),
                 updated_at=config_dict.get("updated_at"),
                 updated_by=config_dict.get("updated_by")
@@ -1081,11 +1075,22 @@ async def get_current_llm_provider(
     Requires admin or super_admin role.
     """
     try:
-        from quickship_agent.agent_service import AgentService
+        from agents.generic_agent.service import GenericAgentService as AgentService
         
         # Create a temporary agent service to get current info
-        agent = AgentService(tenant_id=current_user["tenant_id"], db_session=db)
-        llm_info = agent.get_current_llm_info()
+        agent = AgentService(tenant_id=current_user["tenant_id"])
+        # GenericAgentService doesn't have get_current_llm_info, need a fallback or fix
+        # For now, let's provide basic info or check if it exists
+        if hasattr(agent, 'get_current_llm_info'):
+            llm_info = agent.get_current_llm_info()
+        else:
+            from app.config import AGENT_MODEL, LLM_PROVIDER, AGENT_TEMPERATURE
+            llm_info = {
+                "provider": LLM_PROVIDER,
+                "model": AGENT_MODEL,
+                "temperature": AGENT_TEMPERATURE,
+                "available_providers": {}
+            }
         
         return LLMProviderInfo(**llm_info)
         
@@ -1114,10 +1119,10 @@ async def switch_llm_provider(
     Requires admin or super_admin role.
     """
     try:
-        from quickship_agent.agent_service import AgentService
+        from agents.generic_agent.service import GenericAgentService as AgentService
         
         # Create a temporary agent service to perform the switch
-        agent = AgentService(tenant_id=current_user["tenant_id"], db_session=db)
+        agent = AgentService(tenant_id=current_user["tenant_id"])
         
         # Perform the switch
         switch_result = agent.switch_llm_provider(

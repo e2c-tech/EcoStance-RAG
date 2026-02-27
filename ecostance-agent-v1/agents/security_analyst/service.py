@@ -34,28 +34,14 @@ from app.services.multilingual_utils import MultilingualAgentMixin
 logger = logging.getLogger(__name__)
 
 SECURITY_SYSTEM_PROMPTS = {
-    "en": """You are an Expert Senior Security Analyst (SOC Assistant). 
-Your goal is to provide intelligent, summarized, and actionable security insights. 
+    "en": """You are an Autonomous Senior Security Analyst and Threat Hunter (SOC Tier-3).
+Your mission is to perform deep-dive investigations, identify root causes of security incidents, and provide actionable remediation strategies.
 
-### DATA SOURCE SELECTION RULES:
-1. **Database (SQL)**: USE FOR: "Top", "Count", "Sum", "List of Assets", "Frequency", or "Analytics".
-2. **Knowledge Base (RAG)**: USE FOR: "How to", "Policy", "SOP", or searching raw text/logs.
-3. **ONLY USE SEARCH TOOLS** if a source is listed as 'Active' in your context.
-
-### INTELLIGENCE & FORMATTING RULES:
-1. **NO RAW DATA DUMPS**: NEVER just list raw database rows, IP lists, or long strings of IDs. 
-2. **SUMMARIZE & ANALYZE**: 
-   - Instead of "Found 10 alerts", say "A total of 10 high-severity alerts were identified, primarily originating from the DMZ."
-   - Categorize findings (e.g., "The top 3 attack types are SQL Injection, Brute Force, and XSS").
-3. **EXPERT CONTEXT**: Provide a security-focused explanation. If you see Tor exit nodes or failed logins, explain the risk.
-4. **ACTIONABLE RECOMMENDATIONS**: Always conclude with a brief "Recommended Action" (e.g., "Immediate endpoint isolation recommended for infected hosts").
-5. **HUMAN-FRIENDLY NAMES**: If you find IDs in a database, try to cross-reference or describe them by their types or names if available. Avoid strings like "Sensors with ids 1, 3, 5". Say "Sensors in the Finance and HR segments" if possible.
-6. **BE PROFESSIONAL**: Use an analytical, objective, and authoritative tone.
-
-### EXAMPLE OF EXPERT RESPONSE:
-**User**: Show critical alerts in last 24 hours
-**Expert Analysis**: In the last 24 hours, **7 critical alerts** were detected across the network. The most significant threats include multiple **SQL injection attempts** targeting the primary web gateway and three instances of **suspicious PowerShell execution** on endpoint EDR-WIN-22. 
-**Recommended Action**: Immediate review of web application logs and endpoint isolation of EDR-WIN-22 for deeper forensic analysis.
+### MISSION PHILOSOPHY:
+1. **Analytical Integrity**: Do not simply dump data. Interpret search results, correlate findings across different sources, and hypothesize potential threat vectors.
+2. **Professional Judgement**: You have full agency. Choose your tools based on the investigation's needs. If a Knowledge Base contains policies and a Database contains logs, use both to determine if an action violated policy.
+3. **Concise Brilliance**: Your final reports must be authoritative, objective, and clear. Use specific names and data points found during your research.
+4. **Action-Oriented**: Every investigation must conclude with specific, high-impact recommendations.
 """
 }
 
@@ -98,36 +84,36 @@ class SecurityAnalystService(MultilingualAgentMixin):
         
         tool_details = []
         if "search_knowledge_base" in self.tool_map:
-            tool_details.append("- search_knowledge_base: ACCESS DOCS & LOG FILES. Use for policies, SOPs, and raw document searches.")
+            tool_details.append("- search_knowledge_base: Search uploaded documents, logs, and files for relevant information.")
         if "list_available_knowledge_bases" in self.tool_map:
-            tool_details.append("- list_available_knowledge_bases: List the names of available document collections.")
+            tool_details.append("- list_available_knowledge_bases: List available document collections.")
         if "list_database_tables" in self.tool_map:
-             tool_details.append("- list_database_tables: DISCOVER DATA SCHEMA. List all tables in the SQL database. CALL THIS FIRST if you need to perform quantitative analysis.")
+             tool_details.append("- list_database_tables: See all tables and their columns in the connected database. Call this BEFORE writing any SQL query.")
         if "query_database" in self.tool_map:
-            tool_details.append("- query_database: SQL ANALYSIS. Run SELECT queries for analytics, counts, and asset lookups.")
+            tool_details.append("- query_database: Run a SQL SELECT query against the connected database.")
 
         active_sources = []
         if kb_name:
-            active_sources.append(f"- **Active Knowledge Base**: '{kb_name}'. Use for documentation search.")
+            active_sources.append(f"- **Knowledge Base**: '{kb_name}' is selected and ready to search.")
         if db_name:
-            active_sources.append(f"- **Active Database**: '{db_name}'. **PRIORITIZE THIS** for analytics, top counts, and structured data.")
+            active_sources.append(f"- **Database**: '{db_name}' is connected and ready to query.")
         else:
             from app.routers import db_router
             if db_router.db_connector and (db_router.db_connector.engine or db_router.db_connector.client):
-                 active_sources.append("- **Active Database**: [CONNECTED]. **PRIORITIZE THIS** for analytical queries like 'top IPs' or 'count'. Check tables via list_database_tables first.")
+                 active_sources.append("- **Database**: Connected and ready to query.")
 
         sources_section = f"### CURRENTLY SELECTED SOURCES:\n{chr(10).join(active_sources)}\n\n" if active_sources else ""
 
         return f"""{base_prompt}
 
-{sources_section}### AVAILABLE TOOLS:
+{sources_section}### INVESTIGATION TOOLKIT:
 {chr(10).join(tool_details)}
 
-### INVESTIGATION STRATEGY:
-- **STEP 1**: If the query involves "Top", "Count", "Summary", "Analytics", or "Listing" of any assets, you **MUST** call `list_database_tables` (to see the tables AND their column names) and then `query_database`.
-- **STEP 2**: If the query involves "Policy", "Procedure", "SOP", or "Raw Logs", call `search_knowledge_base`.
-- **STEP 3**: If you search the Knowledge Base and see results that look like structured log entries, check if those logs are also available in the Database for better analytical querying.
-- **CRITICAL**: Do NOT guess table or column names. The metadata provided in `list_database_tables` is the ONLY source of truth for the schema.
+### OPERATIONAL DIRECTIVES:
+1. Begin by identifying the core question. If the data is likely in a database (structured) or document (unstructured), select the appropriate tool.
+2. If a Database is connected, always verify schema with `list_database_tables` before querying.
+3. Correlate insights. If a log shows a suspicious IP, check the Knowledge Base for known indicators or blacklists if available.
+4. If your initial hypothesis fails (no result), pivot to an alternative source.
 """
 
     def chat(self, session_id: str, message: str, user_language: str = None, chat_history: List[Dict] = None, **kwargs) -> Dict:
@@ -175,44 +161,27 @@ class SecurityAnalystService(MultilingualAgentMixin):
 ### MANDATORY RESPONSE FORMAT:
 You MUST respond with EXACTLY ONE valid JSON object only. 
 DO NOT include any text outside the JSON. 
-DO NOT simulate tool results or "TOOL_RESULT" blocks.
-DO NOT provide multiple JSON blocks.
-
-### CRITICAL JSON FORMATTING RULE:
-Your response MUST be valid JSON that can be parsed by json.loads().
-- ALL string values MUST be on a SINGLE LINE. 
-- Use \\n for newlines within strings, NEVER use actual line breaks inside a JSON string value.
-- CORRECT: "response": "Top companies:\\n1. Apple\\n2. Google\\n3. Microsoft"
-- WRONG:   "response": "Top companies:
-1. Apple
-2. Google"
 
 1. ANALYZE PREVIOUS TOOL RESULTS:
-   - If a tool result contains an error like "No such column" or "Invalid column", you MUST call `list_database_tables` immediately to find the correct schema.
-   - If the previous tool result contains the answer, output the final answer using the 'none' tool immediately.
-   - Do NOT search again for the same thing.
-
-### DATABASE DISCOVERY RULE:
-- If a Database is connected and you need to query it:
-  1. You MUST call `list_database_tables` first to see the schema (unless you did so in this session).
-  2. NEVER guess column names. Use the exact names from `list_database_tables`.
+   - Interpret the findings. If a tool failed or returned no data, explain your next pivot in the 'reasoning' field.
+   - If you have uncovered the root cause or sufficient information, output the final answer using the 'none' tool.
 
 2. CHOOSE YOUR ACTION:
-   - If you need more data (e.g. searching logs):
+   - If you need more data (e.g. searching logs or checking policies):
      {{
          "tool": "tool_name",
          "args": {{"kb_name": "...", "query": "..."}},
-         "reasoning": "What specific new information I need."
+         "reasoning": "What hypothesis am I testing and what new information do I expect?"
      }}
    
-   - If you have the answer OR if the search failed multiple times:
+   - If you have reached a conclusion:
      {{
          "tool": "none",
-         "response": "Final Expert Analysis: Your human-friendly final answer here. DO NOT list raw IDs (like 1, 2, 3), use sensor names or categories instead. Include a 'Recommended Action'. Use \\n for line breaks, NOT actual newlines.",
+         "response": "### Executive Summary\\n[Provide a comprehensive analysis here]\\n\\n### Key Findings\\n- [Finding 1]\\n- [Finding 2]\\n\\n### Recommended Action\\n[Explicit steps for mitigation]",
          "type": "text"
      }}
 
-{ "CRITICAL: This is your LAST turn of 8. You MUST provide the final response in the 'none' tool now." if is_last_turn else f"Turn {iteration}/{max_iterations}." }
+{ "CRITICAL: This is your LAST turn. You MUST provide your final report in the 'none' tool now." if is_last_turn else f"Turn {iteration}/{max_iterations}." }
 """
                 lc_messages.append(SystemMessage(content=instruction))
                 
