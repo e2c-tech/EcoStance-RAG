@@ -139,6 +139,7 @@ class SecurityAnalystService(MultilingualAgentMixin):
             # --- ATOMIC HISTORY RECONSTRUCTION (Phase 4 Logic) ---
             # Ensure we don't break ToolMessage <-> AIMessage pairs during truncation
             full_history = self.conversations.get(session_id, [])
+            logger.info(f"Reconstructing history for session {session_id}. Full history length: {len(full_history)}")
             recent_entries = full_history[-15:] # Take a slightly larger window
             
             # If the first entry in our window is a 'tool' message, include its parent 'assistant' message
@@ -168,7 +169,11 @@ class SecurityAnalystService(MultilingualAgentMixin):
                 logger.info(f"Security Analyst iteration {iteration} sending to LLM")
                 
                 # Execute turn using native tool binding
-                response = self.llm_with_tools.invoke(lc_messages)
+                try:
+                    response = self.llm_with_tools.invoke(lc_messages)
+                except Exception as llme:
+                    logger.error(f"LLM Invoke failed: {llme}")
+                    return {"content": f"AI model error: {str(llme)}", "session_id": session_id, "success": False}
                 
                 # Add response to history
                 self.conversations[session_id].append({
@@ -177,6 +182,8 @@ class SecurityAnalystService(MultilingualAgentMixin):
                     "tool_calls": response.tool_calls
                 })
                 lc_messages.append(response)
+                
+                logger.debug(f"LLM Response: {response.content[:100]}... | Tool calls: {len(response.tool_calls or [])}")
                 
                 if not response.tool_calls:
                     # Final answer reached
@@ -237,8 +244,10 @@ class SecurityAnalystService(MultilingualAgentMixin):
             return {"content": final_text, "session_id": session_id, "language": preferred_lang, "success": True}
             
         except Exception as e:
-            logger.error(f"Security Analyst critical error: {e}", exc_info=True)
-            return {"content": "An internal investigation error occurred.", "session_id": session_id, "success": False}
+            logger.error(f"Security Analyst critical error in session {session_id}: {str(e)}", exc_info=True)
+            # Try to provide a slightly more helpful message if we know what happened
+            error_msg = f"An internal investigation error occurred: {str(e)}"
+            return {"content": error_msg, "session_id": session_id, "success": False}
 
     def get_conversation_history(self, session_id: str) -> List[Dict]:
         return self.conversations.get(session_id, [])

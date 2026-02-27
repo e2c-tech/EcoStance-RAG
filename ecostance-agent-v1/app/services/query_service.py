@@ -125,7 +125,7 @@ def get_retriever(collection_name: str, top_k: int = 5):
         
         search_params = {
             "k": initial_k,
-            "score_threshold": 0.35
+            "score_threshold": 0.25 # Lowered to improve recall
         }
         
         base_retriever = qdrant_store.as_retriever(

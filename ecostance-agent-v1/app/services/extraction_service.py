@@ -6,7 +6,7 @@ import pandas as pd
 from trafilatura import extract as trafilatura_extract
 import json
 import re
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from bs4 import BeautifulSoup
 import sqlparse
 import logging
