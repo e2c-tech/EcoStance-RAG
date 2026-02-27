@@ -81,3 +81,8 @@ syslog1day.txt
 Yuvrus_Refund_Policy_Updated.docx
 yuvarus refund policy*
 ai_security_sensors_dump.sql
+
+# Database migrations
+migrations/
+project/
+scripts/
