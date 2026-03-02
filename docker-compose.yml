@@ -2,47 +2,22 @@ version: '3.8'
 
 services:
   # 1. Message Broker (REQUIRED for Celery)
-  redis:
+  ecostanceredis:
     image: redis:alpine
     container_name: ecostance-redis
     restart: unless-stopped
     networks:
       - app-network
 
-  # 2. Shared Embedding Server (The Model Owner)
-  # This container loads the BGE-M3 model and serves vectors on port 9003
-  ecostance-embedding:
-    image: ecostance-backend-core
-    container_name: ecostance-embedding
-    command: python -m app.services.embedding_server
-    environment:
-      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-BAAI/bge-m3}
-      - EMBEDDING_SERVER_PORT=9003
-      - GPU_VRAM_LIMIT_MB=${GPU_VRAM_LIMIT_MB:-8192}
-      - EMBEDDING_VECTOR_SIZE=${EMBEDDING_VECTOR_SIZE:-1024}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  # 3. Main API Server (Now Lightweight)
+  # 2. Main API Server (Now using sc-ai-agent-backend-core)
   ecostance-agent:
-    build:
-      context: ./ecostance-agent-v1
-      dockerfile: Dockerfile
-    image: ecostance-backend-core
+    image: sc-ai-agent-backend-core
     container_name: ecostance-agent
     environment:
       # Hybrid Config
       - REDIS_URL=redis://redis:6379/0
       - USE_REMOTE_EMBEDDING=true
-      - EMBEDDING_SERVER_HOST=ecostance-embedding
+      - EMBEDDING_SERVER_HOST=sc-ai-agent-embedding
       - EMBEDDING_SERVER_PORT=9003
       # Existing Config
       - DATABASE_URL=${DATABASE_URL}
@@ -77,64 +52,35 @@ services:
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9002/ecostance-ui}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9008/ecostance-ui}
     volumes:
       - ./ecostance-agent-v1/uploads:/app/uploads
       - ./ecostance-agent-v1/data:/app/data
     ports:
-      - "9000:9000"
+      - "9007:9000"
     depends_on:
       - redis
-      - ecostance-embedding
     restart: unless-stopped
     networks:
       - app-network
 
-  # 4. Background Celery Worker (Handles binary/heavy tasks)
-  ecostance-worker:
-    image: ecostance-backend-core
-    container_name: ecostance-worker
-    # Use -P solo for Windows/Simple Linux, or --concurrency=1 for stability
-    command: celery -A app.worker.tasks worker --loglevel=info -P solo
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - USE_REMOTE_EMBEDDING=true
-      - EMBEDDING_SERVER_HOST=ecostance-embedding
-      - EMBEDDING_SERVER_PORT=9003
-      - EMBEDDING_VECTOR_SIZE=${EMBEDDING_VECTOR_SIZE:-1024}
-      - DATABASE_URL=${DATABASE_URL}
-      - QDRANT_URL=${QDRANT_URL}
-      - QDRANT_API_KEY=${QDRANT_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
-    volumes:
-      - ./ecostance-agent-v1/uploads:/app/uploads
-      - ./ecostance-agent-v1/data:/app/data
-    depends_on:
-      - redis
-      - ecostance-embedding
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  # 5. UI Frontend
-  ecostance-ui:
-    build:
-      context: ./ecostance-ui-v1
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://ecostance-agent:9000/api/v1}
-        - VITE_ENVIRONMENT=${VITE_ENVIRONMENT:-production}
-        - VITE_BYPASS_AUTH=${VITE_BYPASS_AUTH:-false}
-    container_name: ecostance-ui
-    depends_on:
-      - ecostance-agent
-    ports:
-      - "9002:9002"
-    restart: unless-stopped
-    networks:
-      - app-network
+  # # 3. UI Frontend
+  # ecostance-ui:
+  #   build:
+  #     context: ./ecostance-ui-v1
+  #     dockerfile: Dockerfile
+  #     args:
+  #       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:9007/api/v1}
+  #       - VITE_ENVIRONMENT=${VITE_ENVIRONMENT:-production}
+  #       - VITE_BYPASS_AUTH=${VITE_BYPASS_AUTH:-false}
+  #   container_name: ecostance-ui
+  #   depends_on:
+  #     - ecostance-agent
+  #   ports:
+  #     - "9008:9002"
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
 
 networks:
   app-network:

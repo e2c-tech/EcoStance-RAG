@@ -10,7 +10,7 @@ import pandas as pd
 from typing import Optional, Dict, Any
 
 # --- Configuration ---
-BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:9000/api/v1")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:9007/api/v1")
 
 # --- Page Configuration ---
 st.set_page_config(

@@ -5,7 +5,7 @@ import time
 import pandas as pd
 
 # --- Configuration ---
-BACKEND_URL = "http://127.0.0.1:9000/api/v1"
+BACKEND_URL = "http://127.0.0.1:9007/api/v1"
 
 # --- Custom CSS for better chat UI ---
 def inject_custom_css():
