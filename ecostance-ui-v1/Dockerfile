@@ -8,7 +8,7 @@ RUN npm config set registry https://registry.npmjs.org/ && npm install --no-audi
 COPY . .
 
 # Build arguments for environment variables
-ARG VITE_API_BASE_URL=http://localhost:9007/api/v1
+ARG VITE_API_BASE_URL=http://sc-ai-agent:9000/api/v1
 ARG VITE_ENVIRONMENT=production
 ARG VITE_BYPASS_AUTH=false
 
@@ -16,7 +16,9 @@ ARG VITE_BYPASS_AUTH=false
 #ENV VITE_ENVIRONMENT=$VITE_ENVIRONMENT
 #ENV VITE_BYPASS_AUTH=$VITE_BYPASS_AUTH
 
-RUN npm run build && ls -la /app/dist
+RUN npm cache clean --force
+RUN npm ci
+RUN npm run build
 
 #EXPOSE 9002
 
@@ -38,4 +40,3 @@ COPY --from=builder /app/dist .
 
 #CMD ["serve", "-s", "dist", "-l", "9002"]
 CMD ["sh", "-c", "echo 'Build Complete' && sleep 1"]
-#CMD ["sh", "-c", "npm run build && cp -r dist/* /output/"]
