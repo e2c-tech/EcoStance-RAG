@@ -94,7 +94,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   const headers = new Headers(options.headers);
 
   if (token) {
-    console.log('🔑 Sending request with token:', token.substring(0, 20) + '...');
+    // console.log('🔑 Sending request with token:', token.substring(0, 20) + '...');
     headers.set('Authorization', `Bearer ${token}`);
   }
 
@@ -102,7 +102,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
     headers.set('Content-Type', 'application/json');
   }
 
-  console.log('📡 Making request to:', url);
+  // console.log('📡 Making request to:', url);
   const response = await fetch(`${API_BASE_URL}${url}`, {
     ...options,
     headers,
@@ -176,6 +176,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 export const authAPI = {
   login: async (email: string, password: string) => {
     // Don't use fetchWithAuth for login - use direct fetch to avoid auth loops
+    // console.log('Attempting login for:', email, API_BASE_URL);
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: {
@@ -587,11 +588,11 @@ export const knowledgeBaseAPI = {
   list: async (forceRefresh = false) => {
     const now = Date.now();
     if (!forceRefresh && kbCache.list && (now - kbCache.lastFetchedList < KB_CACHE_TTL)) {
-      console.log('API: Returning cached knowledge base list');
+      // console.log('API: Returning cached knowledge base list');
       return kbCache.list;
     }
 
-    console.log('API: Fetching knowledge bases from /manage/knowledge-bases/', forceRefresh ? '(forced)' : '');
+    // console.log('API: Fetching knowledge bases from /manage/knowledge-bases/', forceRefresh ? '(forced)' : '');
     const response = await fetchWithAuth('/manage/knowledge-bases/');
     const data = await handleResponse(response);
 
@@ -605,7 +606,7 @@ export const knowledgeBaseAPI = {
     const cachedItem = kbCache.details[kbName];
 
     if (!forceRefresh && cachedItem && (now - cachedItem.timestamp < KB_CACHE_TTL)) {
-      console.log(`API: Returning cached details for ${kbName}`);
+      // console.log(`API: Returning cached details for ${kbName}`);
       return cachedItem.data;
     }
 
@@ -960,14 +961,14 @@ export const customCrmAPI = {
 export const publicChatAPI = {
   // Public endpoints (no auth required)
   getConfig: async () => {
-    console.log('[publicChatAPI.getConfig] Fetching from:', `${API_BASE_URL}/public-chat/config`);
+    // console.log('[publicChatAPI.getConfig] Fetching from:', `${API_BASE_URL}/public-chat/config`);
     const response = await fetch(`${API_BASE_URL}/public-chat/config`);
-    console.log('[publicChatAPI.getConfig] Response status:', response.status, response.statusText);
+    // console.log('[publicChatAPI.getConfig] Response status:', response.status, response.statusText);
     const data = await handleResponse<any>(response);
-    console.log('[publicChatAPI.getConfig] Raw data from backend:', JSON.stringify(data, null, 2));
+    // console.log('[publicChatAPI.getConfig] Raw data from backend:', JSON.stringify(data, null, 2));
     // Backend returns { success, message, config }, extract the config
     const config = data.config || data;
-    console.log('[publicChatAPI.getConfig] Extracted config:', JSON.stringify(config, null, 2));
+    // console.log('[publicChatAPI.getConfig] Extracted config:', JSON.stringify(config, null, 2));
     return config;
   },
 

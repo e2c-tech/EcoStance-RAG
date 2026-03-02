@@ -118,7 +118,7 @@ export default function TenantSettingsPage() {
         <div className="flex gap-6">
           {[
             { id: 'profile', label: 'Profile', icon: Settings },
-            { id: 'usage', label: 'Usage & Quotas', icon: BarChart3 },
+            // { id: 'usage', label: 'Usage & Quotas', icon: BarChart3 },
             { id: 'rbac', label: 'Access Control', icon: Shield },
             { id: 'integrations', label: 'Integrations', icon: Plug },
             { id: 'billing', label: 'Billing', icon: CreditCard },
@@ -156,7 +156,9 @@ export default function TenantSettingsPage() {
 
             {agentLoading ? (
               <div className="flex items-center justify-center py-8">
-                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" >
+                Loading ...
+                  </div>
               </div>
             ) : agentConfig ? (
               <div className="space-y-4">

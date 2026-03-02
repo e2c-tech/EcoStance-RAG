@@ -23,7 +23,7 @@ const KBDiagnosticPage: React.FC = () => {
     });
 
     // Check 2: API Base URL
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
     results.checks.push({
       name: 'API Base URL',
       status: 'INFO',

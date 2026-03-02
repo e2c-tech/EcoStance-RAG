@@ -70,7 +70,7 @@ const SidebarLayout: React.FC = () => {
     { path: '/', label: 'Dashboard', icon: Icons.LayoutDashboard, requiresSuperAdmin: false },
     { path: '/users', label: 'Users', icon: Icons.Users, requiresSuperAdmin: false, requiresTenantAdmin: true },
     { path: '/knowledge-base', label: 'Knowledge Base', icon: Icons.BookOpen, requiresSuperAdmin: false },
-    { path: '/chat', label: 'Internal Chat', icon: Icons.Search, requiresSuperAdmin: false },
+    // { path: '/chat', label: 'Internal Chat', icon: Icons.Search, requiresSuperAdmin: false },
     { path: '/database-chat', label: 'Database Chat', icon: Icons.Database, requiresSuperAdmin: false },
     { path: '/ai-agent', label: 'AI Agent', icon: Icons.Sparkles, requiresSuperAdmin: false, badge: 'BETA' },
     { path: '/settings', label: 'Settings', icon: Icons.Settings, requiresSuperAdmin: false },

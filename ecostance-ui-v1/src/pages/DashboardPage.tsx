@@ -163,7 +163,7 @@ const DashboardPage: React.FC = () => {
     activeConnections: 0,
     queriesLast7Days: 0,
   });
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  // const [alerts, setAlerts] = useState<Alert[]>([]);
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [metrics, setMetrics] = useState<MetricPoint[]>([]);
 
@@ -193,7 +193,7 @@ const DashboardPage: React.FC = () => {
       // Fetch additional data in parallel
       const [kbResponse, metricsResponse, jobsResponse, filesResponse] = await Promise.all([
         knowledgeBaseAPI.list().catch(() => ({ knowledge_bases: [] })),
-        metricsAPI.getTenantMetrics('daily', 7).catch(() => ({ data: [] })),
+        // metricsAPI.getTenantMetrics('daily', 7).catch(() => ({ data: [] })),
         documentProcessingAPI.listJobs().catch(() => []),
         filesAPI.list().catch(() => [])
       ]) as any;
@@ -232,12 +232,12 @@ const DashboardPage: React.FC = () => {
       setMetrics(metricHistory);
 
       // Fetch active alerts
-      try {
-        const alertsResponse = await extendedMetricsAPI.getActiveAlerts() as any;
-        setAlerts(Array.isArray(alertsResponse) ? alertsResponse : []);
-      } catch (err) {
-        setAlerts([]);
-      }
+      // try {
+      //   const alertsResponse = await extendedMetricsAPI.getActiveAlerts() as any;
+      //   setAlerts(Array.isArray(alertsResponse) ? alertsResponse : []);
+      // } catch (err) {
+      //   setAlerts([]);
+      // }
 
       // Update overview data
       setOverviewData({
@@ -325,7 +325,7 @@ const DashboardPage: React.FC = () => {
         )}
 
         {/* Active Alerts */}
-        {alerts.length > 0 && (
+        {/* {alerts.length > 0 && (
           <section className="mb-6">
             {alerts.map((alert) => (
               <div
@@ -352,7 +352,7 @@ const DashboardPage: React.FC = () => {
               </div>
             ))}
           </section>
-        )}
+        )} */}
 
         {/* Overview Cards */}
         <section className="mb-8">

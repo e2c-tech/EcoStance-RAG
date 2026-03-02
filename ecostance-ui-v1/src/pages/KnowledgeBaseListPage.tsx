@@ -208,7 +208,8 @@ const KnowledgeBaseListPage: React.FC = () => {
       status: 'Ready',
     };
     addKB(newKB);
-    navigate(`/knowledge-base/${newKbName}`);
+     fetchKnowledgeBases(true);
+    // navigate(`/knowledge-base/${newKbName}`);
   };
 
   const handleRefresh = async () => {
@@ -218,6 +219,7 @@ const KnowledgeBaseListPage: React.FC = () => {
   const handleDeleteKB = async (kbId: string) => {
     try {
       await deleteKB(kbId);
+      await fetchKnowledgeBases(true);
     } catch (err) {
       console.error('Failed to delete knowledge base:', err);
       alert(`Failed to delete knowledge base: ${err instanceof Error ? err.message : 'Unknown error'}`);
