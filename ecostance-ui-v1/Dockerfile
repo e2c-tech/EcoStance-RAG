@@ -8,7 +8,7 @@ RUN npm config set registry https://registry.npmjs.org/ && npm install --no-audi
 COPY . .
 
 # Build arguments for environment variables
-ARG VITE_API_BASE_URL=http://sc-ai-agent:9000/api/v1
+ARG VITE_API_BASE_URL=http://ecostance-agent:9000/api/v1
 ARG VITE_ENVIRONMENT=production
 ARG VITE_BYPASS_AUTH=false
 
