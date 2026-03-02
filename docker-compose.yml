@@ -7,7 +7,7 @@ services:
     container_name: ecostance-redis
     restart: unless-stopped
     networks:
-      - app-network
+      - manual-app-network
 
   # 2. Main API Server (Now using sc-ai-agent-backend-core)
   ecostance-agent:
@@ -62,7 +62,7 @@ services:
       - ecostance-redis
     restart: unless-stopped
     networks:
-      - app-network
+      - manual-app-network
 
   # # 3. UI Frontend
   # ecostance-ui:
