@@ -83,5 +83,5 @@ services:
   #     - app-network
 
 networks:
-  app-network:
+  manual-app-network:
     external: true
