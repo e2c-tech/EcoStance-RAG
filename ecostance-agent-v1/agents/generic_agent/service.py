@@ -17,6 +17,7 @@ from .tools.db_tools import create_db_query_tool, create_list_db_tables_tool
 logger = logging.getLogger(__name__)
 
 from app.services.multilingual_utils import MultilingualAgentMixin
+from app.routers import db_router
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,35 @@ class GenericAgentService(MultilingualAgentMixin):
         self.tool_map = {tool.name: tool for tool in self.tools}
         self.conversations: Dict[str, List[Dict]] = {}
 
+    def _get_dynamic_system_prompt(self, lang: str = "en", kb_name: str = None, db_name: str = None):
+        """Generate system prompt filtered by actually available tools and context."""
+        base_prompt = self.get_system_prompt(lang)
+        
+        active_sources = []
+        if kb_name:
+            active_sources.append(f"- **Active Knowledge Base**: '{kb_name}'. Use for document search.")
+        
+        if db_name:
+            active_sources.append(f"- **Active Database**: '{db_name}'. **PRIORITIZE THIS** for analytics, top counts, and structured data.")
+        else:
+            # Global connection fallback check
+            if db_router.db_connector and db_router.db_connector.is_connected():
+                 active_sources.append("- **Active Database**: [CONNECTED]. **PRIORITIZE THIS** for analytical queries like 'top IPs' or 'count'. Check tables via list_database_tables first.")
+
+        sources_section = f"### CURRENTLY SELECTED SOURCES:\n{chr(10).join(active_sources)}\n\n" if active_sources else ""
+
+        return f"""{base_prompt}
+
+{sources_section}
+### INSTRUCTIONS:
+1. You MUST respond with EXACTLY ONE valid JSON object only.
+2. DO NOT include any text outside the JSON block.
+3. DO NOT simulate tool results or provide multiple JSON blocks.
+4. **DATABASE DISCOVERY**: If you need to query the database, you MUST call `list_database_tables` first to see the schema. NEVER guess column names.
+5. **FAILURE RECOVERY**: If a SQL query fails with "no such column", you MUST call `list_database_tables` immediately.
+6. If you have the data, provide a helpful human-friendly summary.
+"""
+
     def chat(self, session_id: str, message: str, user_language: str = None, chat_history: List[Dict] = None, **kwargs) -> Dict:
         try:
             # Language Detection
@@ -136,20 +166,14 @@ class GenericAgentService(MultilingualAgentMixin):
             
             self.conversations[session_id].append({"role": "user", "content": message})
             
-            # Get language-specific system prompt
-            system_prompt = self.get_system_prompt(preferred_lang)
-            
             # Context about selected KB and DB
             kb_name = kwargs.get('knowledge_base')
             db_conn = kwargs.get('database_connection')
+
+            # Get dynamic context-aware system prompt
+            system_prompt = self._get_dynamic_system_prompt(preferred_lang, kb_name=kb_name, db_name=db_conn)
             
-            context_info = ""
-            if kb_name:
-                context_info += f"\n- Active Knowledge Base: {kb_name}. (Use this as 'kb_name' when searching)"
-            if db_conn:
-                context_info += f"\n- Active Database Connection: {db_conn}. Use list_database_tables first to see schema."
-            else:
-                context_info += "\n- No database connected. Ask user to connect one if needed."
+            tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in self.tools])
 
             tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in self.tools])
             

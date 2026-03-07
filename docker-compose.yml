@@ -54,6 +54,7 @@ services:
       - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9008/ecostance-ui}
     volumes:
+      - ${BASE_PATH}/ecostance-agent-v1:/app
       - ${BASE_PATH}/ecostance-agent-v1/uploads:/app/uploads
       - ${BASE_PATH}/ecostance-agent-v1/data:/app/data
     ports:

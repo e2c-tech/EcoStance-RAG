@@ -201,6 +201,10 @@ class DatabaseConnector:
         except:
             return False
 
+    def is_connected(self) -> bool:
+        """Check if database connection is active (alias for test_connection)"""
+        return self.test_connection()
+
     def close_connection(self):
         """Close database connection"""
         if self.connection:
