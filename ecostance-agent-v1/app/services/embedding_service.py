@@ -60,7 +60,8 @@ def get_langchain_embeddings():
             if _langchain_embeddings is None:
                 if USE_REMOTE_EMBEDDING:
                     logger.info("Creating custom RemoteEmbeddings wrapper for LangChain")
-                    class RemoteEmbeddings:
+                    from langchain_core.embeddings import Embeddings
+                    class RemoteEmbeddings(Embeddings):
                         def embed_documents(self, texts: List[str]) -> List[List[float]]:
                             response = httpx.post(f"{EMBEDDING_SERVER_URL}/embed", json={"text": texts}, timeout=120.0)
                             response.raise_for_status()
