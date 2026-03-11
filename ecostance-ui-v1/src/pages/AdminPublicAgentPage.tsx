@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Label } from '../components/ui/Label';
-import { Checkbox } from '../components/ui/Checkbox';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
-import { Icons } from '../components/icons';
-import { Badge } from '../components/ui/Badge';
-import { publicAgentAPI } from '../services/api';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Label } from '@/components/ui/Label';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { Select } from '@/components/ui/Select';
+import { Icons } from '@/components/icons';
+import { Badge } from '@/components/ui/Badge';
+import { publicAgentAPI } from '@/services/api';
 
 interface KnowledgeBase {
   kb_name: string;
@@ -30,6 +31,8 @@ interface PublicAgentConfig {
     logo_url?: string;
     primary_color: string;
     company_name: string;
+    font_family?: string;
+    font_size_base?: number;
   };
   rate_limit: {
     queries_per_minute: number;
@@ -43,6 +46,18 @@ interface PublicAgentConfig {
     enable_knowledge_base: boolean;
   };
 }
+
+const FONT_OPTIONS = [
+  { value: 'Inter, sans-serif', label: 'Inter (Default)' },
+  { value: 'Roboto, sans-serif', label: 'Roboto' },
+  { value: 'Open Sans, sans-serif', label: 'Open Sans' },
+  { value: 'Lato, sans-serif', label: 'Lato' },
+  { value: 'Poppins, sans-serif', label: 'Poppins' },
+  { value: 'Montserrat, sans-serif', label: 'Montserrat' },
+  { value: 'Playfair Display, serif', label: 'Playfair Display' },
+  { value: 'Georgia, serif', label: 'Georgia' },
+  { value: 'Times New Roman, serif', label: 'Times New Roman' },
+];
 
 const PERSONA_CONFIG: Record<string, { label: string; icon: any; description: string }> = {
   security_analyst: {
@@ -97,7 +112,17 @@ const AdminPublicAgentPage: React.FC = () => {
         console.log('[AdminPublicAgentPage] KBs data:', kbsData);
         console.log('[AdminPublicAgentPage] DBs data:', dbsData);
 
-        setConfig(configData as any);
+        // Ensure branding has font defaults
+        const configWithDefaults = {
+          ...configData,
+          branding: {
+            ...configData.branding,
+            font_family: configData.branding?.font_family || 'Inter, sans-serif',
+            font_size_base: configData.branding?.font_size_base || 14,
+          }
+        };
+
+        setConfig(configWithDefaults as any);
 
         const transformedKBs: KnowledgeBase[] = Array.isArray(kbsData)
           ? (kbsData as any[]).map((kb: any) => {
@@ -166,6 +191,9 @@ const AdminPublicAgentPage: React.FC = () => {
     if (!config) return;
 
     console.log('[AdminPublicAgentPage] Saving config:', config);
+    console.log('[AdminPublicAgentPage] Branding object:', config.branding);
+    console.log('[AdminPublicAgentPage] Font family:', config.branding.font_family);
+    console.log('[AdminPublicAgentPage] Font size:', config.branding.font_size_base);
     console.log('[AdminPublicAgentPage] Current allowed_kbs:', config.allowed_kbs);
 
     setIsSaving(true);
@@ -488,6 +516,40 @@ const AdminPublicAgentPage: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                <div>
+                  <Label className="text-sm font-medium text-text">Font Family</Label>
+                  <Select
+                    value={config.branding.font_family || 'Inter, sans-serif'}
+                    onChange={(e) => setConfig(prev => prev ? ({
+                      ...prev,
+                      branding: { ...prev.branding, font_family: e.target.value }
+                    }) : prev)}
+                    className="mt-1.5"
+                  >
+                    {FONT_OPTIONS.map(font => (
+                      <option key={font.value} value={font.value}>
+                        {font.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium text-text">Base Font Size (px)</Label>
+                  <Input
+                    type="number"
+                    min="10"
+                    max="20"
+                    value={config.branding.font_size_base || 14}
+                    onChange={(e) => setConfig(prev => prev ? ({
+                      ...prev,
+                      branding: { ...prev.branding, font_size_base: parseInt(e.target.value) || 14 }
+                    }) : prev)}
+                    className="mt-1.5"
+                  />
+                  <p className="text-xs text-text-secondary mt-1">Range: 10-20 pixels</p>
+                </div>
               </CardContent>
             </Card>
 
@@ -595,3 +657,4 @@ const AdminPublicAgentPage: React.FC = () => {
 };
 
 export default AdminPublicAgentPage;
+

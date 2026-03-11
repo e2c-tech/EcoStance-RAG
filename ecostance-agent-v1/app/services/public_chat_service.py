@@ -53,7 +53,9 @@ class PublicChatService:
                 suggested_questions="[]",
                 branding=json.dumps({
                     "primary_color": "#0066CC",
-                    "company_name": tenant_name
+                    "company_name": tenant_name,
+                    "font_family": "Inter, sans-serif",
+                    "font_size_base": 14
                 }),
                 rate_limit=json.dumps({
                     "queries_per_minute": 10,

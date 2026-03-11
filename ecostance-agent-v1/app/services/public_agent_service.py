@@ -54,7 +54,9 @@ class PublicAgentService:
                 suggested_questions="[]",
                 branding=json.dumps({
                     "primary_color": "#0066CC",
-                    "company_name": tenant_name
+                    "company_name": tenant_name,
+                    "font_family": "Inter, sans-serif",
+                    "font_size_base": 14
                 }),
                 rate_limit=json.dumps({
                     "queries_per_minute": 10,
@@ -86,6 +88,9 @@ class PublicAgentService:
             raise ValueError("Configuration not found")
 
         logger.info(f"Updating public agent config for tenant {tenant_id}")
+        logger.info(f"Update data received: {update_data}")
+        logger.info(f"Branding data: {update_data.branding}")
+        logger.info(f"Branding dict: {update_data.branding.dict()}")
         logger.info(f"Allowed KBs: {update_data.allowed_kbs}")
         logger.info(f"Allowed DBs: {update_data.allowed_dbs}")
         logger.info(f"Allowed Tools: {update_data.allowed_tools}")

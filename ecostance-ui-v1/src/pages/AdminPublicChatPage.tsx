@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Label } from '../components/ui/Label';
-import { Checkbox } from '../components/ui/Checkbox';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
-import { Icons } from '../components/icons';
-import { Badge } from '../components/ui/Badge';
-import { publicChatAPI } from '../services/api';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Label } from '@/components/ui/Label';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { Select } from '@/components/ui/Select';
+import { Icons } from '@/components/icons';
+import { Badge } from '@/components/ui/Badge';
+import { publicChatAPI } from '@/services/api';
 
 interface KnowledgeBase {
   kb_name: string;
@@ -22,6 +23,8 @@ interface PublicChatConfig {
     logo_url?: string;
     primary_color: string;
     company_name: string;
+    font_family?: string;
+    font_size_base?: number;
   };
   rate_limit: {
     queries_per_minute: number;
@@ -34,6 +37,18 @@ interface PublicChatConfig {
   };
   agent_type: string;
 }
+
+const FONT_OPTIONS = [
+  { value: 'Inter, sans-serif', label: 'Inter (Default)' },
+  { value: 'Roboto, sans-serif', label: 'Roboto' },
+  { value: 'Open Sans, sans-serif', label: 'Open Sans' },
+  { value: 'Lato, sans-serif', label: 'Lato' },
+  { value: 'Poppins, sans-serif', label: 'Poppins' },
+  { value: 'Montserrat, sans-serif', label: 'Montserrat' },
+  { value: 'Playfair Display, serif', label: 'Playfair Display' },
+  { value: 'Georgia, serif', label: 'Georgia' },
+  { value: 'Times New Roman, serif', label: 'Times New Roman' },
+];
 
 const PERSONA_CONFIG: Record<string, { label: string; icon: any }> = {
   security_analyst: { label: 'SOC Assistant', icon: Icons.Shield },
@@ -61,7 +76,17 @@ const AdminPublicChatPage: React.FC = () => {
           publicChatAPI.admin.getAvailableKBs(),
         ]);
 
-        setConfig(configData as any);
+        // Ensure branding has font defaults
+        const configWithDefaults = {
+          ...configData,
+          branding: {
+            ...configData.branding,
+            font_family: configData.branding?.font_family || 'Inter, sans-serif',
+            font_size_base: configData.branding?.font_size_base || 14,
+          }
+        };
+
+        setConfig(configWithDefaults as any);
 
         // Transform KB data - the endpoint returns an array of strings
         const transformedKBs: KnowledgeBase[] = Array.isArray(kbsData)
@@ -302,6 +327,42 @@ const AdminPublicChatPage: React.FC = () => {
                   className="mt-1"
                 />
               </div>
+
+              <div>
+                <Label htmlFor="fontFamily">Font Family (optional)</Label>
+                <Select
+                  id="fontFamily"
+                  value={config.branding.font_family || 'Inter, sans-serif'}
+                  onChange={(e) => setConfig(prev => prev ? ({
+                    ...prev,
+                    branding: { ...prev.branding, font_family: e.target.value }
+                  }) : prev)}
+                  className="mt-1"
+                >
+                  {FONT_OPTIONS.map(font => (
+                    <option key={font.value} value={font.value}>
+                      {font.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="fontSizeBase">Base Font Size (px)</Label>
+                <Input
+                  id="fontSizeBase"
+                  type="number"
+                  min="10"
+                  max="20"
+                  value={config.branding.font_size_base || 14}
+                  onChange={(e) => setConfig(prev => prev ? ({
+                    ...prev,
+                    branding: { ...prev.branding, font_size_base: parseInt(e.target.value) || 14 }
+                  }) : prev)}
+                  className="mt-1"
+                />
+                <p className="text-xs text-text-secondary mt-1">Range: 10-20 pixels</p>
+              </div>
             </CardContent>
           </Card>
 
@@ -480,3 +541,4 @@ const AdminPublicChatPage: React.FC = () => {
 };
 
 export default AdminPublicChatPage;
+
