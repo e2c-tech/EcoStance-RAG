@@ -61,6 +61,8 @@ class BrandingConfig(BaseModel):
     logo_url: Optional[str] = Field(None, description="Logo URL")
     primary_color: str = Field("#0066CC", description="Primary color (hex)")
     company_name: str = Field(..., min_length=1, max_length=100, description="Company name")
+    font_family: Optional[str] = Field("Arial, sans-serif", description="Font family (e.g., 'Arial, sans-serif')")
+    font_size: Optional[str] = Field("14px", description="Base font size (e.g., '14px')")
     
     @validator('primary_color')
     def validate_color(cls, v):
