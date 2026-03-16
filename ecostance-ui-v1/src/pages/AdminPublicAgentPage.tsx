@@ -163,7 +163,7 @@ const [showAssistant, setShowAssistant] = useState(false);
         </clipPath>
       </defs>
     </svg>
-    AI
+    Launch Full Assistant
   </button>
 
 <!-- In App.jsx paste it inside main -->
