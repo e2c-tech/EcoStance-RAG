@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
@@ -8,6 +8,9 @@ import { Select } from '@/components/ui/Select';
 import { Icons } from '@/components/icons';
 import { Badge } from '@/components/ui/Badge';
 import { publicAgentAPI } from '@/services/api';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useAuth } from '@/context/AuthContext.v2';
 
 interface KnowledgeBase {
   kb_name: string;
@@ -32,7 +35,7 @@ interface PublicAgentConfig {
     primary_color: string;
     company_name: string;
     font_family?: string;
-    font_size_base?: number;
+    font_size?: string;
   };
   rate_limit: {
     queries_per_minute: number;
@@ -89,6 +92,7 @@ const PERSONA_CONFIG: Record<string, { label: string; icon: any; description: st
 
 
 const AdminPublicAgentPage: React.FC = () => {
+  const { user } = useAuth();
   const [config, setConfig] = useState<PublicAgentConfig | null>(null);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [databases, setDatabases] = useState<DatabaseConnection[]>([]);
@@ -97,6 +101,150 @@ const AdminPublicAgentPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [isEmbedCopied, setIsEmbedCopied] = useState(false);
+  const [isEmbedappCopied, setIsEmbedappCopied] = useState(false);
+  const embedCopiedTimeoutRef = useRef<number | null>(null);
+
+  const embedSnippet = useMemo(() => {
+    // TODO: replace with real tenant id + hosted loader url when available
+    const loaderSrc = import.meta.env.VITE_LOADER_SRC;
+    const tenantId = user?.tenantId || '';
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    return [
+      '<!-- EcoStance Public Agent Widget -->',
+      `<script src="${loaderSrc}"`,
+      `   data-tenant-id="${tenantId}"`,
+      `   data-api-url="${apiUrl}">`,
+      `</script>`,
+      '<!-- End widget -->',
+    ].join('\n');
+  }, []);
+
+  const embedSnippetHtml = useMemo(() => {
+    const tenantId = user?.tenantId || '';
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    return `
+<!-- In App.jsx paste it inside function -->
+const [showAssistant, setShowAssistant] = useState(false);
+
+<!-- In App.jsx paste it in navbar -->
+<button
+    className="btn btn-primary"
+    style={{ padding: "0.6rem 1.2rem", fontSize: "0.9rem" }}
+    onClick={() => setShowAssistant(true)}
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <g clip-path="url(#clip0_3714_1650)">
+        <path
+          d="M11.0615 0C10.7594 2.60677 10.6595 4.26205 10.0692 5.33059C9.10421 6.65872 7.43166 6.78521 4.35889 7.08533C7.38181 7.47194 9.01628 7.55575 9.98406 8.77241C10.7071 9.84953 10.8294 11.5156 11.0615 14.1707C11.4556 10.7271 11.5174 8.98826 12.9457 7.9987C13.9612 7.48022 15.4766 7.36704 17.7641 7.08533C14.9278 6.718 13.2821 6.63347 12.3023 5.71753C11.4738 4.6735 11.3855 2.9399 11.0615 0Z"
+          fill="white"
+        ></path>
+        <path
+          d="M3.78574 9.49805C3.60447 11.0621 3.54453 12.0553 3.19035 12.6964C2.61137 13.4933 1.6078 13.5692 -0.23584 13.7493C1.57792 13.9813 2.55859 14.0315 3.13926 14.7615C3.5731 15.4077 3.6465 16.4075 3.78574 18.0005C4.02223 15.9343 4.05928 14.891 4.91625 14.2973C5.52559 13.9862 6.43482 13.9183 7.80732 13.7493C6.10548 13.5289 5.11807 13.4781 4.53021 12.9286C4.03314 12.3022 3.98012 11.262 3.78574 9.49805Z"
+          fill="white"
+        ></path>
+      </g>
+      <defs>
+        <clipPath id="clip0_3714_1650">
+          <rect
+            width="18"
+            height="18"
+            fill="white"
+            transform="translate(-0.23584)"
+          ></rect>
+        </clipPath>
+      </defs>
+    </svg>
+    AI
+  </button>
+
+<!-- In App.jsx paste it inside main -->
+{showAssistant ? (
+  <div
+    className="animate-fade-in"
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      padding: "0.5rem 1rem 1rem",
+      height: "85vh",
+      gap: "0.5rem",
+      maxWidth: "1000px",
+      width: "95%",
+      margin: "0 auto",
+      transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
+    }}
+  >
+    <div
+      className="glass"
+      style={{
+        flex: 1,
+        overflow: "hidden",
+        borderRadius: "20px",
+        position: "relative",
+        border: "1px solid rgba(255, 255, 255, 0.15)",
+        boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3)",
+      }}
+    >
+      <button
+        onClick={() => setShowClosePopup(true)}
+        style={{
+          position: "absolute",
+          top: "1rem",
+          right: "1rem",
+          zIndex: 10,
+          background: "rgba(15, 23, 42, 0.6)",
+          backdropFilter: "blur(4px)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          color: "white",
+          cursor: "pointer",
+          borderRadius: "50%",
+          width: "36px",
+          height: "36px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "all 0.2s",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(15, 23, 42, 0.8)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(15, 23, 42, 0.6)")}
+        title="Assistant"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+        >
+          <path
+            fill="currentColor"
+            d="M13.5 4A1.5 1.5 0 0 0 12 5.5A1.5 1.5 0 0 0 13.5 7A1.5 1.5 0 0 0 15 5.5A1.5 1.5 0 0 0 13.5 4m-.36 4.77c-1.19.1-4.44 2.69-4.44 2.69c-.2.15-.14.14.02.42c.16.27.14.29.33.16c.2-.13.53-.34 1.08-.68c2.12-1.36.34 1.78-.57 7.07c-.36 2.62 2 1.27 2.61.87c.6-.39 2.21-1.5 2.37-1.61c.22-.15.06-.27-.11-.52c-.12-.17-.24-.05-.24-.05c-.65.43-1.84 1.33-2 .76c-.19-.57 1.03-4.48 1.7-7.17c.11-.64.41-2.04-.75-1.94"
+          />
+        </svg>
+      </button>
+
+      <iframe
+        src="https://ai-widget-standalone.pages.dev/index.html?tenantId=${tenantId}&apiUrl=${apiUrl}"
+        style={{ width: "100%", height: "100%", border: "none", background: "white" }}
+        title="AI Assistant"
+      />
+    </div>
+  </div>
+) : (
+  <!-- Your main page code -->
+)}
+
+<!-- End widget -->
+    `.trim();
+}, [user?.tenantId]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -113,12 +261,16 @@ const AdminPublicAgentPage: React.FC = () => {
         console.log('[AdminPublicAgentPage] DBs data:', dbsData);
 
         // Ensure branding has font defaults
+        let fontSizeRaw = configData.branding?.font_size || '14px';
+        if (typeof fontSizeRaw === 'string' && !fontSizeRaw.endsWith('px')) {
+          fontSizeRaw = fontSizeRaw + 'px';
+        }
         const configWithDefaults = {
           ...configData,
           branding: {
             ...configData.branding,
             font_family: configData.branding?.font_family || 'Inter, sans-serif',
-            font_size_base: configData.branding?.font_size_base || 14,
+            font_size: fontSizeRaw,
           }
         };
 
@@ -148,6 +300,14 @@ const AdminPublicAgentPage: React.FC = () => {
     };
 
     loadData();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (embedCopiedTimeoutRef.current != null) {
+        window.clearTimeout(embedCopiedTimeoutRef.current);
+      }
+    };
   }, []);
 
   const handleKBToggle = (kbName: string) => {
@@ -193,7 +353,7 @@ const AdminPublicAgentPage: React.FC = () => {
     console.log('[AdminPublicAgentPage] Saving config:', config);
     console.log('[AdminPublicAgentPage] Branding object:', config.branding);
     console.log('[AdminPublicAgentPage] Font family:', config.branding.font_family);
-    console.log('[AdminPublicAgentPage] Font size:', config.branding.font_size_base);
+    console.log('[AdminPublicAgentPage] Font size:', config.branding.font_size);
     console.log('[AdminPublicAgentPage] Current allowed_kbs:', config.allowed_kbs);
 
     setIsSaving(true);
@@ -458,6 +618,64 @@ const AdminPublicAgentPage: React.FC = () => {
                 </CardContent>
               </Card>
             )}
+
+            {/* Messages Section - Full Width */}
+        <Card className="bg-surface border-border mt-6">
+          <CardHeader className="border-b border-border pb-4">
+            <CardTitle className="text-lg font-semibold text-text">Messages & Prompts</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-6">
+            <div>
+              <Label className="text-sm font-medium text-text">Welcome Message</Label>
+              <textarea
+                className="w-full px-4 py-3 mt-1.5 bg-background border border-border rounded-lg text-text resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                rows={3}
+                value={config.welcome_message}
+                onChange={(e) => setConfig(prev => prev ? ({ ...prev, welcome_message: e.target.value }) : prev)}
+                placeholder="Hi! How can I help you today?"
+              />
+              <p className="text-xs text-text-secondary mt-1">First message users see when they open the chat</p>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-sm font-medium text-text">Suggested Questions</Label>
+                <span className="text-xs text-text-secondary">{config.suggested_questions.length}/10</span>
+              </div>
+              <div className="space-y-2">
+                {config.suggested_questions.map((question, index) => (
+                  <div key={index} className="flex items-center gap-2 p-2 bg-surface-hover rounded-lg group">
+                    <span className="text-sm text-text-secondary px-2">{index + 1}.</span>
+                    <Input value={question} readOnly className="flex-1 bg-background border-border" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRemoveQuestion(index)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Icons.X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                {config.suggested_questions.length < 10 && (
+                  <div className="flex gap-2 pt-2">
+                    <Input
+                      value={newQuestion}
+                      onChange={(e) => setNewQuestion(e.target.value)}
+                      placeholder="Add a suggested question..."
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddQuestion()}
+                      className="flex-1"
+                    />
+                    <Button onClick={handleAddQuestion} disabled={!newQuestion.trim()} className="bg-primary hover:bg-primary/90">
+                      <Icons.Plus className="h-4 w-4 mr-1" />
+                      Add
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
           </div>
 
           {/* Right Column - Branding & Settings */}
@@ -525,7 +743,7 @@ const AdminPublicAgentPage: React.FC = () => {
                       ...prev,
                       branding: { ...prev.branding, font_family: e.target.value }
                     }) : prev)}
-                    className="mt-1.5"
+                    className="mt-1.5 w-full bg-zinc-900 text-white border border-zinc-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary [color-scheme:dark]"
                   >
                     {FONT_OPTIONS.map(font => (
                       <option key={font.value} value={font.value}>
@@ -541,17 +759,169 @@ const AdminPublicAgentPage: React.FC = () => {
                     type="number"
                     min="10"
                     max="20"
-                    value={config.branding.font_size_base || 14}
-                    onChange={(e) => setConfig(prev => prev ? ({
-                      ...prev,
-                      branding: { ...prev.branding, font_size_base: parseInt(e.target.value) || 14 }
-                    }) : prev)}
+                    value={config.branding.font_size ? config.branding.font_size.replace('px', '') : '14'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setConfig(prev => prev ? ({
+                        ...prev,
+                        branding: { ...prev.branding, font_size: val ? `${val}px` : '' }
+                      }) : prev);
+                    }}
                     className="mt-1.5"
                   />
                   <p className="text-xs text-text-secondary mt-1">Range: 10-20 pixels</p>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Embed Code Snippet HTML */}
+            <Card className="bg-surface border-border">
+              <CardHeader className="border-b border-border pb-4">
+                <CardTitle className="text-lg font-semibold text-text">Code Snippet for Widget</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="relative border border-border rounded-lg overflow-hidden modern-scroll bg-[#1e1e1e]">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-black/20">
+                    <div className="flex items-center gap-2 text-xs text-white/70">
+                      <span className="h-2 w-2 rounded-full bg-green-400/80" />
+                      <span>index.html</span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isEmbedCopied}
+                      className={[
+                        'inline-flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors',
+                        isEmbedCopied ? 'bg-white/10 text-white/80 cursor-default' : 'bg-primary text-white hover:bg-primary/80',
+                      ].join(' ')}
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(embedSnippet);
+                          setIsEmbedCopied(true);
+                          if (embedCopiedTimeoutRef.current != null) {
+                            window.clearTimeout(embedCopiedTimeoutRef.current);
+                          }
+                          embedCopiedTimeoutRef.current = window.setTimeout(() => setIsEmbedCopied(false), 1500);
+                        } catch {
+                          setError('Copy failed. Please copy manually from the code block.');
+                        }
+                      }}
+                    >
+                      {isEmbedCopied ? (
+                        <>
+                          <Icons.Check className="h-3.5 w-3.5" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Icons.FileText className="h-3.5 w-3.5" />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <SyntaxHighlighter
+                    language="html"
+                    style={vscDarkPlus}
+                    showLineNumbers
+                    customStyle={{
+                      margin: 0,
+                      padding: '12px 14px',
+                      background: 'transparent',
+                      fontSize: '12px',
+                    }}
+                    lineNumberStyle={{
+                      minWidth: '2.25em',
+                      paddingRight: '1em',
+                      color: 'rgba(255,255,255,0.35)',
+                      userSelect: 'none',
+                    }}
+                    codeTagProps={{
+                      style: {
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                      },
+                    }}
+                  >
+                    {embedSnippet}
+                  </SyntaxHighlighter>
+                </div>
+              </CardContent>
+              </Card>
+
+              <Card className="bg-surface border-border">
+              <CardHeader className="border-b border-border pb-4">
+                <CardTitle className="text-lg font-semibold text-text">Code Snippet for Embed Assistent</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+              <div className="relative border border-border rounded-lg bg-[#1e1e1e]">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-black/20">
+                    <div className="flex items-center gap-2 text-xs text-white/70">
+                      <span className="h-2 w-2 rounded-full bg-green-400/80" />
+                      <span>App.jsx</span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isEmbedappCopied}
+                      className={[
+                        'inline-flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors',
+                        isEmbedappCopied ? 'bg-white/10 text-white/80 cursor-default' : 'bg-primary text-white hover:bg-primary/80',
+                      ].join(' ')}
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(embedSnippetHtml);
+                          setIsEmbedappCopied(true);
+                          if (embedCopiedTimeoutRef.current != null) {
+                            window.clearTimeout(embedCopiedTimeoutRef.current);
+                          }
+                          embedCopiedTimeoutRef.current = window.setTimeout(() => setIsEmbedappCopied(false), 1500);
+                        } catch {
+                          setError('Copy failed. Please copy manually from the code block.');
+                        }
+                      }}
+                    >
+                      {isEmbedappCopied ? (
+                        <>
+                          <Icons.Check className="h-3.5 w-3.5" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Icons.FileText className="h-3.5 w-3.5" />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className='overflow-auto max-h-[300px] modern-scroll'>
+                  <SyntaxHighlighter
+                    language="html"
+                    style={vscDarkPlus}
+                    showLineNumbers
+                    customStyle={{
+                      margin: 0,
+                      padding: '12px 14px',
+                      background: 'transparent',
+                      fontSize: '12px',
+                    }}
+                    lineNumberStyle={{
+                      minWidth: '2.25em',
+                      paddingRight: '1em',
+                      color: 'rgba(255,255,255,0.35)',
+                      userSelect: 'none',
+                    }}
+                    codeTagProps={{
+                      style: {
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                      },
+                    }}
+                  >
+                    {embedSnippetHtml}
+                  </SyntaxHighlighter>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
 
             {/* Rate Limits */}
             <Card className="bg-surface border-border">
@@ -594,63 +964,7 @@ const AdminPublicAgentPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Messages Section - Full Width */}
-        <Card className="bg-surface border-border mt-6">
-          <CardHeader className="border-b border-border pb-4">
-            <CardTitle className="text-lg font-semibold text-text">Messages & Prompts</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 space-y-6">
-            <div>
-              <Label className="text-sm font-medium text-text">Welcome Message</Label>
-              <textarea
-                className="w-full px-4 py-3 mt-1.5 bg-background border border-border rounded-lg text-text resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                rows={3}
-                value={config.welcome_message}
-                onChange={(e) => setConfig(prev => prev ? ({ ...prev, welcome_message: e.target.value }) : prev)}
-                placeholder="Hi! How can I help you today?"
-              />
-              <p className="text-xs text-text-secondary mt-1">First message users see when they open the chat</p>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <Label className="text-sm font-medium text-text">Suggested Questions</Label>
-                <span className="text-xs text-text-secondary">{config.suggested_questions.length}/10</span>
-              </div>
-              <div className="space-y-2">
-                {config.suggested_questions.map((question, index) => (
-                  <div key={index} className="flex items-center gap-2 p-2 bg-surface-hover rounded-lg group">
-                    <span className="text-sm text-text-secondary px-2">{index + 1}.</span>
-                    <Input value={question} readOnly className="flex-1 bg-background border-border" />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRemoveQuestion(index)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <Icons.X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                {config.suggested_questions.length < 10 && (
-                  <div className="flex gap-2 pt-2">
-                    <Input
-                      value={newQuestion}
-                      onChange={(e) => setNewQuestion(e.target.value)}
-                      placeholder="Add a suggested question..."
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddQuestion()}
-                      className="flex-1"
-                    />
-                    <Button onClick={handleAddQuestion} disabled={!newQuestion.trim()} className="bg-primary hover:bg-primary/90">
-                      <Icons.Plus className="h-4 w-4 mr-1" />
-                      Add
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
+        
       </div>
     </div>
   );
