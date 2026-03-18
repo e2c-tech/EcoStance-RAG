@@ -1017,7 +1017,7 @@ export const publicChatAPI = {
         primary_color?: string;
         company_name?: string;
         font_family?: string;
-        font_size_base?: number;
+        font_size?: string;
       };
       rate_limit?: {
         queries_per_minute?: number;
@@ -1108,7 +1108,7 @@ export const publicAgentAPI = {
         primary_color?: string;
         company_name?: string;
         font_family?: string;
-        font_size_base?: number;
+        font_size?: string;
       };
       rate_limit?: {
         queries_per_minute?: number;
