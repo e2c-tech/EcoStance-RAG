@@ -1,32 +1,20 @@
-from celery import Celery
-import os
 import asyncio
 import logging
-from ..config import REDIS_URL
+from celery import Celery
+import os
+
+# Use sc-ai-agent's Celery app via shared Redis
+celery_app = Celery(
+    "ecostance_tasks",
+    broker=os.getenv("REDIS_URL", "redis://sc-ai-agent-redis:6379/0"),
+    backend=os.getenv("REDIS_URL", "redis://sc-ai-agent-redis:6379/0"),
+)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("CeleryWorker")
 
-# Initialize Celery
-app = Celery(
-    "ecostance_worker",
-    broker=REDIS_URL,
-    backend=REDIS_URL
-)
-
-# Optional: Celery Configuration
-app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    worker_prefetch_multiplier=1, # Recommended for long-running tasks like processing 19k chunks
-)
-
-@app.task(name="app.worker.tasks.process_file_task")
+@celery_app.task(name="app.worker.tasks.process_file_task")
 def process_file_task(job_id: str, file_path: str, collection_name: str, tenant_id: str):
     """
     Celery task to process a file and upload to Qdrant.
