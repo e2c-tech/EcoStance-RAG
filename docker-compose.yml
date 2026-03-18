@@ -24,6 +24,11 @@ services:
       - USE_REMOTE_EMBEDDING=true
       - EMBEDDING_SERVER_HOST=sc-ai-agent-embedding
       - EMBEDDING_SERVER_PORT=${EMBEDDING_SERVER_PORT:-9003}
+      # Database Connection Pool Configuration
+      - DB_POOL_SIZE=20
+      - DB_MAX_OVERFLOW=40
+      - DB_POOL_TIMEOUT=60
+      - DB_POOL_RECYCLE=1800
       # Existing Config
       - DATABASE_URL=${DATABASE_URL}
       - QDRANT_URL=${QDRANT_URL}
