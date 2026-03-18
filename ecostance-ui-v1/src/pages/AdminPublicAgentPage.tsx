@@ -106,10 +106,9 @@ const AdminPublicAgentPage: React.FC = () => {
   const embedCopiedTimeoutRef = useRef<number | null>(null);
 
   const embedSnippet = useMemo(() => {
-    // TODO: replace with real tenant id + hosted loader url when available
-    const loaderSrc = import.meta.env.VITE_LOADER_SRC;
+    const loaderSrc = 'https://ai-widget-standalone.pages.dev/loader.js';
     const tenantId = user?.tenantId || '';
-    const apiUrl = import.meta.env.VITE_API_URL;
+    const apiUrl = 'https://ai.securitycentric.net/ecostance-agent/api/v1';
 
     return [
       '<!-- EcoStance Public Agent Widget -->',
@@ -123,7 +122,7 @@ const AdminPublicAgentPage: React.FC = () => {
 
   const embedSnippetHtml = useMemo(() => {
     const tenantId = user?.tenantId || '';
-    const apiUrl = import.meta.env.VITE_API_URL;
+    const apiUrl = 'https://ai.securitycentric.net/ecostance-agent/api/v1';
 
     return `
 <!-- In App.jsx paste it inside function -->
