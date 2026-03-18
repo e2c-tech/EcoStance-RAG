@@ -100,10 +100,14 @@ async def upload_file(
             job_id = job_tracker.create_job(file_location, collection_name, tenant_id=tenant_id)
             job_tracker.update_progress(job_id, "Upload complete. Starting processing...")
             
+            # Worker mounts ecostance uploads at /ecostance-uploads
+            # Construct path: /ecostance-uploads/{tenant_id}/{filename}
+            worker_file_path = f"/ecostance-uploads/{tenant_id}/{file.filename}"
+            
             # Add processing task to Celery
             process_file_task.delay(
                 job_id, 
-                file_location, 
+                worker_file_path, 
                 collection_name,
                 tenant_id
             )
