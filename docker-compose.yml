@@ -153,11 +153,11 @@ services:
           cpus: '2.0'
           memory: 3G
     healthcheck:
-      test: ["CMD", "celery", "-A", "app.worker.tasks:celery_app", "inspect", "ping", "-d", "celery@$$HOSTNAME"]
+      test: ["CMD", "celery", "-A", "app.worker.tasks:celery_app", "status"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      timeout: 20s
+      retries: 5
+      start_period: 60s
 
   # # 5. UI Frontend
   # ecostance-ui:
