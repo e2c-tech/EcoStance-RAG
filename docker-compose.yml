@@ -117,7 +117,7 @@ services:
   ecostance-worker:
     image: sc-ai-agent-backend-core
     container_name: ecostance-worker
-    command: celery -A app.worker.tasks:celery_app worker --loglevel=info --concurrency=4
+    command: python -m app.worker.start_worker
     environment:
       - REDIS_URL=redis://ecostance-redis:6379/0
       - USE_REMOTE_EMBEDDING=true
@@ -153,11 +153,11 @@ services:
           cpus: '2.0'
           memory: 3G
     healthcheck:
-      test: ["CMD", "celery", "-A", "app.worker.tasks:celery_app", "status"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9008/health')"]
       interval: 30s
-      timeout: 20s
-      retries: 5
-      start_period: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # # 5. UI Frontend
   # ecostance-ui:
