@@ -3,11 +3,11 @@ import logging
 from celery import Celery
 import os
 
-# Use sc-ai-agent's Celery app via shared Redis
+# Use ecostance's own Redis
 celery_app = Celery(
     "ecostance_tasks",
-    broker=os.getenv("REDIS_URL", "redis://sc-ai-agent-redis:6379/0"),
-    backend=os.getenv("REDIS_URL", "redis://sc-ai-agent-redis:6379/0"),
+    broker=os.getenv("REDIS_URL", "redis://ecostance-redis:6379/0"),
+    backend=os.getenv("REDIS_URL", "redis://ecostance-redis:6379/0"),
 )
 
 # Set up logging
