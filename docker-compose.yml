@@ -117,7 +117,7 @@ services:
   ecostance-worker:
     image: sc-ai-agent-backend-core
     container_name: ecostance-worker
-    command: python -m app.worker.start_worker
+    command: celery -A app.worker.tasks worker --loglevel=info --concurrency=4
     environment:
       - REDIS_URL=redis://ecostance-redis:6379/0
       - USE_REMOTE_EMBEDDING=true
@@ -137,7 +137,7 @@ services:
       - OCR_LANGUAGE=${OCR_LANGUAGE:-eng}
       - MULTILINGUAL_ENABLED=${MULTILINGUAL_ENABLED:-true}
       - WORKER_HEALTH_PORT=9008
-    volumes:
+    volumes:      
       - ${BASE_PATH}/ecostance-agent-v1:/app
       - ${BASE_PATH}/ecostance-agent-v1/uploads:/app/uploads
       - ${BASE_PATH}/ecostance-agent-v1/data:/app/data
@@ -147,17 +147,17 @@ services:
     restart: unless-stopped
     networks:
       - manual-app-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9008/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     deploy:
       resources:
         limits:
           cpus: '2.0'
           memory: 3G
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.worker.tasks", "inspect", "ping", "-d", "celery@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # # 5. UI Frontend
   # ecostance-ui:
