@@ -18,11 +18,8 @@ def get_db():
     Uses the active global database connector if available, otherwise falls back to SessionLocal.
     """
     from app.routers import db_router
-    if db_router.db_connector and (db_router.db_connector.engine or db_router.db_connector.client):
-        # Return the active connector's engine session
-        if db_router.db_connector.engine:
-            from sqlalchemy.orm import Session
-            return Session(bind=db_router.db_connector.engine)
+    if db_router.db_connector and db_router.db_connector.engine:
+        return db_router.db_connector.engine.connect()
     return SessionLocal()
 
 
@@ -181,7 +178,7 @@ def track_by_tracking_number(tracking_number: str) -> str:
     db = get_db()
     try:
         query = text("""
-        SELECT s.*, c.name as customer_name, c.phone, c.city as customer_city,
+        SELECT s.*, c.name as customer_name, c.phone,
                d.name as delivery_boy_name, d.phone as delivery_boy_phone, d.vehicle_number
         FROM shipments s
         JOIN customers c ON s.customer_id = c.customer_id
