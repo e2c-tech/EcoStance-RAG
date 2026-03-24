@@ -7,7 +7,7 @@ import logging
 from langchain.tools import tool
 from typing import Optional
 
-from .multilingual_rag_service_wrapper import get_multilingual_rag_service
+from ..services.multilingual_rag_service import get_multilingual_rag_service
 from app.services.language_service import get_language_service
 from app.config.multilingual_app_config import (
     get_multilingual_collection_name,
