@@ -13,7 +13,16 @@ logger = logging.getLogger(__name__)
 
 
 def get_db():
-    """Helper function to get database session"""
+    """
+    Helper function to get database session.
+    Uses the active global database connector if available, otherwise falls back to SessionLocal.
+    """
+    from app.routers import db_router
+    if db_router.db_connector and (db_router.db_connector.engine or db_router.db_connector.client):
+        # Return the active connector's engine session
+        if db_router.db_connector.engine:
+            from sqlalchemy.orm import Session
+            return Session(bind=db_router.db_connector.engine)
     return SessionLocal()
 
 
