@@ -235,7 +235,15 @@ async def chat_with_agent(
             
             # Load into agent service memory
             if hasattr(agent_service, 'conversations'):
-                agent_service.conversations[session_id] = formatted_history
+                # MultilingualAgentService expects {"messages": [], "language": "en"}
+                # Other services expect a flat list
+                if hasattr(agent_service, 'language_service'):
+                    agent_service.conversations[session_id] = {
+                        "messages": formatted_history,
+                        "language": "en"
+                    }
+                else:
+                    agent_service.conversations[session_id] = formatted_history
         
         # Add current user message to DB
         persistence_service.add_message(session_id, tenant_id, "user", request.message)
