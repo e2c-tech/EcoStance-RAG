@@ -181,7 +181,7 @@ def track_by_tracking_number(tracking_number: str) -> str:
     db = get_db()
     try:
         query = text("""
-        SELECT s.*, c.name as customer_name, c.phone, c.address as customer_city,
+        SELECT s.*, c.name as customer_name, c.phone, c.city as customer_city,
                d.name as delivery_boy_name, d.phone as delivery_boy_phone, d.vehicle_number
         FROM shipments s
         JOIN customers c ON s.customer_id = c.customer_id

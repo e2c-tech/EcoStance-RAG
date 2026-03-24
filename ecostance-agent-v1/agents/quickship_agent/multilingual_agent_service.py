@@ -204,10 +204,8 @@ class MultilingualAgentService:
             self.tools.append(get_complaint_status)
 
         # Generic DB tools for any query not covered by specific tools above
-        self.tools.extend([
-            create_list_db_tables_tool(tenant_id=tenant_id),
-            create_db_query_tool(tenant_id=tenant_id),
-        ])
+        # Note: these are rebuilt per-request in _get_tool_map() to pick up the session's active DB connection
+        self._tenant_id = tenant_id
             
         # Multilingual Tools
         if tenant_id:
@@ -220,7 +218,8 @@ class MultilingualAgentService:
             if "language_detection" in self.allowed_tools:
                 self.tools.append(create_language_detection_tool())
         
-        # Create a tool map for easy lookup
+        # Create a tool map for easy lookup (static tools only; DB tools added per-request)
+        self._static_tools = self.tools[:]
         self.tool_map = {tool.name: tool for tool in self.tools}
         
         # Store conversations by session_id with language info
@@ -407,6 +406,14 @@ Y a-t-il quelque chose lié aux expéditions ou à la logistique avec lequel je 
                 self.session_db = {}
             if database_connection:
                 self.session_db[session_id] = database_connection
+
+            # Rebuild tool_map with session-specific DB connection
+            active_db = self.session_db.get(session_id)
+            self.tools = self._static_tools + [
+                create_list_db_tables_tool(db_connection=active_db, tenant_id=self._tenant_id),
+                create_db_query_tool(db_connection=active_db, tenant_id=self._tenant_id),
+            ]
+            self.tool_map = {tool.name: tool for tool in self.tools}
             
             # Add user message to history
             self.conversations[session_id]["messages"].append({
