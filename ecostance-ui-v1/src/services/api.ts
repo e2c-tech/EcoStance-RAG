@@ -348,10 +348,10 @@ export const databaseAPI = {
     return handleResponse(response);
   },
 
-  connect: async (dbUri: string) => {
+  connect: async (dbUri: string, connectionName?: string) => {
     const response = await fetchWithAuth('/db/connect', {
       method: 'POST',
-      body: JSON.stringify({ db_uri: dbUri }),
+      body: JSON.stringify({ db_uri: dbUri, connection_name: connectionName }),
     });
     return handleResponse(response);
   },

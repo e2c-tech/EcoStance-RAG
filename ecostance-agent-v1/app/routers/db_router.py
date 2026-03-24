@@ -16,6 +16,7 @@ router = APIRouter()
 
 class DBConnectionRequest(BaseModel):
     db_uri: str
+    connection_name: Optional[str] = None
 
 class QueryRequest(BaseModel):
     question: str
@@ -77,9 +78,11 @@ def parse_db_uri(db_uri: str) -> dict:
         raise ValueError(f"Unsupported database scheme: {parsed.scheme}")
 
 @router.post("/db/connect")
-async def connect_to_db(request: DBConnectionRequest):
+async def connect_to_db(request: DBConnectionRequest, current_user: dict = Depends(get_current_user)):
     """
     Connects to a database using the provided connection details.
+    If connection_name is provided, the connection is saved/updated in the connection manager
+    so the agent can reuse it across sessions.
     """
     global db_connector, query_generator
     try:
@@ -99,6 +102,15 @@ async def connect_to_db(request: DBConnectionRequest):
             raise HTTPException(status_code=500, detail=f"Failed to retrieve schema: {schema}")
             
         query_generator = SQLQueryGenerator(schema)
+
+        # Auto-save/update the connection so the agent can find it by name
+        if request.connection_name:
+            tenant_id = current_user["tenant_id"]
+            connection_manager = get_connection_manager()
+            internal_name = f"{tenant_id}_{request.connection_name}"
+            save_data = {**connection_config, 'tenant_id': tenant_id}
+            connection_manager.save_connection(internal_name, save_data)
+
         return {"message": "Database connection successful and schema loaded."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

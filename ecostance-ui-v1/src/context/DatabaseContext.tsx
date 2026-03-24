@@ -99,7 +99,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
 
             setConnectionStep(`Connecting to ${conn.type} database...`);
-            await databaseAPI.connect(dbUri);
+            await databaseAPI.connect(dbUri, connectionName);
             setIsConnected(true);
             setSelectedConnection(connectionName);
 
