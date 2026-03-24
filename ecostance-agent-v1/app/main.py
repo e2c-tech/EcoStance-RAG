@@ -142,18 +142,6 @@ async def lifespan(app: FastAPI):
             remediation="Check system resources and permissions"
         )
 
-    try:
-        from agents.quickship_agent.services.embedding_factory import get_embedding_service
-        get_embedding_service("bge-m3")
-        logger.info("✓ BGE-M3 embedding model pre-warmed")
-    except Exception as e:
-        log_error_with_context(
-            logger=logger,
-            message="Failed to pre-warm BGE-M3 embedding model",
-            error=e,
-            remediation="Check FlagEmbedding installation and available memory"
-        )
-
     logger.info("✓ Application started successfully")
     # === END: branch error handling ===
     
