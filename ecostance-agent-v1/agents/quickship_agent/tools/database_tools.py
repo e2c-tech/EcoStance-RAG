@@ -382,6 +382,71 @@ def get_complaint_status(shipment_id: str) -> str:
         db.close()
 
 
+@tool
+def get_complaints_by_customer(phone: str = None, email: str = None, name: str = None) -> str:
+    """
+    Search all complaints for a customer by their phone, email, or name.
+    Use this when customer asks about complaints and provides their contact info or name,
+    instead of a specific shipment ID.
+
+    Args:
+        phone: Customer phone number
+        email: Customer email address
+        name: Customer name (partial match supported)
+
+    Returns:
+        All complaints linked to that customer across all their shipments
+    """
+    if not phone and not email and not name:
+        return "Please provide phone, email, or customer name to search complaints."
+
+    db = get_db()
+    try:
+        if phone:
+            where = "c.phone = :value"
+            value = phone
+        elif email:
+            where = "c.email = :value"
+            value = email
+        else:
+            where = "c.name ILIKE :value"
+            value = f"%{name}%"
+
+        query = text(f"""
+        SELECT comp.complaint_id, comp.shipment_id, comp.complaint_type,
+               comp.date, comp.status, comp.refund_amount, c.name
+        FROM complaints comp
+        JOIN shipments s ON comp.shipment_id = s.shipment_id
+        JOIN customers c ON s.customer_id = c.customer_id
+        WHERE {where}
+        ORDER BY comp.date DESC
+        """)
+
+        result_proxy = db.execute(query, {"value": value})
+        results = result_proxy.mappings().all()
+
+        if not results:
+            return f"No complaints found for that customer."
+
+        response = f"Found {len(results)} complaint(s) for {results[0]['name']}:\n\n"
+        for i, row in enumerate(results, 1):
+            response += f"{i}. Complaint #{row['complaint_id']} — Shipment {row['shipment_id']}\n"
+            response += f"   Type: {row['complaint_type']}\n"
+            response += f"   Date: {row['date']}\n"
+            response += f"   Status: {row['status']}\n"
+            if row['refund_amount']:
+                response += f"   Refund: ₹{row['refund_amount']}\n"
+            response += "\n"
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Error in get_complaints_by_customer: {e}")
+        return f"Error searching complaints: {str(e)}"
+    finally:
+        db.close()
+
+
 # Group tools into categories for the agent to use
 TOOL_CATEGORIES = {
     "tracking": [

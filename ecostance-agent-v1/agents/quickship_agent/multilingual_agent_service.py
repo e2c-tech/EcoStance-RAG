@@ -36,11 +36,23 @@ from .tools.database_tools import (
     check_cod_payment_status,
     get_complaint_status,
 )
+from .tools.database_tools import (
+    get_shipment_status,
+    search_shipments_by_customer,
+    track_by_tracking_number,
+    get_delivery_estimate,
+    check_cod_payment_status,
+    get_complaint_status,
+)
 from .tools.multilingual_kb_tools import (
     create_multilingual_search_tool,
     create_multilingual_list_tool,
     create_language_detection_tool,
     create_cross_language_search_tool
+)
+from agents.generic_agent.tools.db_tools import (
+    create_db_query_tool,
+    create_list_db_tables_tool
 )
 
 logger = logging.getLogger(__name__)
@@ -184,6 +196,12 @@ class MultilingualAgentService:
             self.tools.append(check_cod_payment_status)
         if "complaints" in self.allowed_tools:
             self.tools.append(get_complaint_status)
+
+        # Generic DB tools for any query not covered by specific tools above
+        self.tools.extend([
+            create_list_db_tables_tool(tenant_id=tenant_id),
+            create_db_query_tool(tenant_id=tenant_id),
+        ])
             
         # Multilingual Tools
         if tenant_id:
