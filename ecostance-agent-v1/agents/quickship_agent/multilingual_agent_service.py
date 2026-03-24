@@ -326,7 +326,7 @@ Y a-t-il quelque chose lié aux expéditions ou à la logistique avec lequel je 
     
     @traceable(name="multilingual_agent_conversation", tags=["multilingual_agent", "conversation"])
     def chat(self, session_id: str, message: str, knowledge_base: str = None, 
-             database_connection: str = None, user_language: str = None) -> Dict:
+             database_connection: str = None, user_language: str = None, **kwargs) -> Dict:
         """
         Process a chat message using multilingual ReAct pattern.
         
