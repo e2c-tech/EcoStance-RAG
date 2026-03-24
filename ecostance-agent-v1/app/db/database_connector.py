@@ -37,7 +37,10 @@ class DatabaseConnector:
 
     def _connect_sqlite(self, config: Dict[str, Any]) -> bool:
         """Connect to SQLite database"""
-        db_path = config.get('database', 'database.db')
+        db_path = config.get('database') or config.get('db_path', 'database.db')
+        # Strip sqlite:/// prefix if already present to avoid double-prefixing
+        if db_path.startswith('sqlite:///'):
+            db_path = db_path[len('sqlite:///'):]
         self.engine = create_engine(f'sqlite:///{db_path}')
         self.connection = self.engine.connect()
         return True

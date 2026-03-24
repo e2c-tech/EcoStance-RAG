@@ -50,24 +50,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const [hasLoaded, setHasLoaded] = useState(false);
     const { user } = useAuth();
 
-    // Clear state when user or tenant changes, then auto-fetch connections
-    useEffect(() => {
-        setConnections([]);
-        setSelectedConnection('');
-        setIsConnected(false);
-        setSchema(null);
-        setHasLoaded(false);
-        setError(null);
-        setConnectionStep(null);
-    }, [user?.tenantId]);
-
-    // Auto-fetch connections when user is available
-    useEffect(() => {
-        if (user?.tenantId && !hasLoaded) {
-            fetchConnections();
-        }
-    }, [user?.tenantId, hasLoaded, fetchConnections]);
-
     const fetchConnections = useCallback(async (force = false) => {
         if (hasLoaded && !force && connections.length > 0) {
             return;
@@ -88,6 +70,24 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setIsLoading(false);
         }
     }, [hasLoaded, connections.length]);
+
+    // Clear state when user or tenant changes
+    useEffect(() => {
+        setConnections([]);
+        setSelectedConnection('');
+        setIsConnected(false);
+        setSchema(null);
+        setHasLoaded(false);
+        setError(null);
+        setConnectionStep(null);
+    }, [user?.tenantId]);
+
+    // Auto-fetch connections when user is available
+    useEffect(() => {
+        if (user?.tenantId && !hasLoaded) {
+            fetchConnections();
+        }
+    }, [user?.tenantId, hasLoaded, fetchConnections]);
 
     const connect = useCallback(async (connectionName: string) => {
         try {
