@@ -18,6 +18,9 @@ from fastapi.concurrency import run_in_threadpool
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Per-tenant agent service cache to avoid re-initializing heavy models per request
+_agent_service_cache: Dict[str, object] = {}
+
 
 def _sanitize_agent_content(raw: str) -> str:
     """
@@ -163,27 +166,34 @@ class ConversationHistory(BaseModel):
 # --- Service Factory ---
 
 def get_agent_service(tenant_id: str, db: Session, database_connection: str = None):
-    """Factory to create the assigned agent service for a tenant"""
+    """Factory to create the assigned agent service for a tenant, cached per tenant."""
     config = db.query(PublicAgentConfig).filter(PublicAgentConfig.tenant_id == tenant_id).first()
     agent_type = config.agent_type if config else "quickship"
-    
+
+    cache_key = f"{tenant_id}:{agent_type}"
+    if cache_key in _agent_service_cache:
+        return _agent_service_cache[cache_key]
+
     logger.debug(f"Tenant {tenant_id} initializing agent type: {agent_type}")
-    
+
     if agent_type == "quickship":
         from .multilingual_agent_service import MultilingualAgentService
-        return MultilingualAgentService(tenant_id=tenant_id, db_session=db)
+        service = MultilingualAgentService(tenant_id=tenant_id, db_session=db)
     elif agent_type == "ecommerce":
         from agents.ecommerce_agent.service import EcommerceAgentService
-        return EcommerceAgentService(tenant_id=tenant_id)
+        service = EcommerceAgentService(tenant_id=tenant_id)
     elif agent_type == "ecostance":
         from agents.ecostance_agent.service import EcoStanceAgentService
-        return EcoStanceAgentService(tenant_id=tenant_id)
+        service = EcoStanceAgentService(tenant_id=tenant_id)
     elif agent_type == "security_analyst":
         from agents.security_analyst.service import SecurityAnalystService
-        return SecurityAnalystService(tenant_id=tenant_id, database_connection=database_connection)
+        service = SecurityAnalystService(tenant_id=tenant_id, database_connection=database_connection)
     else:
         from agents.generic_agent.service import GenericAgentService
-        return GenericAgentService(tenant_id=tenant_id)
+        service = GenericAgentService(tenant_id=tenant_id)
+
+    _agent_service_cache[cache_key] = service
+    return service
 
 # --- Endpoints ---
 
