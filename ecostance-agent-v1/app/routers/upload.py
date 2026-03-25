@@ -58,22 +58,31 @@ async def upload_file(
         
         # Get quota (default 10GB if not found)
         from ..services.quota_service import QuotaService
-        quota_service = QuotaService(db)
-        quotas = quota_service.get_tenant_quotas(tenant_id)
-        max_storage_bytes = quotas.get("max_storage_bytes", 10 * 1024 * 1024 * 1024)
-        
-        # Check storage quota
-        quota_check = file_service.check_storage_quota(
-            tenant_id,
-            max_storage_bytes / (1024 * 1024),
-            file_size
-        )
-        
-        if not quota_check['within_quota']:
-            raise HTTPException(
-                status_code=413,
-                detail="Storage quota exceeded"
-            )
+        try:
+            quota_service = QuotaService(db)
+            quotas = quota_service.get_tenant_quotas(tenant_id)
+            max_storage_bytes = quotas.get("max_storage_bytes", 10 * 1024 * 1024 * 1024)
+        except Exception as quota_error:
+            logger.warning(f"Failed to get quota for tenant {tenant_id}, using default 10GB: {quota_error}")
+            max_storage_bytes = 10 * 1024 * 1024 * 1024
+
+        # Skip quota check if unlimited (-1) or if storage check fails
+        try:
+            if max_storage_bytes > 0:
+                quota_check = file_service.check_storage_quota(
+                    tenant_id,
+                    max_storage_bytes / (1024 * 1024),
+                    file_size
+                )
+                if not quota_check['within_quota']:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="Storage quota exceeded"
+                    )
+        except HTTPException:
+            raise
+        except Exception as quota_check_error:
+            logger.warning(f"Quota check failed, allowing upload: {quota_check_error}")
         
         # Create tenant-specific upload directory
         upload_dir = file_service.ensure_tenant_directory(tenant_id)
@@ -100,10 +109,14 @@ async def upload_file(
             job_id = job_tracker.create_job(file_location, collection_name, tenant_id=tenant_id)
             job_tracker.update_progress(job_id, "Upload complete. Starting processing...")
             
+            # Worker mounts ecostance uploads at /ecostance-uploads
+            # Construct path: /ecostance-uploads/{tenant_id}/{filename}
+            worker_file_path = f"/ecostance-uploads/{tenant_id}/{file.filename}"
+            
             # Add processing task to Celery
             process_file_task.delay(
                 job_id, 
-                file_location, 
+                worker_file_path, 
                 collection_name,
                 tenant_id
             )

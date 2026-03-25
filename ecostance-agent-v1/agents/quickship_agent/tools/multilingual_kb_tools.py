@@ -7,7 +7,7 @@ import logging
 from langchain.tools import tool
 from typing import Optional
 
-from .multilingual_rag_service_wrapper import get_multilingual_rag_service
+from ..services.multilingual_rag_service import get_multilingual_rag_service
 from app.services.language_service import get_language_service
 from app.config.multilingual_app_config import (
     get_multilingual_collection_name,
@@ -63,22 +63,19 @@ def create_multilingual_search_tool(tenant_id: str):
             logger.info(f"Searching multilingual KB '{kb_name}' for tenant {tenant_id}")
             logger.info(f"Collection: {collection_name}, Query: {query[:50]}...")
             
-            # Check if multilingual collection exists
+            # Check if multilingual collection exists, fall back to legacy collection name
+            # but always use the multilingual RAG service (remote embeddings) — never local CPU
             if not rag_service.check_collection_exists(collection_name):
-                # Try legacy collection as fallback
                 from ..services.qdrant_service import get_qdrant_client
                 from app.services.tenant_service import get_tenant_service
-                
+
                 client = get_qdrant_client()
                 tenant_service = get_tenant_service(client)
                 legacy_collection = tenant_service.get_collection_name(tenant_id, kb_name)
-                
+
                 if rag_service.check_collection_exists(legacy_collection):
-                    logger.warning(f"Multilingual collection not found, using legacy: {legacy_collection}")
-                    # Use legacy RAG service
-                    from ..services.rag_service import execute_query
-                    answer = execute_query(legacy_collection, query, chat_history=[])
-                    return f"Knowledge Base ({kb_name}):\n{answer}"
+                    logger.info(f"Multilingual collection not found, searching legacy collection via multilingual service: {legacy_collection}")
+                    collection_name = legacy_collection
                 else:
                     return f"Knowledge base '{kb_name}' is not available. Please check the name or contact support."
             

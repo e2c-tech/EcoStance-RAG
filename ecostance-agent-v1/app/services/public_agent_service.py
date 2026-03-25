@@ -83,9 +83,11 @@ class PublicAgentService:
         updated_by: str
     ) -> PublicAgentConfig:
         """Update public agent configuration."""
-        config = self.get_config(tenant_id)
-        if not config:
-            raise ValueError("Configuration not found")
+        # Fetch tenant name for upsert fallback
+        from ..models.tenant import Tenant
+        tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        tenant_name = tenant.name if tenant else tenant_id
+        config = self.get_or_create_config(tenant_id, tenant_name)
 
         logger.info(f"Updating public agent config for tenant {tenant_id}")
         logger.info(f"Update data received: {update_data}")

@@ -175,8 +175,13 @@ class GenericAgentService(MultilingualAgentMixin):
             
             tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in self.tools])
 
-            tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in self.tools])
-            
+            context_parts = []
+            if kb_name:
+                context_parts.append(f"- Active Knowledge Base: {kb_name}")
+            if db_conn:
+                context_parts.append(f"- Active Database: {db_conn}")
+            context_info = "\n".join(context_parts) if context_parts else "No knowledge base or database selected."
+
             max_iterations = 5
             iteration = 0
             

@@ -36,11 +36,23 @@ from .tools.database_tools import (
     check_cod_payment_status,
     get_complaint_status,
 )
+from .tools.database_tools import (
+    get_shipment_status,
+    search_shipments_by_customer,
+    track_by_tracking_number,
+    get_delivery_estimate,
+    check_cod_payment_status,
+    get_complaint_status,
+)
 from .tools.multilingual_kb_tools import (
     create_multilingual_search_tool,
     create_multilingual_list_tool,
     create_language_detection_tool,
     create_cross_language_search_tool
+)
+from agents.generic_agent.tools.db_tools import (
+    create_db_query_tool,
+    create_list_db_tables_tool
 )
 
 logger = logging.getLogger(__name__)
@@ -64,6 +76,12 @@ Guidelines:
 5. For cross-language information, synthesize content from multiple languages appropriately
 6. Maintain cultural sensitivity in responses
 7. **NO RAW DATA**: Do not just repeat raw database rows or tracking logs. Summarize the shipment status and information in a helpful, conversational way.
+
+**CRITICAL - Database Query Rules:**
+- When searching by customer name, phone, or email — ALWAYS call `list_database_tables` first to get the schema, then use `query_database` to write a SQL JOIN query across the relevant tables.
+- Use `get_shipment_status` only when you have an exact shipment ID.
+- Use `get_complaint_status` only when you have an exact shipment ID.
+- For ANY other search (by name, by customer, by complaint type, etc.) — use `list_database_tables` then `query_database`.
 
 Available Tools:
 **Shipment & Database Tools:** (same as before)
@@ -184,6 +202,10 @@ class MultilingualAgentService:
             self.tools.append(check_cod_payment_status)
         if "complaints" in self.allowed_tools:
             self.tools.append(get_complaint_status)
+
+        # Generic DB tools for any query not covered by specific tools above
+        # Note: these are rebuilt per-request in _get_tool_map() to pick up the session's active DB connection
+        self._tenant_id = tenant_id
             
         # Multilingual Tools
         if tenant_id:
@@ -196,7 +218,8 @@ class MultilingualAgentService:
             if "language_detection" in self.allowed_tools:
                 self.tools.append(create_language_detection_tool())
         
-        # Create a tool map for easy lookup
+        # Create a tool map for easy lookup (static tools only; DB tools added per-request)
+        self._static_tools = self.tools[:]
         self.tool_map = {tool.name: tool for tool in self.tools}
         
         # Store conversations by session_id with language info
@@ -326,7 +349,7 @@ Y a-t-il quelque chose lié aux expéditions ou à la logistique avec lequel je 
     
     @traceable(name="multilingual_agent_conversation", tags=["multilingual_agent", "conversation"])
     def chat(self, session_id: str, message: str, knowledge_base: str = None, 
-             database_connection: str = None, user_language: str = None) -> Dict:
+             database_connection: str = None, user_language: str = None, **kwargs) -> Dict:
         """
         Process a chat message using multilingual ReAct pattern.
         
@@ -383,6 +406,14 @@ Y a-t-il quelque chose lié aux expéditions ou à la logistique avec lequel je 
                 self.session_db = {}
             if database_connection:
                 self.session_db[session_id] = database_connection
+
+            # Rebuild tool_map with session-specific DB connection
+            active_db = self.session_db.get(session_id)
+            self.tools = self._static_tools + [
+                create_list_db_tables_tool(db_connection=active_db, tenant_id=self._tenant_id),
+                create_db_query_tool(db_connection=active_db, tenant_id=self._tenant_id),
+            ]
+            self.tool_map = {tool.name: tool for tool in self.tools}
             
             # Add user message to history
             self.conversations[session_id]["messages"].append({

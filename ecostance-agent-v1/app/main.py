@@ -106,6 +106,19 @@ async def lifespan(app: FastAPI):
             remediation="Check model configuration and available memory"
         )
     
+    # Initialize database connection pool monitoring
+    try:
+        from .db.database import get_db_pool_stats
+        pool_stats = get_db_pool_stats()
+        logger.info(f"✓ Database connection pool initialized: Pool Size={pool_stats.get('configured_pool_size')}, Max Overflow={pool_stats.get('max_overflow')}")
+    except Exception as e:
+        log_error_with_context(
+            logger=logger,
+            message="Failed to initialize database connection pool",
+            error=e,
+            remediation="Check DATABASE_URL and database connectivity"
+        )
+    
     # Start services with error handling
     try:
         await cleanup_service.start()
@@ -128,7 +141,7 @@ async def lifespan(app: FastAPI):
             error=e,
             remediation="Check system resources and permissions"
         )
-    
+
     logger.info("✓ Application started successfully")
     # === END: branch error handling ===
     

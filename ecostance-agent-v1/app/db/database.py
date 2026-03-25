@@ -19,10 +19,10 @@ if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is not set. A hosted PostgreSQL database is required.")
 
 # Connection pool configuration from environment
-DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))
-DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "10"))
-DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))
-DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "3600"))
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "20"))
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "40"))
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "60"))
+DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "1800"))
 
 # Create engine with proper connection pooling for PostgreSQL/Supabase/Aiven
 engine = create_engine(
@@ -34,6 +34,7 @@ engine = create_engine(
     pool_pre_ping=True,  # Verify connections before using them
     echo=False,  # Set to True for SQL query logging
     pool_use_lifo=True,  # Use LIFO (Last In First Out) for better connection reuse
+    connect_args={"connect_timeout": 10, "keepalives": 1, "keepalives_idle": 30},  # PostgreSQL-specific optimizations
 )
 
 # Create session factory
@@ -47,10 +48,15 @@ def get_db():
     """
     Dependency function to get database session.
     Use with FastAPI Depends.
+    Ensures proper cleanup and error handling.
     """
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        logger.error(f"Database session error: {e}")
+        db.rollback()
+        raise
     finally:
         db.close()
 

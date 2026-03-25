@@ -7,6 +7,7 @@ import logging
 from typing import Optional, Union, List
 from abc import ABC, abstractmethod
 from langchain_core.embeddings import Embeddings
+import httpx
 
 from app.config.multilingual_app_config import (
     EMBEDDING_MODEL_TYPE,
@@ -18,6 +19,7 @@ from app.config.multilingual_app_config import (
     BGE_M3_DEVICE,
     FALLBACK_TO_LEGACY
 )
+from app.config import USE_REMOTE_EMBEDDING, EMBEDDING_SERVER_URL
 
 logger = logging.getLogger(__name__)
 
@@ -90,71 +92,72 @@ class BGE_M3EmbeddingService(BaseEmbeddingService):
     """BGE-M3 multilingual embedding service."""
     
     def __init__(self):
+        self.model_name = BGE_M3_MODEL_NAME
+        self.dimension = BGE_M3_EMBEDDING_DIMENSION
+        self.max_length = BGE_M3_MAX_SEQUENCE_LENGTH
+        self.batch_size = BGE_M3_BATCH_SIZE
+        self.normalize = BGE_M3_NORMALIZE
+        self.model = None
+
+        if USE_REMOTE_EMBEDDING:
+            logger.info(f"BGE-M3 using remote embedding server: {EMBEDDING_SERVER_URL}")
+            return
+
         try:
             from FlagEmbedding import BGEM3FlagModel
             import torch
-            
-            # Determine device
+
             if BGE_M3_DEVICE == "auto":
                 device = "cuda" if torch.cuda.is_available() else "cpu"
             else:
                 device = BGE_M3_DEVICE
-            
+
             logger.info(f"Initializing BGE-M3 model on device: {device}")
-            
-            # Initialize BGE-M3 model
             self.model = BGEM3FlagModel(
                 BGE_M3_MODEL_NAME,
-                use_fp16=device == "cuda",  # Use FP16 on GPU for efficiency
+                use_fp16=device == "cuda",
                 device=device
             )
-            
-            self.model_name = BGE_M3_MODEL_NAME
-            self.dimension = BGE_M3_EMBEDDING_DIMENSION
-            self.max_length = BGE_M3_MAX_SEQUENCE_LENGTH
-            self.batch_size = BGE_M3_BATCH_SIZE
-            self.normalize = BGE_M3_NORMALIZE
-            
             logger.info(f"Successfully initialized BGE-M3 embedding service")
-            logger.info(f"Model: {self.model_name}, Dimension: {self.dimension}")
-            
         except ImportError as e:
             logger.error(f"Failed to import BGE-M3 dependencies: {e}")
-            raise ImportError(
-                "BGE-M3 dependencies not installed. "
-                "Install with: pip install FlagEmbedding"
-            )
+            raise ImportError("BGE-M3 dependencies not installed. Install with: pip install FlagEmbedding")
         except Exception as e:
             logger.error(f"Failed to initialize BGE-M3 model: {e}")
             raise
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Embed search docs using BGE-M3."""
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed documents using BGE-M3."""
+        if self.model is None:
+            response = httpx.post(f"{EMBEDDING_SERVER_URL}/embed", json={"text": texts}, timeout=120.0)
+            response.raise_for_status()
+            return response.json()["embeddings"]
         embeddings = self.encode(texts)
-        # Convert numpy arrays to lists if needed
         if hasattr(embeddings[0], 'tolist'):
             return [emb.tolist() for emb in embeddings]
         return embeddings
-    
+
     def embed_query(self, text: str) -> List[float]:
         """Embed query text using BGE-M3."""
+        if self.model is None:
+            response = httpx.post(f"{EMBEDDING_SERVER_URL}/embed", json={"text": text}, timeout=60.0)
+            response.raise_for_status()
+            return response.json()["embedding"]
         embedding = self.encode(text)
-        # Convert numpy array to list if needed
         if hasattr(embedding, 'tolist'):
             return embedding.tolist()
         return embedding
     
     def encode(self, texts: Union[str, list], **kwargs):
-        """
-        Encode text(s) using BGE-M3.
-        
-        Args:
-            texts: Single text or list of texts
-            **kwargs: Additional arguments (batch_size, max_length, etc.)
-            
-        Returns:
-            Embeddings as numpy array or list of arrays
-        """
+        """Encode text(s) using BGE-M3 local model or remote server."""
+        if self.model is None:
+            # Delegate to embed methods which handle remote
+            if isinstance(texts, str):
+                return self.embed_query(texts)
+            return self.embed_documents(texts)
+
         try:
             # Handle single text
             if isinstance(texts, str):

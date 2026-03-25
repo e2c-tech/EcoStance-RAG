@@ -97,6 +97,8 @@ async def login(
                          # Retrieve the associated Tenant
                          tenant = db.query(Tenant).filter(Tenant.id == tenant_user.tenant_id).first()
                          authenticated_user = tenant_user
+                     else:
+                         logger.warning(f"TenantUser login failed for {request.email}: password_hash present={bool(tenant_user.password_hash)}, is_active={tenant_user.is_active}")
                      
             if not tenant:
                 raise HTTPException(
@@ -447,6 +449,11 @@ async def set_password_endpoint(
     import bcrypt
     password_hash = bcrypt.hashpw(request.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     user.password_hash = password_hash
+    user.is_active = True  # Ensure user is active after accepting invite
     db.commit()
+    db.refresh(user)
+    
+    import logging
+    logging.getLogger(__name__).info(f"Password set for user {user.email} (tenant: {tenant_id}), hash present: {bool(user.password_hash)}")
     
     return {"message": "Password set successfully. You can now login."}

@@ -55,25 +55,26 @@ export default function SuperAdminDashboard() {
       const dashboardData = summaryData.data || summaryData;
       setTenants(Array.isArray(tenantsData) ? tenantsData : tenantsData.data || []);
 
-      // Background fetch agent configs to ensure accurate distribution counts
+      // Background fetch agent configs in batches of 3 to avoid DB connection exhaustion
       const rawTenants = Array.isArray(tenantsData) ? tenantsData : tenantsData.data || [];
-      Promise.all(rawTenants.map(async (tenant: any) => {
-        try {
-          const config = await publicAgentAPI.superAdmin.getTenantAgentConfig(tenant.id) as any;
-          if (config) {
-            setTenants(prev => prev.map(t =>
-              t.id === tenant.id
-                ? {
-                  ...t,
-                  agent_type: config.agent_type || config.config?.agent_type || t.agent_type
-                }
-                : t
-            ));
+      const batchSize = 3;
+      for (let i = 0; i < rawTenants.length; i += batchSize) {
+        const batch = rawTenants.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (tenant: any) => {
+          try {
+            const config = await publicAgentAPI.superAdmin.getTenantAgentConfig(tenant.id) as any;
+            if (config) {
+              setTenants(prev => prev.map(t =>
+                t.id === tenant.id
+                  ? { ...t, agent_type: config.agent_type || config.config?.agent_type || t.agent_type }
+                  : t
+              ));
+            }
+          } catch (err) {
+            // Ignore individual fetch errors
           }
-        } catch (err) {
-          // Ignore individual fetch errors
-        }
-      }));
+        }));
+      }
 
       setSummary({
         total_tenants: dashboardData.total_tenants || 0,

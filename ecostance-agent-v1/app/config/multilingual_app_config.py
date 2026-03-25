@@ -101,42 +101,9 @@ def initialize_multilingual_config():
 def is_tenant_multilingual_enabled(tenant_id: str, db=None) -> bool:
     """
     Check if multilingual features are enabled for a specific tenant.
-    
-    This replaces the dual control (global flag + whitelist) with 
-    global flag + specific tenant feature level check.
+    When MULTILINGUAL_ENABLED=true, all tenants are enabled globally.
     """
-    if not MULTILINGUAL_ENABLED:
-        return False
-    
-    if not tenant_id:
-        return False
-        
-    # Use provided session or create a temporary one
-    close_session = False
-    if db is None:
-        try:
-            from ..db.database import SessionLocal
-            db = SessionLocal()
-            close_session = True
-        except ImportError:
-            logger.error("Could not import SessionLocal for multilingual check")
-            return False
-
-    try:
-        from ..models.tenant import Tenant
-        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-        if not tenant:
-            return False
-            
-        settings = tenant.settings or {}
-        features = settings.get("features", [])
-        return "multilingual" in features
-    except Exception as e:
-        logger.error(f"Error checking multilingual status for tenant {tenant_id}: {e}")
-        return False
-    finally:
-        if close_session:
-            db.close()
+    return MULTILINGUAL_ENABLED
 
 def get_multilingual_collection_name(tenant_id: str, kb_name: str) -> str:
     """Generate multilingual collection name for a tenant and knowledge base."""
