@@ -19,7 +19,8 @@ async def process_and_upload_file(
     file_path: str, 
     collection_name: str = "default_collection", 
     job_id: str = None,
-    tenant_id: str = None
+    tenant_id: str = None,
+    db=None
 ):
     """
     Orchestrates the full data pipeline: Extract -> Clean -> Chunk -> Embed -> Upload.
@@ -36,7 +37,7 @@ async def process_and_upload_file(
         """Helper to update job progress if job_id is provided."""
         print(message)
         if job_id:
-            job_tracker.update_progress(job_id, message)
+            job_tracker.update_progress(job_id, message, db=db)
     
     update_progress(f"--- Starting full processing pipeline for file: {os.path.basename(file_path)} ---")
     

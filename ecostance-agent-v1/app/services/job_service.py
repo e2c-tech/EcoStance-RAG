@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List
 from datetime import datetime
 import logging
 from ..db.database import SessionLocal
@@ -7,14 +7,16 @@ from ..models.background_job import BackgroundJob, JobStatus
 
 logger = logging.getLogger(__name__)
 
+
 class JobTracker:
     """Persistent job tracking service using the database."""
-    
+
+    def _get_db(self):
+        return SessionLocal()
+
     def create_job(self, file_path: str, collection_name: str, tenant_id: str = None) -> str:
-        """Create a new job in the database and return its ID."""
         job_id = str(uuid.uuid4())
-        
-        db = SessionLocal()
+        db = self._get_db()
         try:
             job = BackgroundJob(
                 job_id=job_id,
@@ -29,13 +31,14 @@ class JobTracker:
         except Exception as e:
             logger.error(f"Failed to create job in DB: {e}")
             db.rollback()
-            return job_id # Return the ID anyway to avoid breaking frontend completely
+            return job_id
         finally:
             db.close()
-    
-    def start_job(self, job_id: str) -> bool:
-        """Mark a job as started in the database."""
-        db = SessionLocal()
+
+    def start_job(self, job_id: str, db=None) -> bool:
+        own_db = db is None
+        if own_db:
+            db = self._get_db()
         try:
             job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
             if job:
@@ -49,11 +52,13 @@ class JobTracker:
             db.rollback()
             return False
         finally:
-            db.close()
-    
-    def complete_job(self, job_id: str, result: Optional[Dict] = None) -> bool:
-        """Mark a job as completed in the database."""
-        db = SessionLocal()
+            if own_db:
+                db.close()
+
+    def complete_job(self, job_id: str, result: Optional[Dict] = None, db=None) -> bool:
+        own_db = db is None
+        if own_db:
+            db = self._get_db()
         try:
             job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
             if job:
@@ -73,11 +78,13 @@ class JobTracker:
             db.rollback()
             return False
         finally:
-            db.close()
-    
-    def fail_job(self, job_id: str, error_message: str) -> bool:
-        """Mark a job as failed in the database."""
-        db = SessionLocal()
+            if own_db:
+                db.close()
+
+    def fail_job(self, job_id: str, error_message: str, db=None) -> bool:
+        own_db = db is None
+        if own_db:
+            db = self._get_db()
         try:
             job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
             if job:
@@ -92,26 +99,21 @@ class JobTracker:
             db.rollback()
             return False
         finally:
-            db.close()
-    
-    def update_progress(self, job_id: str, message: str) -> bool:
-        """Update the progress message for a job in the database."""
-        db = SessionLocal()
+            if own_db:
+                db.close()
+
+    def update_progress(self, job_id: str, message: str, db=None) -> bool:
+        own_db = db is None
+        if own_db:
+            db = self._get_db()
         try:
             job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
             if job:
                 job.progress_message = message
-                
-                # Append to logs array 
                 current_logs = job.logs if job.logs is not None else []
-                # Make a new list since SQLAlchemy needs to detect a change to the JSON column
                 new_logs = list(current_logs)
-                new_logs.append({
-                    "timestamp": datetime.now().isoformat(),
-                    "message": message
-                })
+                new_logs.append({"timestamp": datetime.now().isoformat(), "message": message})
                 job.logs = new_logs
-                
                 db.commit()
                 return True
             return False
@@ -120,43 +122,38 @@ class JobTracker:
             db.rollback()
             return False
         finally:
-            db.close()
-    
+            if own_db:
+                db.close()
+
     def get_job(self, job_id: str) -> Optional[BackgroundJob]:
-        """Get job information from the database."""
-        db = SessionLocal()
+        db = self._get_db()
         try:
             return db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
         finally:
-            db.close() # Note: The object will be detached after close
-    
+            db.close()
+
     def get_job_dict(self, job_id: str) -> Optional[Dict]:
-        """Get job information as dictionary for JSON serialization."""
-        db = SessionLocal()
+        db = self._get_db()
         try:
             job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
-            if job:
-                return job.to_dict()
-            return None
+            return job.to_dict() if job else None
         finally:
             db.close()
 
     def list_jobs(self, tenant_id: str = None, limit: int = 100) -> List[Dict]:
-        """List all jobs from the database, optionally filtered by tenant."""
-        db = SessionLocal()
+        db = self._get_db()
         try:
             query = db.query(BackgroundJob)
             if tenant_id:
                 query = query.filter(BackgroundJob.tenant_id == tenant_id)
-            
             jobs = query.order_by(BackgroundJob.created_at.desc()).limit(limit).all()
             return [job.to_dict() for job in jobs]
         finally:
             db.close()
 
     def get_recent_jobs(self, limit: int = 10) -> List[Dict]:
-        """Get the most recent jobs from all tenants."""
         return self.list_jobs(limit=limit)
+
 
 # Global job tracker instance
 job_tracker = JobTracker()

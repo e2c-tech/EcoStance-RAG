@@ -46,7 +46,8 @@ async def process_and_upload_file_multilingual(
     collection_name: str = "default_collection",
     job_id: str = None,
     tenant_id: str = None,
-    force_multilingual: bool = False
+    force_multilingual: bool = False,
+    db=None
 ):
     """
     Multilingual version of the data processing pipeline.
@@ -66,7 +67,7 @@ async def process_and_upload_file_multilingual(
         """Helper to update job progress."""
         print(message)
         if job_id:
-            job_tracker.update_progress(job_id, message)
+            job_tracker.update_progress(job_id, message, db=db)
     
     # Determine if multilingual processing should be used
     use_multilingual = force_multilingual or is_multilingual_enabled()
@@ -260,7 +261,7 @@ async def migrate_collection_to_multilingual(
         """Helper to update job progress."""
         print(message)
         if job_id:
-            job_tracker.update_progress(job_id, message)
+            job_tracker.update_progress(job_id, message, db=db)
     
     if not target_collection:
         target_collection = f"{source_collection}_ml"
