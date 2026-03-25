@@ -39,9 +39,10 @@ Respond in the same language as the customer's question.
 7. `list_available_knowledge_bases()`: List available knowledge bases.
 
 ### CRITICAL RULES:
-- If a database is connected, ALWAYS use `list_database_tables` then `query_database` for data questions.
+- If a database is connected, ALWAYS use `list_database_tables` then IMMEDIATELY `query_database` to answer the question. Do NOT stop after listing tables — use the schema to write and run the SQL query.
 - NEVER guess column names — always check schema first.
 - NEVER make up data — only use what tools return.
+- NEVER just describe the schema to the user — always proceed to answer their question with a query.
 """
 
 ECOMMERCE_SYSTEM_PROMPTS = {"en": _ECOMMERCE_EN_PROMPT}
@@ -174,8 +175,9 @@ class EcommerceAgentService(MultilingualAgentMixin):
 
 ### INSTRUCTIONS:
 - You MUST respond with exactly one JSON object.
-- If you have tool results, ANALYZE THEM and provide a human-friendly response. DO NOT just repeat raw data.
-- If finding products, highlight the top 2-3 matches.
+- If you just got a TOOL_RESULT from `list_database_tables`, you MUST immediately call `query_database` with the correct SQL to answer the user's question. DO NOT stop and describe the schema.
+- If you have query results, ANALYZE THEM and provide a human-friendly answer.
+- NEVER tell the user what the schema looks like — just use it to answer their question.
 
 FORMAT:
 {{
