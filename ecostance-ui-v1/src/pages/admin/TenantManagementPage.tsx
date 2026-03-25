@@ -98,27 +98,29 @@ export default function TenantManagementPage() {
 
       setTenants(filteredTenants);
 
-      // Background fetch agent configs for each tenant to ensure accurate display
-      // since the list endpoint might not include full agent details
-      Promise.all(filteredTenants.map(async (tenant) => {
-        try {
-          const config = await publicAgentAPI.superAdmin.getTenantAgentConfig(tenant.id) as any;
-          if (config) {
-            setTenants(prev => prev.map(t =>
-              t.id === tenant.id
-                ? {
-                  ...t,
-                  agent_type: config.agent_type || config.config?.agent_type || t.agent_type,
-                  agent_enabled: config.enabled ?? config.config?.enabled ?? t.agent_enabled
-                }
-                : t
-            ));
+      // Background fetch agent configs in batches of 3 to avoid DB connection exhaustion
+      const batchSize = 3;
+      for (let i = 0; i < filteredTenants.length; i += batchSize) {
+        const batch = filteredTenants.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (tenant) => {
+          try {
+            const config = await publicAgentAPI.superAdmin.getTenantAgentConfig(tenant.id) as any;
+            if (config) {
+              setTenants(prev => prev.map(t =>
+                t.id === tenant.id
+                  ? {
+                    ...t,
+                    agent_type: config.agent_type || config.config?.agent_type || t.agent_type,
+                    agent_enabled: config.enabled ?? config.config?.enabled ?? t.agent_enabled
+                  }
+                  : t
+              ));
+            }
+          } catch (err) {
+            console.debug(`Could not fetch agent config for tenant ${tenant.id}`);
           }
-        } catch (err) {
-          // Ignore individual fetch errors
-          console.debug(`Could not fetch agent config for tenant ${tenant.id}`);
-        }
-      }));
+        }));
+      }
     } catch (error: any) {
       console.error('Failed to fetch tenants:', error);
       setError(error.message || 'Failed to load tenants. Please check if the backend server is running.');
