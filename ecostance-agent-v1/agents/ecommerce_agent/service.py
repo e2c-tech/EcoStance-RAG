@@ -191,11 +191,7 @@ FORMAT:
 OR (if finished):
 {{
     "tool": "none",
-    "response": {{
-        "type": "text",
-        "message": "Your helpful analysis or answer here",
-        "data": null
-    }}
+    "response": "Your complete human-friendly answer here including all data"
 }}
 """)]
                 
@@ -239,7 +235,12 @@ OR (if finished):
                 if tool_name == 'none' or not tool_name or is_last_turn:
                     final_response = decision.get('response', text)
                     if isinstance(final_response, dict):
-                        content = final_response.get('message', str(final_response))
+                        message = final_response.get('message', '')
+                        data = final_response.get('data')
+                        if data:
+                            content = f"{message}\n{json.dumps(data, indent=2)}" if message else json.dumps(data, indent=2)
+                        else:
+                            content = message or str(final_response)
                     else:
                         content = str(final_response)
                         
@@ -279,7 +280,12 @@ OR (if finished):
 
             # Save assistant response
             if isinstance(final_response, dict):
-                content = final_response.get('message', str(final_response))
+                message = final_response.get('message', '')
+                data = final_response.get('data')
+                if data:
+                    content = f"{message}\n{json.dumps(data, indent=2)}" if message else json.dumps(data, indent=2)
+                else:
+                    content = message or str(final_response)
             else:
                 content = str(final_response)
                 
