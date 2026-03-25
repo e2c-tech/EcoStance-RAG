@@ -126,6 +126,9 @@ class EcommerceAgentService(MultilingualAgentMixin):
                     for msg in chat_history:
                         if msg.get("role") in ["user", "assistant"]:
                             self.conversations[session_id].append(msg)
+
+            # Always append the current user message
+            self.conversations[session_id].append({"role": "user", "content": message})
             
             # Store selected knowledge base for this session
             if not hasattr(self, 'session_kb'):
@@ -196,13 +199,18 @@ OR (if finished):
 }}
 """)]
                 
-                # Add history
-                for msg in self.conversations[session_id][-6:]:
+                # Build history: include all user/assistant turns, but only system (tool) messages from current turn
+                # Find index of the current user message (last user message)
+                history = self.conversations[session_id]
+                last_user_idx = max((i for i, m in enumerate(history) if m["role"] == "user"), default=0)
+                
+                for msg in history[-8:]:
+                    idx = history.index(msg) if msg in history else -1
                     if msg["role"] == "user":
                         lc_messages.append(HumanMessage(content=msg["content"]))
                     elif msg["role"] == "assistant":
                         lc_messages.append(AIMessage(content=msg["content"]))
-                    elif msg["role"] == "system":
+                    elif msg["role"] == "system" and history.index(msg) >= last_user_idx:
                         lc_messages.append(SystemMessage(content=msg["content"]))
 
                 # Ask LLM
