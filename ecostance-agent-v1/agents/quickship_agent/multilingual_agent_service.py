@@ -142,7 +142,7 @@ class MultilingualAgentService:
     """Multilingual agent service with language-aware capabilities."""
     
     def __init__(self, tenant_id: str = None, db_session=None, llm_provider: str = None, 
-                 model: str = None, allowed_tools: List[str] = None):
+                 model: str = None, allowed_tools: List[str] = None, **kwargs):
         self.tenant_id = tenant_id
         self.db_session = db_session
         

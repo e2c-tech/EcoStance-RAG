@@ -227,9 +227,9 @@ async def chat_with_public_agent(
         agent = AgentServiceClass(
             tenant_id=tenant_id, 
             allowed_tools=allowed_tools,
-            company_name=company_name,
             database_connection=db_connection,
-            knowledge_base=kb_name
+            knowledge_base=kb_name,
+            company_name=company_name,
         )
         
         logger.info(f"Public agent chat for tenant {tenant_id}")

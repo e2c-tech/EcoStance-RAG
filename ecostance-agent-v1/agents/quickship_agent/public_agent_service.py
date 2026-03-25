@@ -78,7 +78,7 @@ SAFE_TOOL_CATEGORIES = {"tracking", "payments", "complaints", "delivery_estimate
 class PublicAgentService(MultilingualAgentMixin):
     """Service for managing public agent conversations with restricted tool access"""
     
-    def __init__(self, tenant_id: str = None, allowed_tools: List[str] = None):
+    def __init__(self, tenant_id: str = None, allowed_tools: List[str] = None, **kwargs):
         super().__init__(system_prompts=LOGISTICS_SYSTEM_PROMPTS)
         
         self.llm = ChatGoogleGenerativeAI(
