@@ -180,8 +180,7 @@ async def invite_tenant_user(
     }
     invite_token = create_invite_token(token_data)
     
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    invite_link = f"{frontend_url}/auth/set-password?invite_token={invite_token}"
+    invite_link = f"https://ai.securitycentric.net/ecostance-ui/auth/set-password?invite_token={invite_token}"
     
     # Send Email
     email_service = EmailService()
@@ -238,7 +237,7 @@ async def invite_tenant_users_bulk(
     email_service = EmailService()
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8501")
     
-    for email in invite_data.emails:
+    for email in invite_data.emails:        
         try:
             # Check if user exists
             existing_user = db.query(TenantUser).filter(
@@ -273,7 +272,7 @@ async def invite_tenant_users_bulk(
                 "action": "invite_acceptance"
             }
             invite_token = create_invite_token(token_data)
-            invite_link = f"{frontend_url}/auth/set-password?invite_token={invite_token}"
+            invite_link = f"https://ai.securitycentric.net/ecostance-ui/auth/set-password?invite_token={invite_token}"
             
             # Send Email
             if email_service.send_invite_email(email, invite_link):

@@ -236,8 +236,9 @@ async def chat_with_agent(
             # Load into agent service memory
             if hasattr(agent_service, 'conversations'):
                 # MultilingualAgentService expects {"messages": [], "language": "en"}
-                # Other services expect a flat list
-                if hasattr(agent_service, 'language_service'):
+                # EcommerceAgentService and others expect a flat list
+                from agents.quickship_agent.multilingual_agent_service import MultilingualAgentService
+                if isinstance(agent_service, MultilingualAgentService):
                     agent_service.conversations[session_id] = {
                         "messages": formatted_history,
                         "language": "en"
