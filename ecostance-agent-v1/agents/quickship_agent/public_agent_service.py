@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
-from .config import GOOGLE_API_KEY, AGENT_MODEL, AGENT_TEMPERATURE
+from .config import GOOGLE_API_KEY, GROQ_API_KEY, AGENT_MODEL, AGENT_TEMPERATURE, LLM_PROVIDER
 from .tools.database_tools import TOOL_CATEGORIES
 from .tools.knowledge_base_tools import (
     create_search_knowledge_base_tool,
@@ -81,11 +81,19 @@ class PublicAgentService(MultilingualAgentMixin):
     def __init__(self, tenant_id: str = None, allowed_tools: List[str] = None, **kwargs):
         super().__init__(system_prompts=LOGISTICS_SYSTEM_PROMPTS)
         
-        self.llm = ChatGoogleGenerativeAI(
-            model=AGENT_MODEL,
-            google_api_key=GOOGLE_API_KEY,
-            temperature=AGENT_TEMPERATURE
-        )
+        if LLM_PROVIDER == "groq":
+            from langchain_groq import ChatGroq
+            self.llm = ChatGroq(
+                model=AGENT_MODEL,
+                groq_api_key=GROQ_API_KEY,
+                temperature=AGENT_TEMPERATURE
+            )
+        else:
+            self.llm = ChatGoogleGenerativeAI(
+                model=AGENT_MODEL,
+                google_api_key=GOOGLE_API_KEY,
+                temperature=AGENT_TEMPERATURE
+            )
         
         self.tenant_id = tenant_id
         
