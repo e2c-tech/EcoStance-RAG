@@ -12,74 +12,42 @@ from langchain_core.messages import HumanMessage
 
 from .config import AGENT_MODEL, GOOGLE_API_KEY, GROQ_API_KEY, LLM_PROVIDER, AGENT_TEMPERATURE
 from .tools.product_tools import find_products, get_all_categories, get_my_orders
+from agents.generic_agent.tools.kb_tools import create_search_knowledge_base_tool, create_list_knowledge_bases_tool
+from agents.generic_agent.tools.db_tools import create_db_query_tool, create_list_db_tables_tool
 
 from app.services.multilingual_utils import MultilingualAgentMixin
 
 logger = logging.getLogger(__name__)
 
-ECOMMERCE_SYSTEM_PROMPTS = {
-    "en": """You are the E-Commerce Shopping Assistant.
-Your goal is to help customers find products and check their orders.
+_ECOMMERCE_EN_PROMPT = """You are the E-Commerce Shopping Assistant.
+Your goal is to help customers find products, check their orders, and answer questions about the product catalog.
 Respond in the same language as the customer's question.
 
 ### RESPONSE FORMAT RULES
 1. **Normal Chat**: If you are just talking, greeting, or explaining, answer normally.
-2. **Data Found**: If you use a tool (like `find_products`) and get results, you MUST return a JSON object strictly following this format:
-   ```json
-   {
-     "type": "product_list",
-     "message": "Brief text introduction here",
-     "data": { "items": [ ...raw tool results... ] }
-   }
-   ```
+2. **Data Found**: If you use a tool and get results, provide a helpful human-friendly summary.
 3. **Links/Actions**: If the user needs a specific page (like login), return:
-   ```json
-   {
-     "type": "url_action",
-     "message": "Please log in first",
-     "data": { "url": "/login", "button_text": "Log In" }
-   }
-   ```
+   {"type": "url_action", "message": "Please log in first", "data": {"url": "/login", "button_text": "Log In"}}
 
 ### AVAILABLE TOOLS:
-1. `find_products(search, category_slug)`: Returns list of products.
-2. `get_all_categories()`: Returns list of categories.
-3. `get_my_orders(user_id)`: Returns order history.
-""",
-    "es": """Eres el Asistente de Compras de Comercio Electrónico.
-Tu objetivo es ayudar a los clientes a encontrar productos y revisar sus pedidos.
-Responde en el mismo idioma que la pregunta del cliente.
+1. `list_database_tables()`: CALL THIS FIRST to see the database schema before writing SQL.
+2. `query_database(query)`: Run SQL queries against the connected database.
+3. `find_products(search, category_slug)`: Search products via API (if no DB connected).
+4. `get_all_categories()`: Get product categories via API (if no DB connected).
+5. `get_my_orders(user_id)`: Get order history via API (if no DB connected).
+6. `search_knowledge_base(kb_name, query)`: Search company documents/FAQs.
+7. `list_available_knowledge_bases()`: List available knowledge bases.
 
-### REGLAS DE FORMATO DE RESPUESTA
-1. **Chat Normal**: Si solo estás hablando, saludando o explicando, responde normalmente.
-2. **Datos Encontrados**: Si usas una herramienta y obtienes resultados, DEBES devolver un objeto JSON siguiendo este formato:
-   ```json
-   {
-     "type": "product_list",
-     "message": "Breve introducción de texto aquí",
-     "data": { "items": [ ...resultados de la herramienta... ] }
-   }
-   ```
-""",
-    "fr": """Vous êtes l'Assistant d'Achat E-Commerce.
-Votre objectif est d'aider les clients à trouver des produits et à vérifier leurs commandes.
-Répondez dans la même langue que la question du client.
-
-### RÈGLES DE FORMAT DE RÉPONSE
-1. **Chat Normal**: Si vous ne faites que parler, saluer ou expliquer, répondez normalement.
-2. **Données Trouvées**: Si vous utilisez un outil et obtenez des résultats, vous DEVEZ retourner un objet JSON suivant ce format :
-   ```json
-   {
-     "type": "product_list",
-     "message": "Brève introduction textuelle ici",
-     "data": { "items": [ ...résultats de l'outil... ] }
-   }
-   ```
+### CRITICAL RULES:
+- If a database is connected, ALWAYS use `list_database_tables` then `query_database` for data questions.
+- NEVER guess column names — always check schema first.
+- NEVER make up data — only use what tools return.
 """
-}
+
+ECOMMERCE_SYSTEM_PROMPTS = {"en": _ECOMMERCE_EN_PROMPT}
 
 # Strict whitelist of allowed tools for E-Commerce agent
-SAFE_TOOL_WHITELIST = {"product_search", "categories", "orders"}
+SAFE_TOOL_WHITELIST = {"product_search", "categories", "orders", "knowledge_base", "database_query"}
 
 class EcommerceAgentService(MultilingualAgentMixin):
     def __init__(self, tenant_id: str = None, allowed_tools: List[str] = None, **kwargs):
@@ -116,6 +84,13 @@ class EcommerceAgentService(MultilingualAgentMixin):
             self.tools.append(get_all_categories)
         if "orders" in self.allowed_tools:
             self.tools.append(get_my_orders)
+
+        # Always add generic DB tools — they use the global connector set by /db/connect
+        self.tools.append(create_list_db_tables_tool(tenant_id=tenant_id))
+        self.tools.append(create_db_query_tool(tenant_id=tenant_id))
+        # KB tools scoped to tenant
+        self.tools.append(create_search_knowledge_base_tool(tenant_id))
+        self.tools.append(create_list_knowledge_bases_tool(tenant_id))
             
         self.tool_map = {tool.name: tool for tool in self.tools}
         
