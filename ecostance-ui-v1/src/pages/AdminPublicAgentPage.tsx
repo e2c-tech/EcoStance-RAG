@@ -246,6 +246,126 @@ const [showAssistant, setShowAssistant] = useState(false);
     `.trim();
 }, [user?.tenantId]);
 
+const embedSnippetshopify = useMemo(() => {
+    const loaderSrc = import.meta.env.VITE_LOADER_SRC;
+    const tenantId = user?.tenantId || '';
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    return `
+<!-- Paste this code in your Shopify theme.liquid file, inside the <body> tag -->
+
+    <!-- EcoStance Public Agent Widget -->
+      <script src="${loaderSrc}"
+         data-tenant-id="${tenantId}"
+         data-api-url="${apiUrl}">
+      </script>
+    <!-- End widget -->
+
+
+<!-- Paste this code in your Shopify theme.liquid file, just before the closing </body> tag -->
+<div id="assistantContainer" style="
+display:none;
+width:100%;
+align-items:center;
+justify-content:center;
+">
+
+  <div style="
+    width:95%;
+    max-width:1000px;
+    height:85vh;
+    background:white;
+    border-radius:20px;
+    position:relative;
+    overflow:hidden;
+  ">
+
+    <button id="closeAssistant"
+      style="
+      position:absolute;
+      top:10px;
+      right:10px;
+      width:36px;
+      height:36px;
+      border-radius:50%;
+      border:none;
+      cursor:pointer;
+      background:#111;
+      color:white;
+      z-index:10;
+    ">✕</button>
+
+    <iframe
+      src="https://ai-widget-standalone.pages.dev/index.html?tenantId=${tenantId}&apiUrl=${apiUrl}"
+      style="width:100%;height:100%;border:none;">
+    </iframe>
+
+  </div>
+</div>
+
+
+<script>
+  const PANELS = ['MainContent', 'assistantPage', 'assistantPagefull'];
+
+  function showOnly(activeId) {
+    PANELS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = (id === activeId) ? (id === 'MainContent' ? 'block' : 'block') : 'none';
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    // Open assistant (normal)
+    const btn = document.getElementById("openAssistant");
+    if (btn) btn.addEventListener("click", () => showOnly('assistantPage'));
+
+    // Close buttons → return to main
+    const close = document.getElementById("closeAssistant");
+    if (close) close.addEventListener("click", () => showOnly('MainContent'));
+  });
+</script>
+    `.trim();
+}, [user?.tenantId]);
+
+
+const embedSnippetheadershopify = useMemo(() => {
+    return `
+    <!-- Paste this code after Script -->
+    <button id="openAssistant" class="header-actions__action" style="margin-left:10px; background:none; border:none; box-shadow:none; cursor:pointer;">
+  <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <g clip-path="url(#clip0_3714_1650)">
+        <path
+          d="M11.0615 0C10.7594 2.60677 10.6595 4.26205 10.0692 5.33059C9.10421 6.65872 7.43166 6.78521 4.35889 7.08533C7.38181 7.47194 9.01628 7.55575 9.98406 8.77241C10.7071 9.84953 10.8294 11.5156 11.0615 14.1707C11.4556 10.7271 11.5174 8.98826 12.9457 7.9987C13.9612 7.48022 15.4766 7.36704 17.7641 7.08533C14.9278 6.718 13.2821 6.63347 12.3023 5.71753C11.4738 4.6735 11.3855 2.9399 11.0615 0Z"
+          fill="black"
+        ></path>
+        <path
+          d="M3.78574 9.49805C3.60447 11.0621 3.54453 12.0553 3.19035 12.6964C2.61137 13.4933 1.6078 13.5692 -0.23584 13.7493C1.57792 13.9813 2.55859 14.0315 3.13926 14.7615C3.5731 15.4077 3.6465 16.4075 3.78574 18.0005C4.02223 15.9343 4.05928 14.891 4.91625 14.2973C5.52559 13.9862 6.43482 13.9183 7.80732 13.7493C6.10548 13.5289 5.11807 13.4781 4.53021 12.9286C4.03314 12.3022 3.98012 11.262 3.78574 9.49805Z"
+          fill="black"
+        ></path>
+      </g>
+      <defs>
+        <clipPath id="clip0_3714_1650">
+          <rect
+            width="18"
+            height="18"
+            fill="black"
+            transform="translate(-0.23584)"
+          ></rect>
+        </clipPath>
+      </defs>
+    </svg>
+</button>
+
+    `.trim();
+}, [user?.tenantId]);
+
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -676,6 +796,45 @@ const [showAssistant, setShowAssistant] = useState(false);
           </CardContent>
         </Card>
 
+          {/* Rate Limits */}
+            <Card className="bg-surface border-border">
+              <CardHeader className="border-b border-border pb-4">
+                <CardTitle className="text-lg font-semibold text-text">Rate Limits</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                <div>
+                  <Label className="text-sm font-medium text-text">Queries Per Minute</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={config.rate_limit.queries_per_minute}
+                    onChange={(e) => setConfig(prev => prev ? ({
+                      ...prev,
+                      rate_limit: { ...prev.rate_limit, queries_per_minute: parseInt(e.target.value) || 10 }
+                    }) : prev)}
+                    className="mt-1.5"
+                  />
+                  <p className="text-xs text-text-secondary mt-1">Limit requests per user</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-text">Max Messages Per Session</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="200"
+                    value={config.rate_limit.max_messages_per_session}
+                    onChange={(e) => setConfig(prev => prev ? ({
+                      ...prev,
+                      rate_limit: { ...prev.rate_limit, max_messages_per_session: parseInt(e.target.value) || 50 }
+                    }) : prev)}
+                    className="mt-1.5"
+                  />
+                  <p className="text-xs text-text-secondary mt-1">Maximum conversation length</p>
+                </div>
+              </CardContent>
+            </Card>
+
           </div>
 
           {/* Right Column - Branding & Settings */}
@@ -922,45 +1081,154 @@ const [showAssistant, setShowAssistant] = useState(false);
               </CardContent>
             </Card>
 
-
-            {/* Rate Limits */}
-            <Card className="bg-surface border-border">
+                         <Card className="bg-surface border-border">
               <CardHeader className="border-b border-border pb-4">
-                <CardTitle className="text-lg font-semibold text-text">Rate Limits</CardTitle>
+                <CardTitle className="text-lg font-semibold text-text">Code Snippet for Shopify</CardTitle>
               </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                <div>
-                  <Label className="text-sm font-medium text-text">Queries Per Minute</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={config.rate_limit.queries_per_minute}
-                    onChange={(e) => setConfig(prev => prev ? ({
-                      ...prev,
-                      rate_limit: { ...prev.rate_limit, queries_per_minute: parseInt(e.target.value) || 10 }
-                    }) : prev)}
-                    className="mt-1.5"
-                  />
-                  <p className="text-xs text-text-secondary mt-1">Limit requests per user</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-text">Max Messages Per Session</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="200"
-                    value={config.rate_limit.max_messages_per_session}
-                    onChange={(e) => setConfig(prev => prev ? ({
-                      ...prev,
-                      rate_limit: { ...prev.rate_limit, max_messages_per_session: parseInt(e.target.value) || 50 }
-                    }) : prev)}
-                    className="mt-1.5"
-                  />
-                  <p className="text-xs text-text-secondary mt-1">Maximum conversation length</p>
+              <CardContent className="p-6">
+              <div className="relative border border-border rounded-lg bg-[#1e1e1e]">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-black/20">
+                    <div className="flex items-center gap-2 text-xs text-white/70">
+                      <span className="h-2 w-2 rounded-full bg-green-400/80" />
+                      <span>header-actions.liquid</span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isEmbedappCopied}
+                      className={[
+                        'inline-flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors',
+                        isEmbedappCopied ? 'bg-white/10 text-white/80 cursor-default' : 'bg-primary text-white hover:bg-primary/80',
+                      ].join(' ')}
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(embedSnippetheadershopify);
+                          setIsEmbedappCopied(true);
+                          if (embedCopiedTimeoutRef.current != null) {
+                            window.clearTimeout(embedCopiedTimeoutRef.current);
+                          }
+                          embedCopiedTimeoutRef.current = window.setTimeout(() => setIsEmbedappCopied(false), 1500);
+                        } catch {
+                          setError('Copy failed. Please copy manually from the code block.');
+                        }
+                      }}
+                    >
+                      {isEmbedappCopied ? (
+                        <>
+                          <Icons.Check className="h-3.5 w-3.5" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Icons.FileText className="h-3.5 w-3.5" />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className='overflow-auto max-h-[300px] modern-scroll'>
+                  <SyntaxHighlighter
+                    language="html"
+                    style={vscDarkPlus}
+                    showLineNumbers
+                    customStyle={{
+                      margin: 0,
+                      padding: '12px 14px',
+                      background: 'transparent',
+                      fontSize: '12px',
+                    }}
+                    lineNumberStyle={{
+                      minWidth: '2.25em',
+                      paddingRight: '1em',
+                      color: 'rgba(255,255,255,0.35)',
+                      userSelect: 'none',
+                    }}
+                    codeTagProps={{
+                      style: {
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                      },
+                    }}
+                  >
+                    {embedSnippetheadershopify}
+                  </SyntaxHighlighter>
+                  </div>
                 </div>
               </CardContent>
             </Card>
+
+             <Card className="bg-surface border-border">
+              <CardHeader className="border-b border-border pb-4">
+                <CardTitle className="text-lg font-semibold text-text">Code Snippet for Shopify</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+              <div className="relative border border-border rounded-lg bg-[#1e1e1e]">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-black/20">
+                    <div className="flex items-center gap-2 text-xs text-white/70">
+                      <span className="h-2 w-2 rounded-full bg-green-400/80" />
+                      <span>theme.liquid</span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isEmbedappCopied}
+                      className={[
+                        'inline-flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors',
+                        isEmbedappCopied ? 'bg-white/10 text-white/80 cursor-default' : 'bg-primary text-white hover:bg-primary/80',
+                      ].join(' ')}
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(embedSnippetshopify);
+                          setIsEmbedappCopied(true);
+                          if (embedCopiedTimeoutRef.current != null) {
+                            window.clearTimeout(embedCopiedTimeoutRef.current);
+                          }
+                          embedCopiedTimeoutRef.current = window.setTimeout(() => setIsEmbedappCopied(false), 1500);
+                        } catch {
+                          setError('Copy failed. Please copy manually from the code block.');
+                        }
+                      }}
+                    >
+                      {isEmbedappCopied ? (
+                        <>
+                          <Icons.Check className="h-3.5 w-3.5" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Icons.FileText className="h-3.5 w-3.5" />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className='overflow-auto max-h-[300px] modern-scroll'>
+                  <SyntaxHighlighter
+                    language="html"
+                    style={vscDarkPlus}
+                    showLineNumbers
+                    customStyle={{
+                      margin: 0,
+                      padding: '12px 14px',
+                      background: 'transparent',
+                      fontSize: '12px',
+                    }}
+                    lineNumberStyle={{
+                      minWidth: '2.25em',
+                      paddingRight: '1em',
+                      color: 'rgba(255,255,255,0.35)',
+                      userSelect: 'none',
+                    }}
+                    codeTagProps={{
+                      style: {
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                      },
+                    }}
+                  >
+                    {embedSnippetshopify}
+                  </SyntaxHighlighter>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
           </div>
         </div>
 
