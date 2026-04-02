@@ -54,6 +54,7 @@ from agents.generic_agent.tools.db_tools import (
     create_db_query_tool,
     create_list_db_tables_tool
 )
+from agents.generic_agent.tools.web_search_tools import create_web_search_tool
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +97,8 @@ Remember: Always respond in the customer's language and end with appropriate clo
 
 # Strict whitelist for multilingual agent tools
 SAFE_MULTILINGUAL_CATEGORIES = {
-    "tracking", "customer_search", "payments", "complaints", "delivery_estimates", 
-    "knowledge_base", "language_detection"
+    "tracking", "customer_search", "payments", "complaints", "delivery_estimates",
+    "knowledge_base", "language_detection", "web_search"
 }
 
 class MultilingualAgentService:
@@ -179,6 +180,12 @@ class MultilingualAgentService:
                 ])
             if "language_detection" in self.allowed_tools:
                 self.tools.append(create_language_detection_tool())
+
+        # Web search — logistics/shipping topics only
+        if "web_search" in self.allowed_tools:
+            self.tools.append(create_web_search_tool(
+                allowed_topics=["shipping", "logistics", "customs", "delivery", "tracking"]
+            ))
         
         # Create a tool map for easy lookup (static tools only; DB tools added per-request)
         self._static_tools = self.tools[:]

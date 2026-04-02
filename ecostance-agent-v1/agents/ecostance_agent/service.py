@@ -17,6 +17,7 @@ from .tools.shopping_tools import search_eco_products, get_eco_impact_summary
 from .tools.kb_tools import create_ecostance_kb_tools
 
 from agents.generic_agent.tools.db_tools import create_db_query_tool, create_list_db_tables_tool
+from agents.generic_agent.tools.web_search_tools import create_web_search_tool
 
 # Shared tools from the platform
 from app.tools.shared_tools import (
@@ -60,7 +61,7 @@ CRITICAL: Always use type: "text" in your response containing the tags.
 """
 }
 
-SAFE_TOOLS = {"certificates", "shopping", "impact", "faq", "knowledge_base", "tracking", "payments", "complaints", "database_query"}
+SAFE_TOOLS = {"certificates", "shopping", "impact", "faq", "knowledge_base", "tracking", "payments", "complaints", "database_query", "web_search"}
 
 class EcoStanceAgentService(MultilingualAgentMixin):
     def __init__(self, tenant_id: str = None, allowed_tools: List[str] = None, database_connection: str = None, **kwargs):
@@ -106,9 +107,15 @@ class EcoStanceAgentService(MultilingualAgentMixin):
             
         # Add Database tools
         if "database_query" in requested_tools:
-            # Fallback connection handled in tools themselves if self.database_connection is None
             self.tools.append(create_db_query_tool(self.database_connection, tenant_id=self.tenant_id))
             self.tools.append(create_list_db_tables_tool(self.database_connection, tenant_id=self.tenant_id))
+
+        # Add web search — eco/sustainability/carbon topics only
+        if "web_search" in requested_tools:
+            self.tools.append(create_web_search_tool(
+                allowed_topics=["business", "technology", "industry", "company", "product", "brand"],
+                block_store_queries=False
+            ))
             
             
         self.tool_map = {tool.name: tool for tool in self.tools}
