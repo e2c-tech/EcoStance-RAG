@@ -13,6 +13,7 @@ from langchain_core.messages import HumanMessage
 from .config import AGENT_MODEL, GOOGLE_API_KEY, GROQ_API_KEY, LLM_PROVIDER, AGENT_TEMPERATURE
 from .tools.kb_tools import create_search_knowledge_base_tool, create_list_knowledge_bases_tool
 from .tools.db_tools import create_db_query_tool, create_list_db_tables_tool
+from .tools.web_search_tools import create_web_search_tool
 
 logger = logging.getLogger(__name__)
 
@@ -27,42 +28,19 @@ Your goal is to answer questions using the available knowledge base and database
 Respond in the same language as the customer's question.
 
 GUIDELINES:
-1. Search tools (`search_knowledge_base`, `query_database`) should ONLY be used if a Knowledge Base or Database is marked as 'Active' in your context.
-2. **NO RAW DATA DUMPS**: Do not simply repeat database rows, long lists of IDs (e.g., 1, 2, 3), or document snippets. Summarize findings in a professional, human-friendly way.
-3. **CATEGORIZE & ANALYZE**: If you find multiple items, group them by category or importance instead of listing them all. Highlight the top 2-3 most relevant results.
-4. **HUMAN-FRIENDLY NAMES**: Always prefer using names or descriptions over internal database IDs.
-5. If no Knowledge Base is active and the user asks a question requiring documents, explain that they need to select a Knowledge Base first.
-6. Use `list_database_tables` (to see table and column names) and then `query_database` for structured data IF a database is active.
+1. Search tools should ONLY be used if a Knowledge Base or Database is marked as 'Active' in your context.
+2. **NO RAW DATA DUMPS**: Summarize findings in a professional, human-friendly way.
+3. **CATEGORIZE & ANALYZE**: Group results by category or importance. Highlight the top 2-3 most relevant results.
+4. **HUMAN-FRIENDLY NAMES**: Always prefer names/descriptions over internal database IDs.
+5. If no Knowledge Base is active and the user asks about documents, explain they need to select one first.
+6. Use `list_database_tables` / `get_database_schema` first, then `query_database` / `get_data_from_connected_database` for structured data.
 7. Be concise and professional.
 8. If you don't know the answer, say so.
-
-### EXAMPLE OF EXPERT RESPONSE:
-**User**: Which sensors detected intrusions?
-**Expert Analysis**: Our records indicate that intrusions were primarily detected by the **Finance Segment IDS** and the **HR Department Perimeter Sensor**. While several other sensors logged activity, these two captured the most significant intrusion attempts.
-**Recommended Action**: Review the traffic logs for the Finance and HR segments specifically.
-""",
-    "es": """Eres un Asistente de IA servicial para {company_name}.
-Tu objetivo es responder preguntas utilizando la base de conocimientos y la base de datos disponibles.
-Responde en el mismo idioma que la pregunta del cliente.
-
-PAUTAS:
-1. Usa `search_knowledge_base` para buscar información en documentos.
-2. Usa `query_database` para datos estructurados si conoces el esquema.
-3. Sé conciso y profesional.
-""",
-    "fr": """Vous êtes un assistant IA serviable pour {company_name}.
-Votre objectif est de répondre aux questions en utilisant la base de connaissances et la base de données disponibles.
-Répondez dans la même langue que la question du client.
-
-DIRECTIVES:
-1. Utilisez `search_knowledge_base` pour trouver des informations dans les documents.
-2. Utilisez `query_database` pour les données structurées si vous connaissez le schéma.
-3. Soyez concis et professionnel.
 """
 }
 
 # Strict whitelist of allowed tools for Generic agent
-SAFE_GENERIC_TOOLS = {"knowledge_base", "database_query"}
+SAFE_GENERIC_TOOLS = {"knowledge_base", "database_query", "web_search"}
 
 class GenericAgentService(MultilingualAgentMixin):
     def __init__(self, tenant_id: str = None, company_name: str = "Common Assistant", allowed_tools: List[str] = None, custom_system_prompt: str = None, **kwargs):
@@ -114,11 +92,16 @@ class GenericAgentService(MultilingualAgentMixin):
         # Add DB tools if white-listed
         if "database_query" in self.allowed_tools:
             db_path = kwargs.get('database_connection')
-            # Always add tools, they handle fallback to global active connection themselves
             self.tools.extend([
                 create_db_query_tool(db_path, tenant_id=tenant_id),
                 create_list_db_tables_tool(db_path, tenant_id=tenant_id)
             ])
+
+        # Add web search tool if white-listed
+        if "web_search" in self.allowed_tools:
+            self.tools.append(create_web_search_tool(
+                allowed_topics=["business", "technology", "industry", "company"]
+            ))
              
         self.tool_map = {tool.name: tool for tool in self.tools}
         self.conversations: Dict[str, List[Dict]] = {}
@@ -136,7 +119,7 @@ class GenericAgentService(MultilingualAgentMixin):
         else:
             # Global connection fallback check
             if db_router.db_connector and db_router.db_connector.is_connected():
-                 active_sources.append("- **Active Database**: [CONNECTED]. **PRIORITIZE THIS** for analytical queries like 'top IPs' or 'count'. Check tables via list_database_tables first.")
+                 active_sources.append("- **Active Database**: [CONNECTED]. **PRIORITIZE THIS** for analytical queries like 'top IPs' or 'count'. Check tables via get_database_schema first.")
 
         sources_section = f"### CURRENTLY SELECTED SOURCES:\n{chr(10).join(active_sources)}\n\n" if active_sources else ""
 
@@ -147,8 +130,8 @@ class GenericAgentService(MultilingualAgentMixin):
 1. You MUST respond with EXACTLY ONE valid JSON object only.
 2. DO NOT include any text outside the JSON block.
 3. DO NOT simulate tool results or provide multiple JSON blocks.
-4. **DATABASE DISCOVERY**: If you need to query the database, you MUST call `list_database_tables` first to see the schema. NEVER guess column names.
-5. **FAILURE RECOVERY**: If a SQL query fails with "no such column", you MUST call `list_database_tables` immediately.
+4. **DATABASE DISCOVERY**: If you need to query the database, you MUST call `list_database_tables` / `get_database_schema` first to see the schema. NEVER guess column names.
+5. **FAILURE RECOVERY**: If a SQL query fails with "no such column", you MUST call `list_database_tables` / `get_database_schema` immediately.
 6. If you have the data, provide a helpful human-friendly summary.
 """
 
@@ -203,8 +186,8 @@ class GenericAgentService(MultilingualAgentMixin):
 1. You MUST respond with EXACTLY ONE valid JSON object only.
 2. DO NOT include any text outside the JSON block.
 3. DO NOT simulate tool results or provide multiple JSON blocks.
-4. **DATABASE DISCOVERY**: If you need to query the database, you MUST call `list_database_tables` first to see the schema. NEVER guess column names.
-5. **FAILURE RECOVERY**: If a SQL query fails with "no such column", you MUST call `list_database_tables` immediately.
+4. **DATABASE DISCOVERY**: If you need to query the database, you MUST call `list_database_tables` / `get_database_schema` first to see the schema. NEVER guess column names.
+5. **FAILURE RECOVERY**: If a SQL query fails with "no such column", you MUST call `list_database_tables` / `get_database_schema` immediately.
 6. If you have the data, provide a helpful human-friendly summary.
 
 FORMAT:
@@ -277,7 +260,7 @@ OR (if finished):
                     args = decision.get('args', {})
                     
                     # STRICT SELECTION ENFORCEMENT
-                    if tool_name in ["query_database", "list_database_tables"]:
+                    if tool_name in ["query_database", "get_data_from_connected_database", "get_database_schema"]:
                          if not db_conn:
                               from app.routers import db_router
                               if not (db_router.db_connector and (db_router.db_connector.engine or db_router.db_connector.client)):

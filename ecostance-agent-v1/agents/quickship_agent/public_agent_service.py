@@ -15,7 +15,7 @@ from app.services.multilingual_utils import MultilingualAgentMixin
 
 logger = logging.getLogger(__name__)
 
-# Multilingual system prompts for Logistics Agent
+# System prompt for Logistics Public Agent
 LOGISTICS_SYSTEM_PROMPTS = {
     "en": """You are a helpful customer service agent for QuickShip logistics.
 
@@ -30,7 +30,7 @@ Guidelines:
 1. If customer doesn't provide shipment ID, politely ask for phone number, email, or tracking number
 2. Use the available tools to get accurate information from the database
 3. NEVER make up information - only use data returned by the tools
-4. Always respond in the same language as the customer.
+4. Always respond in the same language as the customer
 
 Available Tools:
 {tool_descriptions}
@@ -39,36 +39,6 @@ Remember:
 - Shipment IDs: QS250XXX
 - Tracking numbers: TRKXXXXXXXXX
 - Always end with: "Is there anything else I can help you with?"
-""",
-    "es": """Eres un agente de servicio al cliente útil para la logística de QuickShip.
-
-Tu función:
-- Ayudar a los clientes a rastrear sus envíos
-- Proporcionar información de entrega
-- Responder preguntas sobre pagos
-- Verificar el estado de las quejas
-- Siempre ser cortés, profesional y empático
-
-Pautas:
-1. Si el cliente no proporciona el ID del envío, pida cortésmente el número de teléfono, correo electrónico o número de seguimiento.
-2. Use las herramientas disponibles para obtener información precisa de la base de datos.
-3. NUNCA invente información - use solo los datos devueltos por las herramientas.
-4. Responda siempre en el mismo idioma que el cliente.
-""",
-    "fr": """Vous êtes un agent de service client serviable pour la logistique QuickShip.
-
-Votre rôle:
-- Aider les clients à suivre leurs expéditions
-- Fournir des informations de livraison
-- Répondre aux questions sur les paiements
-- Vérifier le statut des plaintes
-- Soyez toujours poli, professionnel et empathique
-
-Directives:
-1. Si le client ne fournit pas d'ID d'expédition, demandez poliment le numéro de téléphone, l'e-mail ou le numéro de suivi.
-2. Utilisez les outils disponibles pour obtenir des informations précises à partir de la base de données.
-3. Ne JAMAIS inventer d'informations - utilisez uniquement les données renvoyées par les outils.
-4. Répondez toujours dans la même langue que le client.
 """
 }
 
@@ -313,12 +283,7 @@ IMPORTANT: ALWAYS respond in {preferred_lang}."""
             return {"response": "An error occurred.", "session_id": session_id, "success": False, "error": str(e)}
 
     def _get_out_of_scope_message(self, language: str) -> str:
-        messages = {
-            "en": "I'm sorry, I can only help with logistics and shipments.",
-            "es": "Lo siento, solo puedo ayudar con logística y envíos.",
-            "fr": "Désolé, je ne peux aider qu'avec la logistique et les expéditions."
-        }
-        return messages.get(language, messages["en"])
+        return "I'm sorry, I can only help with logistics and shipments."
 
     def get_conversation_history(self, session_id: str) -> List[Dict]:
         return self.conversations.get(session_id, [])

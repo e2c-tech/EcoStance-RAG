@@ -222,6 +222,24 @@ async def chat_with_public_agent(
         company_name = branding.get("company_name", "Assistant")
         
         logger.info(f"Using agent type: {target_agent_type} for tenant {tenant_id}")
+
+        # Auto-connect to the configured database if not already connected
+        if db_connection:
+            from app.routers import db_router
+            if not (db_router.db_connector and db_router.db_connector.engine):
+                try:
+                    from app.db.connection_manager import get_connection_manager
+                    from app.db.database_connector import DatabaseConnector
+                    connection_manager = get_connection_manager()
+                    conn_data = connection_manager.load_connection(f"{tenant_id}_{db_connection}") or \
+                                connection_manager.load_connection(db_connection)
+                    if conn_data:
+                        connector = DatabaseConnector()
+                        connector.connect(conn_data)
+                        db_router.db_connector = connector
+                        logger.info(f"Auto-connected to DB '{db_connection}' for public agent")
+                except Exception as e:
+                    logger.warning(f"Could not auto-connect to DB '{db_connection}': {e}")
         
         # Direct initialization from config and session data
         agent = AgentServiceClass(

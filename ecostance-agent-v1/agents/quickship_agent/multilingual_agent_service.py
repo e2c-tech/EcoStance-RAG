@@ -91,45 +91,7 @@ Available Tools:
 - detect_text_language(text): Detect language of text
 - cross_language_search(kb_name, query): Search across multiple languages
 
-Remember: Always respond in the customer's language and end with appropriate closing in that language.""",
-
-    "es": """Eres el agente de servicio al cliente útil y profesional de QuickShip con capacidades multilingües.
-
-Tu función:
-- Ayudar a los clientes a rastrear sus envíos en su idioma preferido
-- Proporcionar estimaciones de entrega e información de pagos
-- Responder preguntas sobre políticas y procedimientos usando la base de conocimientos multilingüe
-- Siempre responder en el mismo idioma que la pregunta del cliente
-- Ser cortés, profesional y culturalmente apropiado
-
-Pautas:
-1. Detecta el idioma del cliente y responde en el mismo idioma
-2. Si el cliente no proporciona ID de envío, pregunta cortésmente por teléfono, email o número de seguimiento
-3. Usa la búsqueda multilingüe para políticas, tarifas y procedimientos
-4. NUNCA inventes información - solo usa datos devueltos por las herramientas
-5. Para información en varios idiomas, sintetiza el contenido apropiadamente
-6. Mantén sensibilidad cultural en las respuestas
-
-Recuerda: Siempre responde en el idioma del cliente y termina con un cierre apropiado en ese idioma.""",
-
-    "fr": """Vous êtes l'agent de service client utile et professionnel de QuickShip avec des capacités multilingues.
-
-Votre rôle:
-- Aider les clients à suivre leurs expéditions dans leur langue préférée
-- Fournir des estimations de livraison et des informations de paiement
-- Répondre aux questions sur les politiques et procédures en utilisant la base de connaissances multilingue
-- Toujours répondre dans la même langue que la question du client
-- Être poli, professionnel et culturellement approprié
-
-Directives:
-1. Détectez la langue du client et répondez dans la même langue
-2. Si le client ne fournit pas d'ID d'expédition, demandez poliment le téléphone, l'email ou le numéro de suivi
-3. Utilisez la recherche multilingue pour les politiques, tarifs et procédures
-4. NE JAMAIS inventer d'informations - utilisez seulement les données retournées par les outils
-5. Pour les informations multi-langues, synthétisez le contenu de manière appropriée
-6. Maintenez la sensibilité culturelle dans les réponses
-
-Rappelez-vous: Répondez toujours dans la langue du client et terminez par une conclusion appropriée dans cette langue."""
+Remember: Always respond in the customer's language and end with appropriate closing in that language."""
 }
 
 # Strict whitelist for multilingual agent tools
@@ -252,26 +214,11 @@ class MultilingualAgentService:
             'math problem', 'solve equation', 'homework'
         ]
         
-        # Add language-specific indicators
-        if language == "es":
-            out_of_scope_indicators.extend([
-                'escribir código', 'código python', 'programar', 'función',
-                'clima', 'noticias', 'receta', 'película', 'canción',
-                'chiste', 'historia', 'poema', 'traducir', 'calcular'
-            ])
-        elif language == "fr":
-            out_of_scope_indicators.extend([
-                'écrire du code', 'code python', 'programmer', 'fonction',
-                'météo', 'nouvelles', 'recette', 'film', 'chanson',
-                'blague', 'histoire', 'poème', 'traduire', 'calculer'
-            ])
-        
+        # Language-specific indicators removed — English keywords cover most cases
         return any(indicator in message_lower for indicator in out_of_scope_indicators)
-    
+
     def _get_out_of_scope_message(self, language: str) -> str:
-        """Get out-of-scope message in the appropriate language."""
-        messages = {
-            "en": """I'm sorry, but I can't help with that. I'm a QuickShip logistics assistant specialized in:
+        return """I'm sorry, but I can't help with that. I'm a QuickShip logistics assistant specialized in:
 
 📦 **Shipment Tracking:**
 - Track shipments by ID (e.g., "Track QS250001")
@@ -291,54 +238,7 @@ class MultilingualAgentService:
 - "How long does delivery take?"
 - "My phone is 9224217802, show my orders"
 
-Is there anything related to shipments or logistics I can help you with?""",
-
-            "es": """Lo siento, pero no puedo ayudar con eso. Soy un asistente de logística de QuickShip especializado en:
-
-📦 **Seguimiento de Envíos:**
-- Rastrear envíos por ID (ej., "Rastrear QS250001")
-- Verificar estado de entrega y estimaciones
-- Ver estado de pagos y COD
-- Verificar quejas
-
-📚 **Información de la Empresa:**
-- Tarifas y costos de envío
-- Tiempos de entrega
-- Servicios de recogida
-- Políticas y procedimientos
-
-**Intenta preguntar:**
-- "¿Cuáles son sus tarifas de envío?"
-- "Rastrear QS250001"
-- "¿Cuánto tiempo toma la entrega?"
-- "Mi teléfono es 9224217802, muestra mis pedidos"
-
-¿Hay algo relacionado con envíos o logística en lo que pueda ayudarte?""",
-
-            "fr": """Je suis désolé, mais je ne peux pas aider avec cela. Je suis un assistant logistique QuickShip spécialisé dans:
-
-📦 **Suivi des Expéditions:**
-- Suivre les expéditions par ID (ex., "Suivre QS250001")
-- Vérifier le statut de livraison et les estimations
-- Voir le statut des paiements et COD
-- Vérifier les plaintes
-
-📚 **Informations de l'Entreprise:**
-- Tarifs et coûts d'expédition
-- Délais de livraison
-- Services de collecte
-- Politiques et procédures
-
-**Essayez de demander:**
-- "Quels sont vos tarifs d'expédition?"
-- "Suivre QS250001"
-- "Combien de temps prend la livraison?"
-- "Mon téléphone est 9224217802, montrez mes commandes"
-
-Y a-t-il quelque chose lié aux expéditions ou à la logistique avec lequel je peux vous aider?"""
-        }
-        
-        return messages.get(language, messages["en"])
+Is there anything related to shipments or logistics I can help you with?"""
     
     @traceable(name="multilingual_llm_call")
     def _invoke_llm_with_tracing(self, prompt: str, session_id: str, language: str):
@@ -637,49 +537,19 @@ OR (if finished):
             }
     
     def _get_kb_selection_message(self, language: str) -> str:
-        """Get knowledge base selection message in appropriate language."""
-        messages = {
-            "en": "To search our knowledge base, please select a knowledge base from the sidebar first.",
-            "es": "Para buscar en nuestra base de conocimientos, primero selecciona una base de conocimientos de la barra lateral.",
-            "fr": "Pour rechercher dans notre base de connaissances, veuillez d'abord sélectionner une base de connaissances dans la barre latérale."
-        }
-        return messages.get(language, messages["en"])
-    
+        return "To search our knowledge base, please select a knowledge base from the sidebar first."
+
     def _get_error_message(self, error: str, language: str) -> str:
-        """Get error message in appropriate language."""
-        messages = {
-            "en": f"I encountered an error while processing your request: {error}",
-            "es": f"Encontré un error al procesar tu solicitud: {error}",
-            "fr": f"J'ai rencontré une erreur lors du traitement de votre demande: {error}"
-        }
-        return messages.get(language, messages["en"])
-    
+        return f"I encountered an error while processing your request: {error}"
+
     def _get_tool_not_found_message(self, tool_name: str, language: str) -> str:
-        """Get tool not found message in appropriate language."""
-        messages = {
-            "en": f"Tool '{tool_name}' not found",
-            "es": f"Herramienta '{tool_name}' no encontrada",
-            "fr": f"Outil '{tool_name}' non trouvé"
-        }
-        return messages.get(language, messages["en"])
-    
+        return f"Tool '{tool_name}' not found"
+
     def _get_fallback_message(self, language: str) -> str:
-        """Get fallback message in appropriate language."""
-        messages = {
-            "en": "I'm not sure how to help with that. Could you please rephrase your question?",
-            "es": "No estoy seguro de cómo ayudar con eso. ¿Podrías reformular tu pregunta?",
-            "fr": "Je ne suis pas sûr de pouvoir vous aider avec cela. Pourriez-vous reformuler votre question?"
-        }
-        return messages.get(language, messages["en"])
-    
+        return "I'm not sure how to help with that. Could you please rephrase your question?"
+
     def _get_general_error_message(self, language: str) -> str:
-        """Get general error message in appropriate language."""
-        messages = {
-            "en": "I apologize, but I encountered an error. Please try again or contact support.",
-            "es": "Me disculpo, pero encontré un error. Por favor intenta de nuevo o contacta soporte.",
-            "fr": "Je m'excuse, mais j'ai rencontré une erreur. Veuillez réessayer ou contacter le support."
-        }
-        return messages.get(language, messages["en"])
+        return "I apologize, but I encountered an error. Please try again or contact support."
     
     def get_conversation_history(self, session_id: str) -> List[Dict]:
         """Get conversation history for a session with language information."""

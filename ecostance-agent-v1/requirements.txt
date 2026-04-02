@@ -212,3 +212,8 @@ aiofiles
 celery
 redis
 httpx
+
+# Web search tools
+tavily-python
+duckduckgo-search
+langchain-community

@@ -14,6 +14,7 @@ from .config import AGENT_MODEL, GOOGLE_API_KEY, GROQ_API_KEY, LLM_PROVIDER, AGE
 from .tools.product_tools import find_products, get_all_categories, get_my_orders
 from agents.generic_agent.tools.kb_tools import create_search_knowledge_base_tool, create_list_knowledge_bases_tool
 from agents.generic_agent.tools.db_tools import create_db_query_tool, create_list_db_tables_tool
+from agents.generic_agent.tools.web_search_tools import create_web_search_tool
 
 from app.services.multilingual_utils import MultilingualAgentMixin
 
@@ -30,16 +31,17 @@ Respond in the same language as the customer's question.
    {"type": "url_action", "message": "Please log in first", "data": {"url": "/login", "button_text": "Log In"}}
 
 ### AVAILABLE TOOLS:
-1. `list_database_tables()`: CALL THIS FIRST to see the database schema before writing SQL.
-2. `query_database(query)`: Run SQL queries against the connected database.
+1. `list_database_tables()` / `get_database_schema()`: CALL THIS FIRST to see the database schema before writing SQL.
+2. `get_data_from_connected_database(sql_query)`: Run SQL queries against the connected database.
 3. `find_products(search, category_slug)`: Search products via API (if no DB connected).
 4. `get_all_categories()`: Get product categories via API (if no DB connected).
 5. `get_my_orders(user_id)`: Get order history via API (if no DB connected).
 6. `search_knowledge_base(kb_name, query)`: Search company documents/FAQs.
 7. `list_available_knowledge_bases()`: List available knowledge bases.
+8. `web_search(query)`: Search the web for current information not in the DB or KB.
 
 ### CRITICAL RULES:
-- If a database is connected, ALWAYS use `list_database_tables` then IMMEDIATELY `query_database` to answer the question. Do NOT stop after listing tables — use the schema to write and run the SQL query.
+- If a database is connected, ALWAYS use `list_database_tables` / `get_database_schema` then IMMEDIATELY `query_database` / `get_data_from_connected_database` to answer the question. Do NOT stop after listing tables — use the schema to write and run the SQL query.
 - NEVER guess column names — always check schema first.
 - NEVER make up data — only use what tools return.
 - NEVER just describe the schema to the user — always proceed to answer their question with a query.
@@ -92,6 +94,10 @@ class EcommerceAgentService(MultilingualAgentMixin):
         # KB tools scoped to tenant
         self.tools.append(create_search_knowledge_base_tool(tenant_id))
         self.tools.append(create_list_knowledge_bases_tool(tenant_id))
+        # Web search with Tavily → DuckDuckGo fallback, ecommerce topics only
+        self.tools.append(create_web_search_tool(
+            allowed_topics=["product", "price", "brand", "shopping", "review", "tech specs"]
+        ))
             
         self.tool_map = {tool.name: tool for tool in self.tools}
         
@@ -178,7 +184,7 @@ class EcommerceAgentService(MultilingualAgentMixin):
 
 ### INSTRUCTIONS:
 - You MUST respond with exactly one JSON object.
-- If you just got a TOOL_RESULT from `list_database_tables`, you MUST immediately call `query_database` with the correct SQL to answer the user's question. DO NOT stop and describe the schema.
+- If you just got a TOOL_RESULT from `list_database_tables` / `get_database_schema`, you MUST immediately call `query_database` / `get_data_from_connected_database` with the correct SQL to answer the user's question. DO NOT stop and describe the schema.
 - If you have query results, ANALYZE THEM and provide a human-friendly answer.
 - NEVER tell the user what the schema looks like — just use it to answer their question.
 

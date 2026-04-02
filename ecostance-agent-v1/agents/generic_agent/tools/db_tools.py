@@ -15,13 +15,21 @@ def _get_global_connector():
 
 def create_db_query_tool(db_connection: str = None, tenant_id: str = None):
     @tool
-    def query_database(query: str) -> str:
+    def get_data_from_connected_database(sql_query: str) -> str:
         """
-        Query the connected database using SQL (SQLite, PostgreSQL, MySQL).
-        IMPORTANT: NEVER guess column names. You MUST call 'list_database_tables' first
-        to see the schema (tables and columns) before writing your SQL query.
+        Run a SQL query against the connected database to retrieve structured data.
+        Use this for ANY question about data that lives in the database — products,
+        orders, customers, inventory, sales, shipments, analytics, counts, filters, etc.
+        
+        RULES:
+        - You MUST call 'get_database_schema' first to know the table and column names.
+        - NEVER guess column names — always check schema first.
+        - Use this tool BEFORE web_search for anything that could be in the database.
+        
+        Args:
+            sql_query: A valid SQL SELECT statement
         """
-        logger.info(f"query_database called. db_connection: {db_connection}, tenant_id: {tenant_id}")
+        logger.info(f"get_data_from_connected_database called. tenant_id: {tenant_id}")
 
         connector = _get_global_connector()
         if not connector:
@@ -30,8 +38,7 @@ def create_db_query_tool(db_connection: str = None, tenant_id: str = None):
                 "Please go to the Database page, select your connection and click Connect."
             )
 
-        logger.info("Executing query via global db_connector")
-        result = connector.execute_query(query)
+        result = connector.execute_query(sql_query)
 
         if not result.get('success'):
             return f"Error: {result.get('error')}"
@@ -40,17 +47,18 @@ def create_db_query_tool(db_connection: str = None, tenant_id: str = None):
             return str(rows) if rows else "Query executed successfully. No rows found."
         return f"Query executed successfully. {result.get('message', '')}"
 
-    return query_database
+    return get_data_from_connected_database
 
 
 def create_list_db_tables_tool(db_connection: str = None, tenant_id: str = None):
     @tool
     def list_database_tables() -> str:
         """
-        List all tables AND their column names/types available in the connected database.
-        CALL THIS FIRST before using 'query_database' to discover the schema.
+        Get the full schema of the connected database — all table names and their columns.
+        ALWAYS call this FIRST before writing any SQL query so you know the exact
+        table names and column names. Never skip this step.
         """
-        logger.info(f"list_database_tables called. db_connection: {db_connection}, tenant_id: {tenant_id}")
+        logger.info(f"list_database_tables called. tenant_id: {tenant_id}")
 
         connector = _get_global_connector()
         if not connector:
@@ -59,7 +67,6 @@ def create_list_db_tables_tool(db_connection: str = None, tenant_id: str = None)
                 "Please go to the Database page, select your connection and click Connect."
             )
 
-        logger.info("Fetching schema via global db_connector")
         schema = connector.get_schema_info()
 
         if 'tables' in schema:
