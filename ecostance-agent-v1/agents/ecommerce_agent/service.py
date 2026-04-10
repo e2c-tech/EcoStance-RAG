@@ -14,7 +14,7 @@ from .config import AGENT_MODEL, GOOGLE_API_KEY, GROQ_API_KEY, LLM_PROVIDER, AGE
 from .tools.product_tools import find_products, get_all_categories, get_my_orders
 from agents.generic_agent.tools.kb_tools import create_search_knowledge_base_tool, create_list_knowledge_bases_tool
 from agents.generic_agent.tools.db_tools import create_db_query_tool, create_list_db_tables_tool
-from agents.generic_agent.tools.web_search_tools import create_web_search_tool
+from .tools.web_search_tools import create_web_search_tool
 
 from app.services.multilingual_utils import MultilingualAgentMixin
 
@@ -38,13 +38,18 @@ Respond in the same language as the customer's question.
 5. `get_my_orders(user_id)`: Get order history via API (if no DB connected).
 6. `search_knowledge_base(kb_name, query)`: Search company documents/FAQs.
 7. `list_available_knowledge_bases()`: List available knowledge bases.
-8. `web_search(query)`: Search the web for current information not in the DB or KB.
+8. `web_search(query)`: Search the web for general/educational information only (e.g. "what is aromatherapy", "difference between eau de parfum and eau de toilette"). NEVER use web search results to suggest, list, or recommend products.
 
 ### CRITICAL RULES:
 - If a database is connected, ALWAYS use `list_database_tables` / `get_database_schema` then IMMEDIATELY `query_database` / `get_data_from_connected_database` to answer the question. Do NOT stop after listing tables — use the schema to write and run the SQL query.
 - NEVER guess column names — always check schema first.
 - NEVER make up data — only use what tools return.
 - NEVER just describe the schema to the user — always proceed to answer their question with a query.
+- PRODUCT SUGGESTIONS RULE: When a user asks both an educational question AND for a product suggestion (e.g. "explain aromatherapy and suggest a perfume"), you MUST:
+  1. Use `web_search` ONLY for the educational/informational part.
+  2. Use `find_products` or `get_data_from_connected_database` for the product suggestion part.
+  3. NEVER carry over product names, brands, or items from web search results into your product suggestions.
+  4. Only suggest products that actually exist in our shop's database or API response.
 """
 
 ECOMMERCE_SYSTEM_PROMPTS = {"en": _ECOMMERCE_EN_PROMPT}
@@ -95,9 +100,7 @@ class EcommerceAgentService(MultilingualAgentMixin):
         self.tools.append(create_search_knowledge_base_tool(tenant_id))
         self.tools.append(create_list_knowledge_bases_tool(tenant_id))
         # Web search with Tavily → DuckDuckGo fallback, ecommerce topics only
-        self.tools.append(create_web_search_tool(
-            allowed_topics=["product", "price", "brand", "shopping", "review", "tech specs"]
-        ))
+        self.tools.append(create_web_search_tool())
             
         self.tool_map = {tool.name: tool for tool in self.tools}
         
@@ -187,6 +190,7 @@ class EcommerceAgentService(MultilingualAgentMixin):
 - If you just got a TOOL_RESULT from `list_database_tables` / `get_database_schema`, you MUST immediately call `query_database` / `get_data_from_connected_database` with the correct SQL to answer the user's question. DO NOT stop and describe the schema.
 - If you have query results, ANALYZE THEM and provide a human-friendly answer.
 - NEVER tell the user what the schema looks like — just use it to answer their question.
+- If the user asks an educational question AND wants a product suggestion (e.g. "explain aromatherapy and suggest a perfume"), split the work: use `web_search` for the educational part, then use `find_products` or `get_data_from_connected_database` for the product part. NEVER suggest products based on web search results — only suggest products returned by shop tools.
 
 FORMAT:
 {{
