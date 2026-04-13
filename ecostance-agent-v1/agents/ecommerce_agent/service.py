@@ -45,6 +45,7 @@ Respond in the same language as the customer's question.
 - NEVER guess column names — always check schema first.
 - NEVER make up data — only use what tools return.
 - NEVER just describe the schema to the user — always proceed to answer their question with a query.
+- KEY DB RELATIONSHIPS: perfume scent notes are in `scent_notes` table joined via `perfume_notes` (perfume_id, scent_note_id). Moods via `perfume_moods` → `moods`. Family via `fragrance_families`. Brand via `brands`. Pricing via `perfume_sizes`. NEVER query `perfumes.ingredients` — it does not exist.
 - PRODUCT SUGGESTIONS RULE: When a user asks both an educational question AND for a product suggestion (e.g. "explain aromatherapy and suggest a perfume"), you MUST:
   1. Use `web_search` ONLY for the educational/informational part.
   2. Use `find_products` or `get_data_from_connected_database` for the product suggestion part.
@@ -134,6 +135,18 @@ class EcommerceAgentService(MultilingualAgentMixin):
 
             # Get schema
             schema = schema_tool.invoke({})
+
+            # Append relationship hints so LLM understands joins
+            schema += """
+
+KEY RELATIONSHIPS (always use these joins):
+- To find perfumes by scent note: JOIN perfume_notes ON perfume_notes.perfume_id = perfumes.id JOIN scent_notes ON scent_notes.id = perfume_notes.scent_note_id — filter on scent_notes.name
+- To find perfumes by mood: JOIN perfume_moods ON perfume_moods.perfume_id = perfumes.id JOIN moods ON moods.id = perfume_moods.mood_id — filter on moods.name
+- To find perfumes by fragrance family: JOIN fragrance_families ON fragrance_families.id = perfumes.fragrance_family_id — filter on fragrance_families.name
+- To get brand name: JOIN brands ON brands.id = perfumes.brand_id
+- To get pricing: JOIN perfume_sizes ON perfume_sizes.perfume_id = perfumes.id
+- NEVER query perfumes.ingredients — it does not exist. Notes are in scent_notes table via perfume_notes join table.
+"""
             if schema.startswith("Error:"):
                 return
 
@@ -159,39 +172,33 @@ class EcommerceAgentService(MultilingualAgentMixin):
             result = query_tool.invoke({"sql_query": sql})
             logger.info(f"Prefetch SQL result: {result[:300]}")
 
-            # If query returned no rows OR errored, fall back to full catalog
-            needs_fallback = (
-                not result
-                or result.strip() == '[]'
-                or 'No rows found' in result
-                or result.startswith('Error:')
-            )
-            if needs_fallback:
-                logger.info(f"Prefetch query returned empty/error ({result[:80]}), falling back to full catalog")
-                fallback_sql = """
-                    SELECT p.name, b.name as brand, p.concentration, p.gender_target,
-                           ff.name as fragrance_family,
-                           GROUP_CONCAT(sn.name || ' (' || pn.layer || ')', ', ') as notes
-                    FROM perfumes p
-                    JOIN brands b ON p.brand_id = b.id
-                    JOIN fragrance_families ff ON p.fragrance_family_id = ff.id
-                    LEFT JOIN perfume_notes pn ON pn.perfume_id = p.id
-                    LEFT JOIN scent_notes sn ON sn.id = pn.scent_note_id
-                    WHERE p.is_discontinued = 0
-                    GROUP BY p.id
-                    ORDER BY p.name
-                """
-                result = query_tool.invoke({"sql_query": fallback_sql.strip()})
+            # Always inject full catalog with notes as the ground truth
+            fallback_sql = """
+                SELECT p.name, b.name as brand, p.concentration, p.gender_target,
+                       ff.name as fragrance_family,
+                       GROUP_CONCAT(sn.name || ' (' || pn.layer || ')', ', ') as notes
+                FROM perfumes p
+                JOIN brands b ON p.brand_id = b.id
+                JOIN fragrance_families ff ON p.fragrance_family_id = ff.id
+                LEFT JOIN perfume_notes pn ON pn.perfume_id = p.id
+                LEFT JOIN scent_notes sn ON sn.id = pn.scent_note_id
+                WHERE p.is_discontinued = 0
+                GROUP BY p.id
+                ORDER BY p.name
+            """
+            catalog_result = query_tool.invoke({"sql_query": fallback_sql.strip()})
+            logger.info(f"Prefetch full catalog result length: {len(catalog_result)}")
+
             self.conversations[session_id].append({
                 "role": "system",
                 "content": (
-                    "PRE_FETCHED PRODUCT DATA — these are the ONLY real products in our store. "
+                    "PRE_FETCHED PRODUCT DATA — these are the ONLY real products in our store with their scent notes. "
                     "You MUST suggest ONLY products from this list. "
                     "Do NOT invent or add any product names not present here:\n"
-                    f"{result}"
+                    f"{catalog_result}"
                 )
             })
-            logger.info(f"Prefetch injected product data for session {session_id} | SQL: {sql[:100]}")
+            logger.info(f"Prefetch complete for session {session_id}")
 
         except Exception as e:
             logger.warning(f"Prefetch failed: {e}")
