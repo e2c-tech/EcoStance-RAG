@@ -50,6 +50,8 @@ Respond in the same language as the customer's question.
   2. Use `find_products` or `get_data_from_connected_database` for the product suggestion part.
   3. NEVER carry over product names, brands, or items from web search results into your product suggestions.
   4. Only suggest products that actually exist in our shop's database or API response.
+  5. NEVER use your own training knowledge to name or suggest products — if the DB/API returns no results, say "we don't have that in our store" instead of inventing product names.
+  6. If PRE_FETCHED SCHEMA is present in context, use it immediately to write a SQL query — do NOT call list_database_tables again.
 """
 
 ECOMMERCE_SYSTEM_PROMPTS = {"en": _ECOMMERCE_EN_PROMPT}
@@ -107,9 +109,40 @@ class EcommerceAgentService(MultilingualAgentMixin):
         # In-memory conversation storage
         self.conversations: Dict[str, List[Dict]] = {}
         
-    def _is_out_of_scope(self, message: str) -> bool:
-        """Simple keyword check for clearly out-of-scope queries."""
-        return False
+    # Keywords that indicate the user wants product suggestions from the store
+    _PRODUCT_INTENT_KEYWORDS = [
+        "suggest", "recommend", "show me", "which perfume", "what perfume",
+        "do you carry", "do you have", "contain", "with ", "options", "available",
+        "your perfume", "your fragrance", "your store", "your collection",
+        "what do you have", "what have you got", "list", "find"
+    ]
+
+    def _has_product_intent(self, message: str) -> bool:
+        m = message.lower()
+        return any(kw in m for kw in self._PRODUCT_INTENT_KEYWORDS)
+
+    def _prefetch_products(self, message: str, session_id: str) -> None:
+        """
+        If a DB is connected and the message has product intent, pre-run the schema
+        lookup + a relevant query and inject results into conversation context so the
+        LLM cannot hallucinate products.
+        """
+        if session_id not in getattr(self, 'session_db', {}):
+            return
+        if not self._has_product_intent(message):
+            return
+
+        try:
+            # Step 1: get schema
+            schema_tool = self.tool_map.get('list_database_tables') or self.tool_map.get('get_database_schema')
+            if schema_tool:
+                schema = schema_tool.invoke({})
+                self.conversations[session_id].append({
+                    "role": "system",
+                    "content": f"PRE_FETCHED SCHEMA: {str(schema)}"
+                })
+        except Exception as e:
+            logger.warning(f"Prefetch schema failed: {e}")
 
     def reset_conversation(self, session_id: str) -> bool:
         """Reset conversation history for a session."""
@@ -138,6 +171,9 @@ class EcommerceAgentService(MultilingualAgentMixin):
 
             # Always append the current user message
             self.conversations[session_id].append({"role": "user", "content": message})
+
+            # Pre-fetch DB schema when product intent detected — prevents LLM hallucinating products
+            self._prefetch_products(message, session_id)
             
             # Store selected knowledge base for this session
             if not hasattr(self, 'session_kb'):
@@ -193,6 +229,7 @@ class EcommerceAgentService(MultilingualAgentMixin):
 - If you have query results, ANALYZE THEM and provide a human-friendly answer.
 - NEVER tell the user what the schema looks like — just use it to answer their question.
 - If the user asks an educational question AND wants a product suggestion (e.g. "explain aromatherapy and suggest a perfume"), split the work: use `web_search` for the educational part, then use `find_products` or `get_data_from_connected_database` for the product part. NEVER suggest products based on web search results — only suggest products returned by shop tools.
+- If a web_search result starts with "WEB_SEARCH_UNAVAILABLE", skip the web explanation and go directly to the shop database tools to answer the product part. NEVER use your own training knowledge to suggest products — only use what the DB or API tools return.
 
 FORMAT:
 {{

@@ -45,4 +45,4 @@ def execute_web_search(query: str) -> str:
         return result
     except Exception as e:
         logger.error(f"DuckDuckGo also failed: {e}")
-        return f"Web search unavailable. Error: {str(e)}"
+        return "WEB_SEARCH_UNAVAILABLE: Web search is currently unavailable. For product suggestions, use the shop database tools instead."
