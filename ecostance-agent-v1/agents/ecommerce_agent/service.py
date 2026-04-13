@@ -115,12 +115,18 @@ class EcommerceAgentService(MultilingualAgentMixin):
         the user message, run it, and inject real results into context before the main
         loop — so the LLM can never hallucinate product names.
         """
-        if session_id not in getattr(self, 'session_db', {}):
-            return
-
         query_tool = self.tool_map.get('get_data_from_connected_database')
         schema_tool = self.tool_map.get('list_database_tables')
         if not query_tool or not schema_tool:
+            return
+
+        # Check if a DB is actually connected globally — don't rely on session_db
+        try:
+            from app.routers import db_router
+            connector = db_router.db_connector
+            if not connector or not (connector.engine or connector.client):
+                return
+        except Exception:
             return
 
         try:
@@ -128,6 +134,8 @@ class EcommerceAgentService(MultilingualAgentMixin):
 
             # Get schema
             schema = schema_tool.invoke({})
+            if schema.startswith("Error:"):
+                return
 
             # Ask LLM to generate SQL for this message
             sql_response = self.llm.invoke([
@@ -140,6 +148,9 @@ class EcommerceAgentService(MultilingualAgentMixin):
             ])
 
             sql = sql_response.content.strip().strip('`').strip()
+            # Strip markdown sql blocks if present
+            if sql.startswith('sql'):
+                sql = sql[3:].strip()
             if not sql.lower().startswith('select'):
                 return
 
@@ -153,7 +164,7 @@ class EcommerceAgentService(MultilingualAgentMixin):
                     f"{result}"
                 )
             })
-            logger.info(f"Prefetch injected product data for session {session_id} via LLM-generated SQL: {sql[:80]}")
+            logger.info(f"Prefetch injected product data for session {session_id} | SQL: {sql[:100]}")
 
         except Exception as e:
             logger.warning(f"Prefetch failed: {e}")
