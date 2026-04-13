@@ -152,9 +152,12 @@ class EcommerceAgentService(MultilingualAgentMixin):
             if sql.startswith('sql'):
                 sql = sql[3:].strip()
             if not sql.lower().startswith('select'):
+                logger.warning(f"Prefetch: LLM did not return valid SQL: {sql[:200]}")
                 return
 
+            logger.info(f"Prefetch SQL generated: {sql}")
             result = query_tool.invoke({"sql_query": sql})
+            logger.info(f"Prefetch SQL result: {result[:300]}")
 
             # If query returned no rows OR errored, fall back to full catalog
             needs_fallback = (
