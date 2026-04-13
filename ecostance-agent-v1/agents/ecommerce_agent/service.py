@@ -109,27 +109,13 @@ class EcommerceAgentService(MultilingualAgentMixin):
         # In-memory conversation storage
         self.conversations: Dict[str, List[Dict]] = {}
         
-    # Keywords that indicate the user wants product suggestions from the store
-    _PRODUCT_INTENT_KEYWORDS = [
-        "suggest", "recommend", "show me", "which perfume", "what perfume",
-        "do you carry", "do you have", "contain", "with ", "options", "available",
-        "your perfume", "your fragrance", "your store", "your collection",
-        "what do you have", "what have you got", "list", "find"
-    ]
-
-    def _has_product_intent(self, message: str) -> bool:
-        m = message.lower()
-        return any(kw in m for kw in self._PRODUCT_INTENT_KEYWORDS)
-
     def _prefetch_products(self, message: str, session_id: str) -> None:
         """
-        If a DB is connected and the message has product intent, pre-run a relevant
-        SQL query and inject real results into conversation context so the LLM cannot
-        hallucinate products.
+        When a DB is connected, use the LLM to generate a relevant SQL query based on
+        the user message, run it, and inject real results into context before the main
+        loop — so the LLM can never hallucinate product names.
         """
         if session_id not in getattr(self, 'session_db', {}):
-            return
-        if not self._has_product_intent(message):
             return
 
         query_tool = self.tool_map.get('get_data_from_connected_database')
@@ -138,93 +124,36 @@ class EcommerceAgentService(MultilingualAgentMixin):
             return
 
         try:
-            # Always inject schema first
+            from langchain_core.messages import SystemMessage, HumanMessage as HM
+
+            # Get schema
             schema = schema_tool.invoke({})
+
+            # Ask LLM to generate SQL for this message
+            sql_response = self.llm.invoke([
+                SystemMessage(content=(
+                    "You are a SQL expert. Given a database schema and a user question, "
+                    "write a single SQL SELECT query to fetch the most relevant products. "
+                    "Return ONLY the raw SQL query, nothing else. No explanation, no markdown, no backticks."
+                )),
+                HM(content=f"Schema:\n{schema}\n\nUser question: {message}")
+            ])
+
+            sql = sql_response.content.strip().strip('`').strip()
+            if not sql.lower().startswith('select'):
+                return
+
+            result = query_tool.invoke({"sql_query": sql})
             self.conversations[session_id].append({
                 "role": "system",
-                "content": f"PRE_FETCHED SCHEMA:\n{schema}"
+                "content": (
+                    "PRE_FETCHED PRODUCT DATA — these are the ONLY real products in our store. "
+                    "You MUST suggest ONLY products from this list. "
+                    "Do NOT invent or add any product names not present here:\n"
+                    f"{result}"
+                )
             })
-
-            # Extract keywords from message to build a targeted query
-            m = message.lower()
-
-            # Detect note-based queries (e.g. "contain vetiver", "with bergamot")
-            note_keywords = [
-                "vetiver", "bergamot", "oud", "rose", "jasmine", "sandalwood",
-                "cedar", "musk", "amber", "vanilla", "citrus", "patchouli",
-                "tuberose", "lavender", "neroli", "incense", "tobacco", "leather"
-            ]
-            matched_note = next((n for n in note_keywords if n in m), None)
-
-            # Detect concentration queries
-            concentration_map = {
-                "parfum": "Parfum", "edp": "Eau de Parfum",
-                "eau de parfum": "Eau de Parfum", "edt": "Eau de Toilette",
-                "eau de toilette": "Eau de Toilette", "cologne": "Eau de Cologne"
-            }
-            matched_concentration = next(
-                (v for k, v in concentration_map.items() if k in m), None
-            )
-
-            # Detect mood queries
-            mood_keywords = ["romantic", "serene", "mysterious", "confident", "playful", "energetic"]
-            matched_mood = next((mo for mo in mood_keywords if mo in m), None)
-
-            # Detect fragrance family queries
-            family_keywords = ["floral", "oriental", "woody", "fresh", "citrus", "aromatic", "fougere"]
-            matched_family = next((f for f in family_keywords if f in m), None)
-
-            sql = None
-
-            if matched_note:
-                sql = f"""
-                    SELECT DISTINCT p.name, b.name as brand, p.concentration, p.gender_target, pn.layer
-                    FROM perfumes p
-                    JOIN brands b ON p.brand_id = b.id
-                    JOIN perfume_notes pn ON pn.perfume_id = p.id
-                    JOIN scent_notes sn ON sn.id = pn.scent_note_id
-                    WHERE LOWER(sn.name) LIKE '%{matched_note}%' AND p.is_discontinued = 0
-                    ORDER BY p.name
-                """
-            elif matched_concentration:
-                sql = f"""
-                    SELECT p.name, b.name as brand, p.gender_target, ps.size_ml, ps.price
-                    FROM perfumes p
-                    JOIN brands b ON p.brand_id = b.id
-                    JOIN perfume_sizes ps ON ps.perfume_id = p.id
-                    WHERE p.concentration = '{matched_concentration}' AND p.is_discontinued = 0
-                    ORDER BY p.name
-                """
-            elif matched_mood:
-                sql = f"""
-                    SELECT p.name, b.name as brand, pm.relevance_score
-                    FROM perfumes p
-                    JOIN brands b ON p.brand_id = b.id
-                    JOIN perfume_moods pm ON pm.perfume_id = p.id
-                    JOIN moods mo ON mo.id = pm.mood_id
-                    WHERE LOWER(mo.name) = '{matched_mood}' AND p.is_discontinued = 0
-                    ORDER BY pm.relevance_score DESC
-                """
-            elif matched_family:
-                sql = f"""
-                    SELECT p.name, b.name as brand, p.concentration, p.gender_target
-                    FROM perfumes p
-                    JOIN brands b ON p.brand_id = b.id
-                    JOIN fragrance_families ff ON p.fragrance_family_id = ff.id
-                    WHERE LOWER(ff.name) = '{matched_family}' AND p.is_discontinued = 0
-                    ORDER BY p.name
-                """
-
-            if sql:
-                result = query_tool.invoke({"sql_query": sql.strip()})
-                self.conversations[session_id].append({
-                    "role": "system",
-                    "content": (
-                        f"PRE_FETCHED PRODUCT DATA (use ONLY these results for product suggestions — "
-                        f"do NOT add any products not listed here):\n{result}"
-                    )
-                })
-                logger.info(f"Prefetch injected product data for session {session_id}")
+            logger.info(f"Prefetch injected product data for session {session_id} via LLM-generated SQL: {sql[:80]}")
 
         except Exception as e:
             logger.warning(f"Prefetch failed: {e}")
