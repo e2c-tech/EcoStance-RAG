@@ -194,7 +194,7 @@ KEY RELATIONSHIPS (always use these joins):
                 "content": (
                     "PRE_FETCHED PRODUCT DATA — these are the ONLY real products in our store with their scent notes. "
                     "You MUST suggest ONLY products from this list. "
-                    "Do NOT invent or add any product names not present here:\n"
+                    "Do NOT call database tools again — use this data directly to answer the user:\n"
                     f"{catalog_result}"
                 )
             })
@@ -284,6 +284,7 @@ KEY RELATIONSHIPS (always use these joins):
 
 ### INSTRUCTIONS:
 - You MUST respond with exactly one JSON object.
+- If PRE_FETCHED PRODUCT DATA is present in the conversation, use it DIRECTLY to answer — do NOT call any database tools again, the data is already there.
 - If you just got a TOOL_RESULT from `list_database_tables` / `get_database_schema`, you MUST immediately call `query_database` / `get_data_from_connected_database` with the correct SQL to answer the user's question. DO NOT stop and describe the schema.
 - If you have query results, ANALYZE THEM and provide a human-friendly answer.
 - NEVER tell the user what the schema looks like — just use it to answer their question.
