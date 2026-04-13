@@ -215,5 +215,5 @@ httpx
 
 # Web search tools
 tavily-python
-duckduckgo-search
+ddgs
 langchain-community

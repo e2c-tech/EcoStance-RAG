@@ -161,7 +161,9 @@ class EcommerceAgentService(MultilingualAgentMixin):
             if session_id in self.session_kb:
                  context_info += f"\nActive Knowledge Base: {self.session_kb[session_id]}"
             if session_id in self.session_db:
-                 context_info += f"\nActive Database: {self.session_db[session_id]}"
+                 context_info += f"\nActive Database: {self.session_db[session_id]} (CONNECTED — use list_database_tables then get_data_from_connected_database for all product/data queries)"
+            else:
+                 context_info += f"\nActive Database: None (use find_products / get_all_categories API tools instead)"
 
             max_iterations = 4
             iteration = 0
@@ -242,7 +244,7 @@ OR (if finished):
 
                 tool_name = decision.get('tool')
                 
-                if tool_name == 'none' or not tool_name or is_last_turn:
+                if tool_name == 'none' or not tool_name:
                     final_response = decision.get('response', text)
                     if isinstance(final_response, dict):
                         message = final_response.get('message', '')
@@ -254,6 +256,22 @@ OR (if finished):
                     else:
                         content = str(final_response)
                         
+                    self.conversations[session_id].append({"role": "assistant", "content": content})
+                    return {
+                        "response": content,
+                        "session_id": session_id,
+                        "language": preferred_lang,
+                        "success": True
+                    }
+
+                # On last iteration, force a final answer instead of leaking raw tool JSON
+                if is_last_turn:
+                    self.conversations[session_id].append({
+                        "role": "system",
+                        "content": "You have reached the maximum number of steps. Summarize what you know so far into a final human-friendly answer."
+                    })
+                    final_result = self.llm.invoke(lc_messages + [SystemMessage(content="Provide your final answer now based on all results so far.")])
+                    content = final_result.content
                     self.conversations[session_id].append({"role": "assistant", "content": content})
                     return {
                         "response": content,
