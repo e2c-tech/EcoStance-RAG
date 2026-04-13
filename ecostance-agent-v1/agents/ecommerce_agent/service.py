@@ -172,9 +172,6 @@ class EcommerceAgentService(MultilingualAgentMixin):
             # Always append the current user message
             self.conversations[session_id].append({"role": "user", "content": message})
 
-            # Pre-fetch DB schema when product intent detected — prevents LLM hallucinating products
-            self._prefetch_products(message, session_id)
-            
             # Store selected knowledge base for this session
             if not hasattr(self, 'session_kb'):
                 self.session_kb = {}
@@ -186,6 +183,9 @@ class EcommerceAgentService(MultilingualAgentMixin):
                 self.session_db = {}
             if database_connection:
                 self.session_db[session_id] = database_connection
+
+            # Pre-fetch DB schema when product intent detected — MUST be after session_db is set
+            self._prefetch_products(message, session_id)
             
             # Get language-specific system prompt
             system_prompt = self.get_system_prompt(preferred_lang)
