@@ -110,70 +110,25 @@ class EcommerceAgentService(MultilingualAgentMixin):
         # In-memory conversation storage
         self.conversations: Dict[str, List[Dict]] = {}
         
-    def _prefetch_products(self, message: str, session_id: str) -> None:
+    def _prefetch_products(self, message: str, session_id: str) -> bool:
         """
-        When a DB is connected, use the LLM to generate a relevant SQL query based on
-        the user message, run it, and inject real results into context before the main
-        loop — so the LLM can never hallucinate product names.
+        Fetch full product catalog from DB and inject into context.
+        Returns True if successful so caller can bypass the tool loop.
         """
         query_tool = self.tool_map.get('get_data_from_connected_database')
-        schema_tool = self.tool_map.get('list_database_tables')
-        if not query_tool or not schema_tool:
-            return
+        if not query_tool:
+            return False
 
-        # Check if a DB is actually connected globally — don't rely on session_db
         try:
             from app.routers import db_router
             connector = db_router.db_connector
             if not connector or not (connector.engine or connector.client):
-                return
+                return False
         except Exception:
-            return
+            return False
 
         try:
-            from langchain_core.messages import SystemMessage, HumanMessage as HM
-
-            # Get schema
-            schema = schema_tool.invoke({})
-
-            # Append relationship hints so LLM understands joins
-            schema += """
-
-KEY RELATIONSHIPS (always use these joins):
-- To find perfumes by scent note: JOIN perfume_notes ON perfume_notes.perfume_id = perfumes.id JOIN scent_notes ON scent_notes.id = perfume_notes.scent_note_id — filter on scent_notes.name
-- To find perfumes by mood: JOIN perfume_moods ON perfume_moods.perfume_id = perfumes.id JOIN moods ON moods.id = perfume_moods.mood_id — filter on moods.name
-- To find perfumes by fragrance family: JOIN fragrance_families ON fragrance_families.id = perfumes.fragrance_family_id — filter on fragrance_families.name
-- To get brand name: JOIN brands ON brands.id = perfumes.brand_id
-- To get pricing: JOIN perfume_sizes ON perfume_sizes.perfume_id = perfumes.id
-- NEVER query perfumes.ingredients — it does not exist. Notes are in scent_notes table via perfume_notes join table.
-"""
-            if schema.startswith("Error:"):
-                return
-
-            # Ask LLM to generate SQL for this message
-            sql_response = self.llm.invoke([
-                SystemMessage(content=(
-                    "You are a SQL expert. Given a database schema and a user question, "
-                    "write a single SQL SELECT query to fetch the most relevant products. "
-                    "Return ONLY the raw SQL query, nothing else. No explanation, no markdown, no backticks."
-                )),
-                HM(content=f"Schema:\n{schema}\n\nUser question: {message}")
-            ])
-
-            sql = sql_response.content.strip().strip('`').strip()
-            # Strip markdown sql blocks if present
-            if sql.startswith('sql'):
-                sql = sql[3:].strip()
-            if not sql.lower().startswith('select'):
-                logger.warning(f"Prefetch: LLM did not return valid SQL: {sql[:200]}")
-                return
-
-            logger.info(f"Prefetch SQL generated: {sql}")
-            result = query_tool.invoke({"sql_query": sql})
-            logger.info(f"Prefetch SQL result: {result[:300]}")
-
-            # Always inject full catalog with notes as the ground truth
-            fallback_sql = """
+            catalog_sql = """
                 SELECT p.name, b.name as brand, p.concentration, p.gender_target,
                        ff.name as fragrance_family,
                        GROUP_CONCAT(sn.name || ' (' || pn.layer || ')', ', ') as notes
@@ -186,22 +141,24 @@ KEY RELATIONSHIPS (always use these joins):
                 GROUP BY p.id
                 ORDER BY p.name
             """
-            catalog_result = query_tool.invoke({"sql_query": fallback_sql.strip()})
-            logger.info(f"Prefetch full catalog result length: {len(catalog_result)}")
+            catalog = query_tool.invoke({"sql_query": catalog_sql.strip()})
+            if not catalog or 'Error' in catalog:
+                logger.warning(f"Prefetch catalog failed: {catalog[:100]}")
+                return False
 
             self.conversations[session_id].append({
                 "role": "system",
                 "content": (
-                    "PRE_FETCHED PRODUCT DATA — these are the ONLY real products in our store with their scent notes. "
-                    "You MUST suggest ONLY products from this list. "
-                    "Do NOT call database tools again — use this data directly to answer the user:\n"
-                    f"{catalog_result}"
+                    "STORE PRODUCT CATALOG — complete list of all real products with their scent notes:\n"
+                    f"{catalog}"
                 )
             })
-            logger.info(f"Prefetch complete for session {session_id}")
+            logger.info(f"Prefetch complete for session {session_id}, catalog length: {len(catalog)}")
+            return True
 
         except Exception as e:
             logger.warning(f"Prefetch failed: {e}")
+            return False
 
     def reset_conversation(self, session_id: str) -> bool:
         """Reset conversation history for a session."""
@@ -244,7 +201,28 @@ KEY RELATIONSHIPS (always use these joins):
                 self.session_db[session_id] = database_connection
 
             # Pre-fetch DB schema when product intent detected — MUST be after session_db is set
-            self._prefetch_products(message, session_id)
+            prefetch_done = self._prefetch_products(message, session_id)
+
+            # If prefetch ran successfully, skip the tool loop — answer directly from catalog
+            if prefetch_done:
+                from langchain_core.messages import SystemMessage as SM
+                catalog_content = next(
+                    (m["content"] for m in reversed(self.conversations[session_id])
+                     if m["role"] == "system" and "STORE PRODUCT CATALOG" in m.get("content", "")),
+                    ""
+                )
+                final_result = self.llm.invoke([
+                    SM(content=(
+                        f"{self.get_system_prompt(preferred_lang)}\n\n"
+                        "Answer the customer using ONLY the products listed below. "
+                        "Do NOT invent product names not in this list.\n\n"
+                        f"{catalog_content}"
+                    )),
+                    HumanMessage(content=message)
+                ])
+                content = final_result.content
+                self.conversations[session_id].append({"role": "assistant", "content": content})
+                return {"response": content, "session_id": session_id, "language": preferred_lang, "success": True}
             
             # Get language-specific system prompt
             system_prompt = self.get_system_prompt(preferred_lang)
