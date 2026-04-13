@@ -155,6 +155,30 @@ class EcommerceAgentService(MultilingualAgentMixin):
                 return
 
             result = query_tool.invoke({"sql_query": sql})
+
+            # If query returned no rows OR errored, fall back to full catalog
+            needs_fallback = (
+                not result
+                or result.strip() == '[]'
+                or 'No rows found' in result
+                or result.startswith('Error:')
+            )
+            if needs_fallback:
+                logger.info(f"Prefetch query returned empty/error ({result[:80]}), falling back to full catalog")
+                fallback_sql = """
+                    SELECT p.name, b.name as brand, p.concentration, p.gender_target,
+                           ff.name as fragrance_family,
+                           GROUP_CONCAT(sn.name || ' (' || pn.layer || ')', ', ') as notes
+                    FROM perfumes p
+                    JOIN brands b ON p.brand_id = b.id
+                    JOIN fragrance_families ff ON p.fragrance_family_id = ff.id
+                    LEFT JOIN perfume_notes pn ON pn.perfume_id = p.id
+                    LEFT JOIN scent_notes sn ON sn.id = pn.scent_note_id
+                    WHERE p.is_discontinued = 0
+                    GROUP BY p.id
+                    ORDER BY p.name
+                """
+                result = query_tool.invoke({"sql_query": fallback_sql.strip()})
             self.conversations[session_id].append({
                 "role": "system",
                 "content": (
