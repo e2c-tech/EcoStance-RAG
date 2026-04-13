@@ -238,6 +238,15 @@ OR (if finished):
                             try: decision = json.loads(match_first.group(0))
                             except: pass
 
+                # Normalize OpenAI function-calling format → our internal format
+                # e.g. {"type": "function", "name": "tool_name", "parameters": {...}}
+                if decision and decision.get('type') == 'function' and 'name' in decision:
+                    decision = {
+                        'tool': decision['name'],
+                        'args': decision.get('parameters', decision.get('arguments', {})),
+                        'reasoning': 'normalized from function-call format'
+                    }
+
                 if not decision:
                     self.conversations[session_id].append({"role": "assistant", "content": text})
                     return {"response": text, "session_id": session_id, "success": True}
