@@ -117,15 +117,20 @@ class EcommerceAgentService(MultilingualAgentMixin):
         """
         query_tool = self.tool_map.get('get_data_from_connected_database')
         if not query_tool:
+            logger.warning("Prefetch: query_tool not found")
             return False
 
         try:
             from app.routers import db_router
             connector = db_router.db_connector
             if not connector or not (connector.engine or connector.client):
+                logger.info("Prefetch: no DB connector active")
                 return False
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Prefetch: connector check failed: {e}")
             return False
+
+        logger.info(f"Prefetch: DB connected, fetching catalog for session {session_id}")
 
         try:
             catalog_sql = """
@@ -211,19 +216,40 @@ class EcommerceAgentService(MultilingualAgentMixin):
                      if m["role"] == "system" and "STORE PRODUCT CATALOG" in m.get("content", "")),
                     ""
                 )
-                final_result = self.llm.invoke([
-                    SM(content=(
-                        f"{self.get_system_prompt(preferred_lang)}\n\n"
-                        "Answer the customer using ONLY the products listed below. "
-                        "Do NOT invent product names not in this list.\n\n"
-                        f"{catalog_content}"
-                    )),
-                    HumanMessage(content=message)
-                ])
-                content = final_result.content
-                self.conversations[session_id].append({"role": "assistant", "content": content})
-                return {"response": content, "session_id": session_id, "language": preferred_lang, "success": True}
-            
+                logger.info(f"Prefetch early-return path. catalog_content length: {len(catalog_content)}")
+                if not catalog_content:
+                    logger.error("Prefetch returned True but catalog_content is empty — falling through to tool loop")
+                else:
+                    final_result = self.llm.invoke([
+                        SM(content=(
+                            f"{self.get_system_prompt(preferred_lang)}\n\n"
+                            "Answer the customer using ONLY the products listed below. "
+                            "Do NOT invent product names not in this list.\n\n"
+                            f"{catalog_content}"
+                        )),
+                        HumanMessage(content=message)
+                    ])
+                    content = final_result.content
+                    self.conversations[session_id].append({"role": "assistant", "content": content})
+                    return {"response": content, "session_id": session_id, "language": preferred_lang, "success": True}
+
+            # No DB connected — inject a hard constraint so LLM cannot hallucinate products
+            try:
+                from app.routers import db_router
+                connector = db_router.db_connector
+                db_connected = connector and (connector.engine or connector.client)
+            except Exception:
+                db_connected = False
+
+            if not db_connected:
+                self.conversations[session_id].append({
+                    "role": "system",
+                    "content": (
+                        "NO DATABASE CONNECTED. You MUST NOT suggest, list, or name any specific products. "
+                        "If the user asks about products, tell them to please select a database first using the DATABASE selector at the top of the chat. "
+                        "You may answer general knowledge questions (e.g. fragrance families, notes, perfumery concepts) but never name specific products."
+                    )
+                })            
             # Get language-specific system prompt
             system_prompt = self.get_system_prompt(preferred_lang)
             
