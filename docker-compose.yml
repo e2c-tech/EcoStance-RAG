@@ -16,7 +16,10 @@ services:
 
   # 2. Shared Embedding Server
   ecostance-embedding:
-    image: sc-ai-agent-backend-core
+    build:
+      context: ./ecostance-agent-v1
+      dockerfile: Dockerfile
+    image: tonys-ai-agent
     container_name: ecostance-embedding
     command: python -m app.services.embedding_server
     environment:
@@ -50,7 +53,7 @@ services:
 
   # 3. Main API Server
   ecostance-agent:
-    image: sc-ai-agent-backend-core
+    image: tonys-ai-agent
     container_name: ecostance-agent
     environment:
       - REDIS_URL=redis://ecostance-redis:6379/0
@@ -115,7 +118,7 @@ services:
 
   # 4. Background Celery Worker
   ecostance-worker:
-    image: sc-ai-agent-backend-core
+    image: tonys-ai-agent
     container_name: ecostance-worker
     command: python -m app.worker.start_worker
     environment:
